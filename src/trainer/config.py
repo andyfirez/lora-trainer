@@ -54,6 +54,12 @@ class ModelPartConfig(BaseModel):
     weight_dtype: WeightDtype = WeightDtype.FLOAT_16
 
 
+class LoggingConfig(BaseModel):
+    use_ui_logger: bool = True
+    log_every: int = Field(default=1, ge=1)
+    log_dir: Optional[str] = None
+
+
 class TrainConfig(BaseModel):
     """SDXL LoRA training configuration. Serialized to/from YAML."""
 
@@ -121,6 +127,8 @@ class TrainConfig(BaseModel):
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_scheduler: SampleScheduler = SampleScheduler.EULER
+
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     @classmethod
     def from_yaml(cls, yaml_str: str) -> "TrainConfig":

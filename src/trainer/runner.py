@@ -19,8 +19,9 @@ from src.db.session import session_factory
 from src.db.tables.training_job import JobStatus, TrainingJob
 from src.settings.app_settings import settings
 from src.trainer.config import TrainConfig
+from src.trainer.metric_logger import MetricLogger, build_loss_log_path
 from src.trainer.sdxl.trainer import SDXLLoRATrainer
-from src.trainer.training_log import JobTrainingLogger
+from src.trainer.training_log import JobTrainingLogger, setup_tensorboard_writer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -183,7 +184,19 @@ async def _run(job_id: int) -> None:
 
     config = TrainConfig.from_yaml(config_yaml)
     log_path = _build_log_path(job_id)
-    training_logger = JobTrainingLogger(job_id=job_id, log_path=log_path)
+    metric_logger: MetricLogger | None = None
+    if config.logging.use_ui_logger:
+        metric_logger = MetricLogger(build_loss_log_path(config))
+    tensorboard_writer = None
+    if config.logging.log_dir:
+        tensorboard_writer = setup_tensorboard_writer(config.logging.log_dir, config.lora_name)
+    training_logger = JobTrainingLogger(
+        job_id=job_id,
+        log_path=log_path,
+        metric_logger=metric_logger,
+        log_every=config.logging.log_every,
+        tensorboard_writer=tensorboard_writer,
+    )
     await _set_log_path(job_id, str(log_path))
     training_logger.logger.info(
         "Starting SDXL LoRA training for job id=%d: %s/%s", job_id, config.output_dir, config.lora_name
@@ -207,6 +220,8 @@ async def _run(job_id: int) -> None:
         training_logger.logger.exception("Job id=%d failed: %s", job_id, exc)
         await _update_status(job_id, JobStatus.FAILED, error=str(exc))
         sys.exit(1)
+    finally:
+        training_logger.finish()
 
 
 def main() -> None:

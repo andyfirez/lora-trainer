@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
+from src.api.schemas.job_loss import JobLossResponse
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.repositories.training_job_repo import TrainingJobRepository
 from src.db.tables.queue_entry import QueueEntry
@@ -13,6 +14,9 @@ from src.services.jobs.exceptions import (
     JobNotCancellableError,
     JobNotFoundError,
 )
+from src.services.jobs.loss_log_reader import read_loss_log
+from src.trainer.config import TrainConfig
+from src.trainer.metric_logger import build_loss_log_path
 from src.trainer.training_log import JobTrainingLogger
 
 
@@ -87,3 +91,23 @@ class JobsService:
         if not job.log_path:
             return []
         return JobTrainingLogger.read_tail(Path(job.log_path), lines=tail)
+
+    async def get_job_loss(
+        self,
+        job_id: int,
+        *,
+        key: str = "loss/loss",
+        limit: int = 2000,
+        since_step: int | None = None,
+        stride: int = 1,
+    ) -> JobLossResponse:
+        job = await self.get_job(job_id)
+        config = TrainConfig.from_yaml(job.config_yaml)
+        log_path = build_loss_log_path(config)
+        return read_loss_log(
+            log_path,
+            key=key,
+            limit=limit,
+            since_step=since_step,
+            stride=stride,
+        )

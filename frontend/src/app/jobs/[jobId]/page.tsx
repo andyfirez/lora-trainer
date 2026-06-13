@@ -7,6 +7,7 @@ import { ArrowLeft, Play, Square, Download, Pencil } from "lucide-react";
 import { jobsApi } from "@/lib/api/jobs";
 import StatusBadge from "@/components/StatusBadge";
 import JobProgressBar from "@/components/JobProgressBar";
+import JobLossGraph from "@/components/JobLossGraph";
 import { Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -103,6 +104,7 @@ export default function JobDetailPage({ params }: Props) {
       : null;
   const isRunning = job.status === "running";
   const showLogs = isRunning || job.status === "completed" || job.status === "failed";
+  const showLossGraph = showLogs;
 
   const handleEnqueue = async () => { await jobsApi.enqueue(id); mutate(); };
   const handleCancel = async () => { await jobsApi.cancel(id); mutate(); };
@@ -208,6 +210,8 @@ export default function JobDetailPage({ params }: Props) {
           }
         />
       ) : null)}
+
+      {showLossGraph && <JobLossGraph jobId={id} isActive={isRunning} />}
 
       {showLogs && <LiveLogs jobId={id} isRunning={isRunning} showLogs={showLogs} jobStatus={job.status} />}
 

@@ -5,6 +5,18 @@ export interface JobLogs {
   lines: string[];
 }
 
+export interface LossPoint {
+  step: number;
+  wall_time?: number | null;
+  value: number | null;
+}
+
+export interface JobLossResponse {
+  key: string;
+  keys: string[];
+  points: LossPoint[];
+}
+
 export const jobsApi = {
   list: () => api.get<Job[]>("/jobs/"),
   get: (id: number) => api.get<Job>(`/jobs/${id}`),
@@ -14,4 +26,13 @@ export const jobsApi = {
   enqueue: (id: number) => api.post<Job>(`/jobs/${id}/enqueue`),
   cancel: (id: number) => api.post<Job>(`/jobs/${id}/cancel`),
   getLogs: (id: number, tail = 500) => api.get<JobLogs>(`/jobs/${id}/logs?tail=${tail}`),
+  getLoss: (id: number, params: { key?: string; limit?: number; since_step?: number; stride?: number } = {}) => {
+    const search = new URLSearchParams();
+    if (params.key) search.set("key", params.key);
+    if (params.limit != null) search.set("limit", String(params.limit));
+    if (params.since_step != null) search.set("since_step", String(params.since_step));
+    if (params.stride != null) search.set("stride", String(params.stride));
+    const qs = search.toString();
+    return api.get<JobLossResponse>(`/jobs/${id}/loss${qs ? `?${qs}` : ""}`);
+  },
 };

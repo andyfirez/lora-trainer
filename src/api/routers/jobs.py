@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from src.api.dependencies import JobsServiceDep
 from src.api.schemas.job_logs import JobLogsResponse
+from src.api.schemas.job_loss import JobLossResponse
 from src.api.schemas.jobs import JobCreate, JobResponse, JobUpdate
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -52,3 +53,21 @@ async def cancel_job(job_id: int, service: JobsServiceDep) -> JobResponse:
 async def get_job_logs(job_id: int, service: JobsServiceDep, tail: int = 500) -> JobLogsResponse:
     lines = await service.get_job_logs(job_id, tail=tail)
     return JobLogsResponse(lines=lines)
+
+
+@router.get("/{job_id}/loss", response_model=JobLossResponse)
+async def get_job_loss(
+    job_id: int,
+    service: JobsServiceDep,
+    key: str = "loss/loss",
+    limit: int = 2000,
+    since_step: int | None = None,
+    stride: int = 1,
+) -> JobLossResponse:
+    return await service.get_job_loss(
+        job_id,
+        key=key,
+        limit=limit,
+        since_step=since_step,
+        stride=stride,
+    )

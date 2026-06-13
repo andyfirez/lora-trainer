@@ -50,5 +50,11 @@ sample_negative_prompt: ''
 sample_steps: 30
 sample_cfg_scale: 7.5
 sample_scheduler: euler
+
+# Logging (loss graph + optional TensorBoard)
+logging:
+  use_ui_logger: true
+  log_every: 1
+  # log_dir: output/.tensorboard
 `,
 };

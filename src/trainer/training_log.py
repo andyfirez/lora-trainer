@@ -3,12 +3,14 @@
 import logging
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from tqdm import tqdm
 
 from src.trainer.config import TrainConfig
+from src.trainer.metric_logger import MetricLogger
 
 
 class LossRecorder:
@@ -49,10 +51,21 @@ def format_step_log(
     )
 
 
+def setup_tensorboard_writer(log_dir: str, run_name: str) -> Any:
+    from torch.utils.tensorboard import SummaryWriter
+
+    time_str = datetime.now().strftime("%Y%m%d-%H%M%S")
+    summary_dir = Path(log_dir) / f"{run_name}_{time_str}"
+    return SummaryWriter(str(summary_dir))
+
+
 @dataclass
 class JobTrainingLogger:
     job_id: int
     log_path: Path
+    metric_logger: Optional[MetricLogger] = None
+    log_every: int = 1
+    tensorboard_writer: Any = None
     _loss_recorder: LossRecorder = field(default_factory=LossRecorder)
     _progress_bar: Optional[tqdm] = None
     _logger: logging.Logger = field(init=False)
@@ -156,7 +169,29 @@ class JobTrainingLogger:
                 epoch_total=epoch_total,
             )
         )
+        if step % self.log_every == 0:
+            if self.metric_logger is not None:
+                self.metric_logger.log(
+                    {
+                        "loss/loss": loss,
+                        "loss/avr_loss": avr_loss,
+                        "learning_rate": lr,
+                    }
+                )
+            if self.tensorboard_writer is not None:
+                self.tensorboard_writer.add_scalar("loss", loss, step)
+                self.tensorboard_writer.add_scalar("avr_loss", avr_loss, step)
+                self.tensorboard_writer.add_scalar("lr", lr, step)
+        if self.metric_logger is not None:
+            self.metric_logger.commit(step=step)
         return avr_loss
+
+    def finish(self) -> None:
+        if self.metric_logger is not None:
+            self.metric_logger.finish()
+        if self.tensorboard_writer is not None:
+            self.tensorboard_writer.close()
+            self.tensorboard_writer = None
 
     def close_progress_bar(self) -> None:
         if self._progress_bar is not None:
