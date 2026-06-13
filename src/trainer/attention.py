@@ -14,23 +14,22 @@ def configure_unet_attention(
     mechanism: AttentionMechanism,
     log: logging.Logger | logging.LoggerAdapter,
 ) -> None:
-    """Apply the requested attention backend, falling back to SDPA when needed."""
+    """Apply the requested attention backend."""
     if mechanism in ("default", "sdpa"):
         log.info("Using PyTorch SDPA attention (diffusers default on torch 2.x).")
         return
 
     if not is_xformers_available():
-        log.warning(
-            "xformers is not installed; falling back to PyTorch SDPA. "
-            "See https://github.com/facebookresearch/xformers#installing-xformers"
+        raise RuntimeError(
+            "attention_mechanism='xformers' requires xformers, but it is not installed. "
+            "Install it with `uv add xformers` and re-run training."
         )
-        return
 
     try:
         unet.enable_xformers_memory_efficient_attention()
         log.info("xformers memory-efficient attention enabled.")
     except Exception as exc:
-        log.warning(
-            "Failed to enable xformers (%s); falling back to PyTorch SDPA.",
-            exc,
-        )
+        raise RuntimeError(
+            "attention_mechanism='xformers' was requested, but enabling xformers "
+            f"memory-efficient attention failed: {exc}"
+        ) from exc

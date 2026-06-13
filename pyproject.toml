@@ -24,6 +24,7 @@ dependencies = [
     "psutil>=6.0.0",
     "bitsandbytes>=0.44.0",
     "prodigyopt>=1.0",
+    "xformers>=0.0.35",
 ]
 
 [project.scripts]

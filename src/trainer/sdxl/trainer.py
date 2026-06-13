@@ -4,6 +4,7 @@ import contextlib
 import logging
 import math
 import random
+import time
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -55,8 +56,7 @@ def _build_inference_scheduler(
     sample_scheduler: SampleScheduler,
     noise_scheduler: DDPMScheduler,
 ) -> object:
-    cls = _SCHEDULER_MAP[sample_scheduler]
-    return cls.from_config(noise_scheduler.config)
+    return _SCHEDULER_MAP[sample_scheduler].from_config(noise_scheduler.config)
 
 
 class SDXLLoRATrainer:
@@ -77,6 +77,8 @@ class SDXLLoRATrainer:
         self._training_logger = training_logger
         self._progress = TrainProgress()
         self._total_steps: int = 0
+        self._optimizer: Optional[object] = None
+        self._device: Optional[torch.device] = None
 
     def train(self) -> None:
         config = self._config
@@ -177,6 +179,8 @@ class SDXLLoRATrainer:
             unet = torch.compile(unet, backend="inductor")
 
         optimizer = self._build_optimizer(trainable_params, config)
+        self._optimizer = optimizer
+        self._device = device
         cache_mode = config.cache_latents or config.cache_text_encoder_outputs
         train_dataset = self._build_dataset(config, cache_mode=cache_mode)
         dataloader = DataLoader(
@@ -540,6 +544,49 @@ class SDXLLoRATrainer:
         final_path = self._work_dir(config) / f"{config.lora_name}{ext}"
         self._export_lora(unet, text_encoder_1, text_encoder_2, config, final_path)
 
+    def _offload_to_cpu(
+        self,
+        unet: torch.nn.Module,
+        text_encoder_1: torch.nn.Module,
+        text_encoder_2: torch.nn.Module,
+        config: TrainConfig,
+        log: logging.Logger,
+    ) -> None:
+        log.info("Offloading training state to CPU for sampling...")
+        unet.to("cpu")
+        if not config.cache_text_encoder_outputs:
+            text_encoder_1.to("cpu")
+            text_encoder_2.to("cpu")
+        if config.optimizer != Optimizer.ADAMW_8BIT and self._optimizer is not None:
+            for state in self._optimizer.state.values():
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.cpu()
+        torch.cuda.empty_cache()
+        free_gb = torch.cuda.mem_get_info()[0] / 1e9
+        log.info("VRAM freed. Available: %.1f GB", free_gb)
+
+    def _restore_to_gpu(
+        self,
+        unet: torch.nn.Module,
+        text_encoder_1: torch.nn.Module,
+        text_encoder_2: torch.nn.Module,
+        config: TrainConfig,
+        log: logging.Logger,
+    ) -> None:
+        assert self._device is not None
+        log.info("Restoring training state to GPU...")
+        unet.to(self._device)
+        if not config.cache_text_encoder_outputs:
+            text_encoder_1.to(self._device)
+            text_encoder_2.to(self._device)
+        if config.optimizer != Optimizer.ADAMW_8BIT and self._optimizer is not None:
+            for state in self._optimizer.state.values():
+                for k, v in state.items():
+                    if isinstance(v, torch.Tensor):
+                        state[k] = v.to(self._device)
+        log.info("Training state restored to GPU.")
+
     def _run_sampling(
         self,
         epoch: int,
@@ -560,79 +607,87 @@ class SDXLLoRATrainer:
             return
 
         log = training_logger.logger if training_logger is not None else logger
-
-        sample_dir = self._work_dir(config) / "samples"
-        sample_dir.mkdir(parents=True, exist_ok=True)
-
-        te1_device = next(text_encoder_1.parameters()).device
-        te2_device = next(text_encoder_2.parameters()).device
-        vae_device = next(vae.parameters()).device
-
-        if te1_device.type == "cpu":
-            text_encoder_1 = text_encoder_1.to(device)
-        if te2_device.type == "cpu":
-            text_encoder_2 = text_encoder_2.to(device)
-        if vae_device.type == "cpu":
-            vae = vae.to(device)
-
-        # Merge LoRA adapter weights into the base model so the pipeline receives
-        # a plain UNet2DConditionModel with no PEFT wrapping. Passing a PeftModel
-        # to StableDiffusionXLPipeline deadlocks on PyTorch 2.12 / Windows.
-        unet.merge_adapter()
-        inference_unet = unet.base_model.model
-
-        if config.text_encoder_1.train:
-            text_encoder_1.merge_adapter()
-            inference_te1 = text_encoder_1.base_model.model
-        else:
-            inference_te1 = text_encoder_1
-
-        if config.text_encoder_2.train:
-            text_encoder_2.merge_adapter()
-            inference_te2 = text_encoder_2.base_model.model
-        else:
-            inference_te2 = text_encoder_2
-
-        inference_unet_dtype = _DTYPE_MAP[config.unet.weight_dtype]
-        inference_te1_dtype = _DTYPE_MAP[config.text_encoder_1.weight_dtype]
-        inference_te2_dtype = _DTYPE_MAP[config.text_encoder_2.weight_dtype]
-        autocast_dtype = _DTYPE_MAP[config.mixed_precision]
-
-        inference_unet = inference_unet.to(device=device, dtype=inference_unet_dtype)
-        inference_te1 = inference_te1.to(device=device, dtype=inference_te1_dtype)
-        inference_te2 = inference_te2.to(device=device, dtype=inference_te2_dtype)
-        vae = vae.to(device=device, dtype=torch.float32)
-
-        inference_scheduler = _build_inference_scheduler(config.sample_scheduler, noise_scheduler)
-        pipe = StableDiffusionXLPipeline(
-            vae=vae,
-            text_encoder=inference_te1,
-            text_encoder_2=inference_te2,
-            tokenizer=tokenizer_1,
-            tokenizer_2=tokenizer_2,
-            unet=inference_unet,
-            scheduler=inference_scheduler,
-        )
-        pipe.to(device)
-        unet_training = unet.training
-        te1_training = text_encoder_1.training
-        te2_training = text_encoder_2.training
-        inference_unet.eval()
-        inference_te1.eval()
-        inference_te2.eval()
-
-        width = config.sample_width or config.resolution
-        height = config.sample_height or config.resolution
-
-        n_prompts = len(config.sample_prompts)
-        log.info("Sampling %d image(s) for epoch %d...", n_prompts, epoch)
+        sampling_started_at = time.perf_counter()
 
         if training_logger is not None:
             training_logger.close_progress_bar()
 
-        torch.cuda.empty_cache()
+        sample_dir = self._work_dir(config) / "samples"
+        sample_dir.mkdir(parents=True, exist_ok=True)
+        n_prompts = len(config.sample_prompts)
+        log.info("Sampling %d image(s) for epoch %d...", n_prompts, epoch)
+
+        if sampling_status_callback is not None:
+            sampling_status_callback(f"Sampling epoch {epoch} — preparing")
+
+        vae_device = next(vae.parameters()).device
+        te1_device = next(text_encoder_1.parameters()).device
+        te2_device = next(text_encoder_2.parameters()).device
+
+        offload_started_at = time.perf_counter()
+        self._offload_to_cpu(unet, text_encoder_1, text_encoder_2, config, log)
+        log.info("[sampling e%d] offload: %.2fs", epoch, time.perf_counter() - offload_started_at)
+
+        inference_unet: Optional[torch.nn.Module] = None
+        inference_te1: Optional[torch.nn.Module] = None
+        inference_te2: Optional[torch.nn.Module] = None
+        unet_merged = False
+        te1_merged = False
+        te2_merged = False
 
         try:
+            merge_started_at = time.perf_counter()
+            unet.merge_adapter()
+            unet_merged = True
+            inference_unet = unet.base_model.model
+            log.info(
+                "[sampling e%d] applying attention backend for inference: %s",
+                epoch,
+                config.attention_mechanism,
+            )
+            configure_unet_attention(inference_unet, config.attention_mechanism, log)
+
+            if config.text_encoder_1.train:
+                text_encoder_1.merge_adapter()
+                te1_merged = True
+                inference_te1 = text_encoder_1.base_model.model
+            else:
+                inference_te1 = text_encoder_1
+
+            if config.text_encoder_2.train:
+                text_encoder_2.merge_adapter()
+                te2_merged = True
+                inference_te2 = text_encoder_2.base_model.model
+            else:
+                inference_te2 = text_encoder_2
+            log.info("[sampling e%d] merge adapters: %.2fs", epoch, time.perf_counter() - merge_started_at)
+
+            build_started_at = time.perf_counter()
+            inference_unet = inference_unet.to(device=device, dtype=_DTYPE_MAP[config.unet.weight_dtype])
+            inference_te1 = inference_te1.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_1.weight_dtype])
+            inference_te2 = inference_te2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
+            vae = vae.to(device=device, dtype=torch.float32)
+
+            inference_scheduler = _build_inference_scheduler(config.sample_scheduler, noise_scheduler)
+            pipe = StableDiffusionXLPipeline(
+                vae=vae,
+                text_encoder=inference_te1,
+                text_encoder_2=inference_te2,
+                tokenizer=tokenizer_1,
+                tokenizer_2=tokenizer_2,
+                unet=inference_unet,
+                scheduler=inference_scheduler,
+            )
+            pipe.set_progress_bar_config(disable=True)
+            inference_unet.eval()
+            inference_te1.eval()
+            inference_te2.eval()
+            log.info("[sampling e%d] move/build pipeline: %.2fs", epoch, time.perf_counter() - build_started_at)
+
+            width = config.sample_width or config.resolution
+            height = config.sample_height or config.resolution
+            autocast_dtype = _DTYPE_MAP[config.mixed_precision]
+
             with torch.no_grad():
                 for i, prompt in enumerate(config.sample_prompts):
                     if sampling_status_callback is not None:
@@ -640,7 +695,6 @@ class SDXLLoRATrainer:
                     if sampling_progress_callback is not None:
                         sampling_progress_callback(0, config.sample_steps)
 
-                    pipe.set_progress_bar_config(disable=True)
                     generator = torch.Generator(device=device)
                     if config.seed is not None:
                         generator.manual_seed(config.seed + i)
@@ -654,14 +708,11 @@ class SDXLLoRATrainer:
                         if completed % log_interval == 0 or completed == config.sample_steps:
                             log.info(
                                 "[sample %d/%d e%d] step %d/%d",
-                                i + 1,
-                                n_prompts,
-                                epoch,
-                                completed,
-                                config.sample_steps,
+                                i + 1, n_prompts, epoch, completed, config.sample_steps,
                             )
                         return callback_kwargs
 
+                    image_started_at = time.perf_counter()
                     with torch.autocast(device_type=device.type, dtype=autocast_dtype):
                         image = pipe(
                             prompt=prompt,
@@ -674,10 +725,32 @@ class SDXLLoRATrainer:
                             callback_on_step_end=_on_step_end,
                             callback_on_step_end_tensor_inputs=[],
                         ).images[0]
+
                     filename = f"{config.lora_name}_epoch{epoch}_{i:02d}.png"
                     image.save(sample_dir / filename)
-                    log.info("Sample saved: %s", filename)
+                    log.info(
+                        "Sample saved: %s (denoise %.2fs)",
+                        filename,
+                        time.perf_counter() - image_started_at,
+                    )
         finally:
+            restore_started_at = time.perf_counter()
+            if inference_unet is not None:
+                inference_unet.to("cpu")
+            if inference_te1 is not None:
+                inference_te1.to(te1_device)
+            if inference_te2 is not None:
+                inference_te2.to(te2_device)
+            vae.to(vae_device)
+            if unet_merged:
+                unet.unmerge_adapter()
+            if te1_merged:
+                text_encoder_1.unmerge_adapter()
+            if te2_merged:
+                text_encoder_2.unmerge_adapter()
+            self._restore_to_gpu(unet, text_encoder_1, text_encoder_2, config, log)
+            log.info("[sampling e%d] restore: %.2fs", epoch, time.perf_counter() - restore_started_at)
+            log.info("[sampling e%d] total: %.2fs", epoch, time.perf_counter() - sampling_started_at)
             if sampling_status_callback is not None:
                 sampling_status_callback(None)
             if training_logger is not None:
@@ -686,25 +759,6 @@ class SDXLLoRATrainer:
                     initial=self._progress.global_step,
                     desc="steps",
                 )
-            # Restore LoRA adapters to separate state (unmerge from base weights).
-            unet.unmerge_adapter()
-            if config.text_encoder_1.train:
-                text_encoder_1.unmerge_adapter()
-            if config.text_encoder_2.train:
-                text_encoder_2.unmerge_adapter()
-            # Restore training modes on the PEFT wrappers (not the extracted base models).
-            if unet_training:
-                unet.train()
-            if te1_training:
-                text_encoder_1.train()
-            if te2_training:
-                text_encoder_2.train()
-            if te1_device.type == "cpu":
-                text_encoder_1.to("cpu")
-            if te2_device.type == "cpu":
-                text_encoder_2.to("cpu")
-            if vae_device.type == "cpu":
-                vae.to("cpu")
 
     def _export_lora(
         self,
