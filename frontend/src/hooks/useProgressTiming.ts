@@ -45,6 +45,16 @@ export function useProgressTiming(
   }, [step]);
 
   useEffect(() => {
+    if (!active) {
+      startRef.current = null;
+      lastStepRef.current = null;
+      lastStepTimeRef.current = null;
+      setSecondsPerIteration(null);
+      setElapsedSeconds(0);
+    }
+  }, [active]);
+
+  useEffect(() => {
     if (!active || startRef.current === null) {
       return;
     }

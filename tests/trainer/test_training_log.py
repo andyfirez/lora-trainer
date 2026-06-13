@@ -51,3 +51,22 @@ def test_log_cache_progress_writes_log(tmp_path) -> None:
     logger.advance_progress(1, desc="cache latents")
     lines = JobTrainingLogger.read_tail(logger.log_path)
     assert any("cache latents 1/5" in line for line in lines)
+
+
+def test_build_latent_cache_uses_job_logger(tmp_path) -> None:
+    from unittest.mock import MagicMock
+
+    import torch
+
+    from src.trainer.sdxl.latent_cache import build_latent_cache
+
+    job_logger = JobTrainingLogger(job_id=2, log_path=tmp_path / "job.log")
+    vae = MagicMock()
+    vae.eval = MagicMock()
+    vae.to = MagicMock(return_value=vae)
+
+    build_latent_cache([], 512, vae, torch.device("cpu"), False, log=job_logger.logger)
+
+    lines = JobTrainingLogger.read_tail(job_logger.log_path)
+    assert any("Caching latents for 0 unique images" in line for line in lines)
+    assert any("Latent cache ready" in line for line in lines)

@@ -42,6 +42,68 @@ async def test_cancel_running_job(jobs_service: JobsService, session: AsyncSessi
 
 
 @pytest.mark.asyncio
+async def test_cancel_clears_progress_and_error(jobs_service: JobsService, session: AsyncSession) -> None:
+    job = await jobs_service.create_job("test", "base_model_name: x")
+    await jobs_service._job_repo.update_status(
+        job,
+        JobStatus.RUNNING,
+        pid=1234,
+        error_message="previous failure",
+    )
+    await jobs_service._job_repo.update_progress(
+        job,
+        step=50,
+        total=100,
+        loss=0.5,
+        avr_loss=0.4,
+        epoch=1,
+        epoch_total=10,
+    )
+    await jobs_service._job_repo.update_cache_progress(job, step=3, total=10)
+    await jobs_service._job_repo.update_sampling_status(job, "Sampling")
+    await jobs_service._job_repo.update_sampling_progress(job, step=2, total=5)
+
+    cancelled = await jobs_service.cancel_job(job.id)
+
+    assert cancelled.status == JobStatus.CANCELLED
+    assert cancelled.pid is None
+    assert cancelled.error_message is None
+    assert cancelled.progress_step is None
+    assert cancelled.progress_total is None
+    assert cancelled.progress_loss is None
+    assert cancelled.progress_avr_loss is None
+    assert cancelled.progress_epoch is None
+    assert cancelled.progress_epoch_total is None
+    assert cancelled.cache_progress_step is None
+    assert cancelled.cache_progress_total is None
+    assert cancelled.sampling_status is None
+    assert cancelled.sampling_step is None
+    assert cancelled.sampling_total is None
+
+
+@pytest.mark.asyncio
+async def test_enqueue_clears_stale_runtime_state(jobs_service: JobsService, session: AsyncSession) -> None:
+    job = await jobs_service.create_job("test", "base_model_name: x")
+    await jobs_service._job_repo.update_status(
+        job,
+        JobStatus.FAILED,
+        error_message="CUDA OOM",
+    )
+    await jobs_service._job_repo.update_progress(job, step=25, total=100, loss=0.9, avr_loss=0.8)
+
+    queued = await jobs_service.enqueue_job(job.id)
+    refreshed = await jobs_service.get_job(job.id)
+
+    assert queued.job_id == job.id
+    assert refreshed.status == JobStatus.QUEUED
+    assert refreshed.error_message is None
+    assert refreshed.progress_step is None
+    assert refreshed.progress_total is None
+    assert refreshed.progress_loss is None
+    assert refreshed.progress_avr_loss is None
+
+
+@pytest.mark.asyncio
 async def test_cancel_completed_job_raises(jobs_service: JobsService, session: AsyncSession) -> None:
     job = await jobs_service.create_job("test", "base_model_name: x")
     await jobs_service._job_repo.update_status(job, JobStatus.COMPLETED)
@@ -101,3 +163,19 @@ def test_read_tail_from_file(tmp_path) -> None:
     log_path.write_text("\n".join(f"line{i}" for i in range(10)), encoding="utf-8")
     lines = JobTrainingLogger.read_tail(log_path, lines=3)
     assert lines == ["line7", "line8", "line9"]
+
+
+def test_job_logger_overwrites_log_file(tmp_path) -> None:
+    log_path = tmp_path / "job.log"
+    log_path.write_text("old content\n", encoding="utf-8")
+
+    first_logger = JobTrainingLogger(job_id=1, log_path=log_path)
+    first_logger.logger.info("first run")
+
+    second_logger = JobTrainingLogger(job_id=2, log_path=log_path)
+    second_logger.logger.info("second run")
+
+    content = log_path.read_text(encoding="utf-8")
+    assert "old content" not in content
+    assert "first run" not in content
+    assert "second run" in content

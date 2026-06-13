@@ -90,7 +90,7 @@ export default function JobsTable() {
                   <StatusBadge status={job.status} />
                 </td>
                 <td className="px-4 py-3">
-                  {progress != null ? (
+                  {job.status === "running" && progress != null ? (
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 bg-[var(--border)] rounded-full h-1.5 w-24">

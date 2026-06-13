@@ -64,6 +64,7 @@ class JobsService:
             raise JobAlreadyQueuedError(job_id)
         max_pos = await self._queue_repo.get_max_position()
         entry = QueueEntry(job_id=job_id, position=max_pos + 1)
+        await self._job_repo.clear_runtime_state(job)
         await self._job_repo.update_status(job, JobStatus.QUEUED)
         return await self._queue_repo.add(entry)
 
@@ -72,12 +73,14 @@ class JobsService:
         if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
             raise JobNotCancellableError(job_id, job.status)
         if job.status == JobStatus.RUNNING:
-            return await self._job_repo.update_status(job, JobStatus.CANCELLED)
+            await self._job_repo.update_status(job, JobStatus.CANCELLED)
+            return await self._job_repo.clear_runtime_state(job)
         entry = await self._queue_repo.get_by_job_id(job_id)
         if entry is not None:
             await self._queue_repo.shift_positions_down(entry.position)
             await self._queue_repo.delete(entry)
-        return await self._job_repo.update_status(job, JobStatus.CANCELLED)
+        await self._job_repo.update_status(job, JobStatus.CANCELLED)
+        return await self._job_repo.clear_runtime_state(job)
 
     async def get_job_logs(self, job_id: int, tail: int = 500) -> list[str]:
         job = await self.get_job(job_id)

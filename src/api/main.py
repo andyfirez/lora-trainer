@@ -19,6 +19,7 @@ from src.api.exception_handlers import (
 )
 from src.api.routers import datasets, files, jobs, queues
 from src.db.session import create_tables
+from src.services.worker.service import QueueWorker
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetNameConflictError,
@@ -40,7 +41,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting up — creating database tables")
     await create_tables()
+    worker = QueueWorker(echo_subprocess_output=False)
+    await worker.start()
+    app.state.queue_worker = worker
     yield
+    await worker.stop()
     logger.info("Shutting down")
 
 

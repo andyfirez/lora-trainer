@@ -23,19 +23,47 @@ function progressPercent(step: number | null, total: number | null): number | nu
   return Math.round((step / total) * 100);
 }
 
-function LiveLogs({ jobId, active }: { jobId: number; active: boolean }) {
+function LiveLogs({
+  jobId,
+  isRunning,
+  showLogs,
+  jobStatus,
+}: {
+  jobId: number;
+  isRunning: boolean;
+  showLogs: boolean;
+  jobStatus: string;
+}) {
   const logRef = useRef<HTMLPreElement>(null);
-  const { data } = useSWR(
-    active ? `/jobs/${jobId}/logs` : null,
+  const prevRunningRef = useRef(isRunning);
+  const { data, mutate } = useSWR(
+    showLogs ? `/jobs/${jobId}/logs` : null,
     () => jobsApi.getLogs(jobId, 500),
-    { refreshInterval: active ? 2000 : 0 },
+    { refreshInterval: isRunning ? 2000 : 0 },
   );
 
   useEffect(() => {
-    if (logRef.current && active) {
+    if (prevRunningRef.current && !isRunning && showLogs) {
+      if (jobStatus === "cancelled") {
+        void mutate({ lines: [] }, { revalidate: false });
+      } else {
+        void mutate();
+      }
+    }
+    prevRunningRef.current = isRunning;
+  }, [isRunning, showLogs, mutate, jobStatus]);
+
+  useEffect(() => {
+    if (jobStatus === "cancelled") {
+      void mutate({ lines: [] }, { revalidate: false });
+    }
+  }, [jobStatus, mutate]);
+
+  useEffect(() => {
+    if (logRef.current && (isRunning || data?.lines.length)) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [data, active]);
+  }, [data, isRunning]);
 
   const text = data?.lines.join("\n") ?? "";
 
@@ -74,7 +102,7 @@ export default function JobDetailPage({ params }: Props) {
       ? Math.round((job.sampling_step / job.sampling_total) * 100)
       : null;
   const isRunning = job.status === "running";
-  const showLogs = isRunning || job.status === "completed" || job.status === "failed" || job.status === "cancelled";
+  const showLogs = isRunning || job.status === "completed" || job.status === "failed";
 
   const handleEnqueue = async () => { await jobsApi.enqueue(id); mutate(); };
   const handleCancel = async () => { await jobsApi.cancel(id); mutate(); };
@@ -121,7 +149,7 @@ export default function JobDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {cachePct != null && (
+      {isRunning && cachePct != null && (
         <JobProgressBar
           title="Caching Progress"
           step={job.cache_progress_step}
@@ -137,7 +165,7 @@ export default function JobDetailPage({ params }: Props) {
         />
       )}
 
-      {job.sampling_status ? (
+      {isRunning && (job.sampling_status ? (
         <JobProgressBar
           title={job.sampling_status}
           step={job.sampling_step}
@@ -179,11 +207,11 @@ export default function JobDetailPage({ params }: Props) {
             ) : undefined
           }
         />
-      ) : null}
+      ) : null)}
 
-      {showLogs && <LiveLogs jobId={id} active={isRunning} />}
+      {showLogs && <LiveLogs jobId={id} isRunning={isRunning} showLogs={showLogs} jobStatus={job.status} />}
 
-      {job.error_message && (
+      {job.status === "failed" && job.error_message && (
         <div className="rounded-lg bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 text-sm">
           <strong>Error:</strong> {job.error_message}
         </div>

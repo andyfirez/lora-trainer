@@ -32,6 +32,7 @@ def build_te_cache(
     dtype: torch.dtype,
     to_disk: bool,
     on_progress: Optional[CacheProgressCallback] = None,
+    log: logging.Logger | None = None,
 ) -> dict[str, tuple[Tensor, Tensor]]:
     """Encode all captions through both SDXL text encoders once.
 
@@ -55,8 +56,9 @@ def build_te_cache(
     encoded = 0
     processed = 0
     total_unique = len({caption for _, caption in path_caption_pairs})
+    active_log = log or logger
 
-    logger.info(
+    active_log.info(
         "Caching text encoder outputs for %d unique captions (to_disk=%s)...",
         total_unique,
         to_disk,
@@ -117,7 +119,7 @@ def build_te_cache(
         if on_progress is not None:
             on_progress(processed, total_unique, "text_encoder")
 
-    logger.info(
+    active_log.info(
         "TE cache ready: %d encoded, %d loaded from disk. Moving text encoders to CPU.",
         encoded,
         loaded_from_disk,

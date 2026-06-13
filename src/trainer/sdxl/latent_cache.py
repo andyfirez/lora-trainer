@@ -40,6 +40,7 @@ def build_latent_cache(
     device: torch.device,
     to_disk: bool,
     on_progress: Optional[CacheProgressCallback] = None,
+    log: logging.Logger | None = None,
 ) -> dict[str, Tensor]:
     """Encode all images through VAE once and cache the resulting latents.
 
@@ -50,9 +51,10 @@ def build_latent_cache(
     """
     transform = _make_transform(resolution)
     cache: dict[str, Tensor] = {}
+    active_log = log or logger
 
     unique_paths = list(dict.fromkeys(image_paths))
-    logger.info("Caching latents for %d unique images (to_disk=%s)...", len(unique_paths), to_disk)
+    active_log.info("Caching latents for %d unique images (to_disk=%s)...", len(unique_paths), to_disk)
 
     vae.eval()
     vae.to(device)
@@ -87,7 +89,7 @@ def build_latent_cache(
         if on_progress is not None:
             on_progress(index, len(unique_paths), "latents")
 
-    logger.info(
+    active_log.info(
         "Latent cache ready: %d encoded, %d loaded from disk. Moving VAE to CPU.",
         encoded,
         loaded_from_disk,

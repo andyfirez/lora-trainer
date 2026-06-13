@@ -16,7 +16,7 @@ from pathlib import Path
 
 from src.db.repositories.training_job_repo import TrainingJobRepository
 from src.db.session import session_factory
-from src.db.tables.training_job import JobStatus
+from src.db.tables.training_job import JobStatus, TrainingJob
 from src.settings.app_settings import settings
 from src.trainer.config import TrainConfig
 from src.trainer.sdxl.trainer import SDXLLoRATrainer
@@ -38,6 +38,13 @@ threading.Thread(
 ).start()
 
 
+async def _get_active_job(repo: TrainingJobRepository, job_id: int) -> TrainingJob | None:
+    job = await repo.get_by_id(job_id)
+    if job is None or job.status == JobStatus.CANCELLED:
+        return None
+    return job
+
+
 async def _update_progress(
     job_id: int,
     step: int,
@@ -49,7 +56,7 @@ async def _update_progress(
 ) -> None:
     async with session_factory() as session:
         repo = TrainingJobRepository(session)
-        job = await repo.get_by_id(job_id)
+        job = await _get_active_job(repo, job_id)
         if job is not None:
             await repo.update_progress(
                 job,
@@ -66,7 +73,7 @@ async def _update_progress(
 async def _update_sampling_status(job_id: int, status: str | None) -> None:
     async with session_factory() as session:
         repo = TrainingJobRepository(session)
-        job = await repo.get_by_id(job_id)
+        job = await _get_active_job(repo, job_id)
         if job is not None:
             await repo.update_sampling_status(job, status)
             await session.commit()
@@ -75,7 +82,7 @@ async def _update_sampling_status(job_id: int, status: str | None) -> None:
 async def _update_sampling_progress(job_id: int, step: int, total: int) -> None:
     async with session_factory() as session:
         repo = TrainingJobRepository(session)
-        job = await repo.get_by_id(job_id)
+        job = await _get_active_job(repo, job_id)
         if job is not None:
             await repo.update_sampling_progress(job, step, total)
             await session.commit()
@@ -84,7 +91,7 @@ async def _update_sampling_progress(job_id: int, step: int, total: int) -> None:
 async def _update_cache_progress(job_id: int, step: int, total: int) -> None:
     async with session_factory() as session:
         repo = TrainingJobRepository(session)
-        job = await repo.get_by_id(job_id)
+        job = await _get_active_job(repo, job_id)
         if job is not None:
             await repo.update_cache_progress(job, step, total)
             await session.commit()

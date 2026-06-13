@@ -64,7 +64,7 @@ class JobTrainingLogger:
         self._logger.propagate = False
         if not self._logger.handlers:
             formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-            file_handler = logging.FileHandler(self.log_path, encoding="utf-8")
+            file_handler = logging.FileHandler(self.log_path, mode="w", encoding="utf-8")
             file_handler.setFormatter(formatter)
             stream_handler = logging.StreamHandler(sys.stdout)
             stream_handler.setFormatter(formatter)

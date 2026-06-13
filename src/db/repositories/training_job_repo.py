@@ -113,3 +113,17 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.flush()
         await self._session.refresh(job)
         return job
+
+    async def clear_runtime_state(self, job: TrainingJob) -> TrainingJob:
+        job.pid = None
+        job.error_message = None
+        job.progress_step = None
+        job.progress_total = None
+        job.progress_loss = None
+        job.progress_avr_loss = None
+        job.progress_epoch = None
+        job.progress_epoch_total = None
+        job.cache_progress_step = None
+        job.cache_progress_total = None
+        await self.update_sampling_status(job, None)
+        return job

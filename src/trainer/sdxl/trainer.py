@@ -240,6 +240,7 @@ class SDXLLoRATrainer:
                 device,
                 config.cache_latents_to_disk,
                 on_progress=_on_cache_progress if cache_steps > 0 else None,
+                log=log,
             )
 
         if config.cache_text_encoder_outputs:
@@ -254,6 +255,7 @@ class SDXLLoRATrainer:
                 weight_dtype,
                 config.cache_text_encoder_outputs_to_disk,
                 on_progress=_on_cache_progress if cache_steps > 0 else None,
+                log=log,
             )
 
         if self._training_logger is not None:
@@ -650,9 +652,13 @@ class SDXLLoRATrainer:
                         if sampling_progress_callback is not None:
                             sampling_progress_callback(completed, config.sample_steps)
                         if completed % log_interval == 0 or completed == config.sample_steps:
-                            print(
-                                f"[sample {i + 1}/{n_prompts} e{epoch}] step {completed}/{config.sample_steps}",
-                                flush=True,
+                            log.info(
+                                "[sample %d/%d e%d] step %d/%d",
+                                i + 1,
+                                n_prompts,
+                                epoch,
+                                completed,
+                                config.sample_steps,
                             )
                         return callback_kwargs
 
