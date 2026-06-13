@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --border: #2d3148;
+  --text: #e2e8f0;
+  --muted: #6b7280;
+  --accent: #6366f1;
+  --accent-hover: #4f46e5;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --running: #3b82f6;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.status-badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+.status-pending   { @apply bg-gray-800 text-gray-300; }
+.status-queued    { @apply bg-yellow-900 text-yellow-300; }
+.status-running   { @apply bg-blue-900 text-blue-300; }
+.status-completed { @apply bg-green-900 text-green-300; }
+.status-failed    { @apply bg-red-900 text-red-300; }
+.status-cancelled { @apply bg-gray-800 text-gray-500; }

@@ -1,0 +1,13 @@
+[server]
+host = "127.0.0.1"
+port = 8000
+
+[database]
+path = "lora_trainer.db"
+echo = false
+
+[training]
+worker_poll_interval_seconds = 5
+max_concurrent_jobs = 1
+logs_dir = "logs"
+cancel_poll_interval_seconds = 1

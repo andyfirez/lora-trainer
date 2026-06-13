@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[oc]
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+wheels/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Local configuration and secrets
+config.toml
+.env
+.env.*
+!.env.example
+
+# Application runtime data
+lora_trainer.db
+*.db
+logs/
+output/
+
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
+
+# OS and IDE
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+*.swp
+*.swo
+*~
