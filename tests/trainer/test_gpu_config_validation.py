@@ -66,3 +66,32 @@ def test_validate_gpu_config_skips_gpu_checks_without_cuda(
         mixed_precision=WeightDtype.BFLOAT_16,
         vae_dtype=VaeDtype.BFLOAT_16,
     )
+
+
+@patch("src.trainer.gpu_config_validation.torch.cuda.is_available", return_value=True)
+@patch("src.trainer.gpu_config_validation.torch.cuda.get_device_capability", return_value=(8, 6))
+@patch("src.trainer.gpu_config_validation.torch.cuda.is_bf16_supported", return_value=True)
+@patch("src.trainer.gpu_config_validation.is_xformers_available", return_value=True)
+def test_validate_gpu_config_reforge_sampler_rejects_mixed_vae_dtype_on_ampere(
+    _xformers: object,
+    _bf16: object,
+    _capability: object,
+    _cuda: object,
+) -> None:
+    with pytest.raises(ValueError, match="use_reforge_sampler=true requires mixed_precision to match vae_dtype"):
+        validate_gpu_config(
+            attention_mechanism="sdpa",
+            mixed_precision=WeightDtype.FLOAT_16,
+            vae_dtype=VaeDtype.AUTO,
+            use_reforge_sampler=True,
+        )
+
+
+@patch("src.trainer.gpu_config_validation.is_xformers_available", return_value=True)
+def test_validate_gpu_config_reforge_sampler_accepts_matching_dtypes(_xformers: object) -> None:
+    validate_gpu_config(
+        attention_mechanism="sdpa",
+        mixed_precision=WeightDtype.FLOAT_16,
+        vae_dtype=VaeDtype.FLOAT_16,
+        use_reforge_sampler=True,
+    )

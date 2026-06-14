@@ -173,4 +173,5 @@ class TrainConfig(BaseModel):
             attention_mechanism=self.attention_mechanism,
             mixed_precision=self.mixed_precision,
             vae_dtype=self.vae_dtype,
+            use_reforge_sampler=self.use_reforge_sampler,
         )
