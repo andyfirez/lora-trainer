@@ -17,9 +17,9 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
-from src.db.repositories.training_job_repo import TrainingJobRepository
+from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
-from src.db.tables.training_job import JobStatus, TrainingJob
+from src.db.tables.job import Job, JobStatus
 from src.settings.app_settings import settings
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
@@ -42,7 +42,7 @@ threading.Thread(
 ).start()
 
 
-async def _get_active_job(repo: TrainingJobRepository, job_id: int) -> TrainingJob | None:
+async def _get_active_job(repo: JobRepository, job_id: int) -> Job | None:
     job = await repo.get_by_id(job_id)
     if job is None or job.status == JobStatus.CANCELLED:
         return None

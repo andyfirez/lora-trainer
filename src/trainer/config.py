@@ -142,6 +142,7 @@ class TrainConfig(BaseModel):
     use_reforge_sampler: bool = False
     sample_sampler: ReforgeSampleSampler = ReforgeSampleSampler.EULER_A
     sample_scheduler_mode: ReforgeSampleSchedulerMode = ReforgeSampleSchedulerMode.NORMAL
+    post_training_sampling_config_id: Optional[int] = None
 
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 

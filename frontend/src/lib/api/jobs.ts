@@ -1,5 +1,5 @@
 import { api } from "@/lib/api/client";
-import type { Job, SamplingRun } from "@/types";
+import type { Job, JobSamplesResponse, JobType } from "@/types";
 
 export interface JobLogs {
   lines: string[];
@@ -17,11 +17,20 @@ export interface JobLossResponse {
   points: LossPoint[];
 }
 
+export interface JobListParams {
+  job_type?: JobType;
+  source_job_id?: number;
+}
+
 export const jobsApi = {
-  list: () => api.get<Job[]>("/jobs/"),
+  list: (params: JobListParams = {}) => {
+    const search = new URLSearchParams();
+    if (params.job_type) search.set("job_type", params.job_type);
+    if (params.source_job_id != null) search.set("source_job_id", String(params.source_job_id));
+    const qs = search.toString();
+    return api.get<Job[]>(`/jobs/${qs ? `?${qs}` : ""}`);
+  },
   get: (id: number) => api.get<Job>(`/jobs/${id}`),
-  create: (name: string, config_yaml: string) => api.post<Job>("/jobs/", { name, config_yaml }),
-  update: (id: number, data: { name?: string; config_yaml?: string }) => api.patch<Job>(`/jobs/${id}`, data),
   delete: (id: number) => api.delete(`/jobs/${id}`),
   enqueue: (id: number) => api.post<Job>(`/jobs/${id}/enqueue`),
   resume: (id: number) => api.post<Job>(`/jobs/${id}/resume`),
@@ -37,7 +46,5 @@ export const jobsApi = {
     const qs = search.toString();
     return api.get<JobLossResponse>(`/jobs/${id}/loss${qs ? `?${qs}` : ""}`);
   },
-  listSamplingRuns: (id: number) => api.get<SamplingRun[]>(`/jobs/${id}/sampling-runs`),
-  createSamplingRun: (id: number, data: { lora_paths: string[]; name?: string; enqueue?: boolean }) =>
-    api.post<SamplingRun>(`/jobs/${id}/sample`, data),
+  getSamples: (id: number) => api.get<JobSamplesResponse>(`/jobs/${id}/samples`),
 };

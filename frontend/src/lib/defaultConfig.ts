@@ -62,3 +62,22 @@ logging:
   # log_dir: output/.tensorboard
 `,
 };
+
+export const SamplingConfig = {
+  DEFAULT_YAML: `# SDXL LoRA Sampling Configuration
+base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+output_dir: output
+lora_name: lora
+sample_prompts: []
+sample_negative_prompt: ''
+sample_steps: 30
+sample_cfg_scale: 7.5
+# sample_width: 1024
+# sample_height: 1024
+sample_scheduler: euler
+use_reforge_sampler: false
+sample_sampler: euler_a
+sample_scheduler_mode: normal
+lora_paths: []
+`,
+};

@@ -1,33 +1,22 @@
-import Link from "next/link";
-import { PlusCircle } from "lucide-react";
-import JobsTable from "@/components/JobsTable";
-import SamplingRunsTable from "@/components/SamplingRunsTable";
+import JobQueuePanel from "@/components/JobQueuePanel";
+import JobsList from "@/components/JobsList";
 
 export default function JobsPage() {
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Jobs</h1>
-          <p className="text-[var(--muted)] mt-1">Training jobs and sampling runs</p>
-        </div>
-        <Link
-          href="/jobs/new"
-          className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-        >
-          <PlusCircle size={15} />
-          New Job
-        </Link>
+      <div>
+        <h1 className="text-2xl font-bold text-white">Jobs</h1>
+        <p className="text-[var(--muted)] mt-1">Training and sampling job runs</p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-white">Training Jobs</h2>
-        <JobsTable />
+        <h2 className="text-lg font-semibold text-white">Queue</h2>
+        <JobQueuePanel />
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-white">Sampling Runs</h2>
-        <SamplingRunsTable />
+        <h2 className="text-lg font-semibold text-white">All Jobs</h2>
+        <JobsList />
       </section>
     </div>
   );

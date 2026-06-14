@@ -2,12 +2,10 @@
 
 from typing import Sequence
 
+from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
-from src.db.repositories.sampling_run_repo import SamplingRunRepository
-from src.db.repositories.training_job_repo import TrainingJobRepository
-from src.db.tables.queue_entry import QueueEntry, QueueItemType
-from src.db.tables.sampling_run import SamplingRun
-from src.db.tables.training_job import TrainingJob
+from src.db.tables.job import Job
+from src.db.tables.queue_entry import QueueEntry
 from src.services.queues.exceptions import QueueEntryNotFoundError
 
 
@@ -15,34 +13,27 @@ class QueuesService:
     def __init__(
         self,
         queue_repo: QueueRepository,
-        job_repo: TrainingJobRepository,
-        sampling_run_repo: SamplingRunRepository,
+        job_repo: JobRepository,
     ) -> None:
         self._queue_repo = queue_repo
         self._job_repo = job_repo
-        self._sampling_run_repo = sampling_run_repo
 
     async def list_queue(self) -> Sequence[QueueEntry]:
         return await self._queue_repo.get_ordered()
 
-    async def list_queue_with_items(self) -> Sequence[tuple[QueueEntry, TrainingJob | SamplingRun]]:
+    async def list_queue_with_jobs(self) -> Sequence[tuple[QueueEntry, Job]]:
         entries = await self._queue_repo.get_ordered()
-        result: list[tuple[QueueEntry, TrainingJob | SamplingRun]] = []
+        result: list[tuple[QueueEntry, Job]] = []
         for entry in entries:
-            if entry.item_type == QueueItemType.TRAINING:
-                job = await self._job_repo.get_by_id(entry.item_id)
-                if job is not None:
-                    result.append((entry, job))
-            elif entry.item_type == QueueItemType.SAMPLING:
-                sampling_run = await self._sampling_run_repo.get_by_id(entry.item_id)
-                if sampling_run is not None:
-                    result.append((entry, sampling_run))
+            job = await self._job_repo.get_by_id(entry.job_id)
+            if job is not None:
+                result.append((entry, job))
         return result
 
-    async def move_to_top(self, item_type: QueueItemType, item_id: int) -> QueueEntry:
-        entry = await self._queue_repo.get_by_item(item_type, item_id)
+    async def move_to_top(self, job_id: int) -> QueueEntry:
+        entry = await self._queue_repo.get_by_job_id(job_id)
         if entry is None:
-            raise QueueEntryNotFoundError(item_id)
+            raise QueueEntryNotFoundError(job_id)
         entry.position = 0
         self._queue_repo._session.add(entry)
         await self._queue_repo._session.flush()

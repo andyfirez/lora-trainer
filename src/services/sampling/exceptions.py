@@ -1,6 +1,6 @@
 """Sampling service exceptions."""
 
-from src.db.tables.sampling_run import SamplingRunStatus
+from src.db.tables.job import JobStatus
 
 
 class SamplingRunNotFoundError(Exception):
@@ -16,7 +16,7 @@ class SamplingRunAlreadyQueuedError(Exception):
 
 
 class SamplingRunNotCancellableError(Exception):
-    def __init__(self, sampling_run_id: int, status: SamplingRunStatus) -> None:
+    def __init__(self, sampling_run_id: int, status: JobStatus) -> None:
         super().__init__(f"Sampling run {sampling_run_id} with status {status} cannot be cancelled")
         self.sampling_run_id = sampling_run_id
         self.status = status

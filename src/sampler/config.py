@@ -1,0 +1,65 @@
+"""Sampling configuration — Pydantic model, serialized as YAML."""
+
+from typing import Optional
+
+import yaml
+from pydantic import BaseModel, Field
+
+from src.trainer.config import (
+    ReforgeSampleSampler,
+    ReforgeSampleSchedulerMode,
+    SampleScheduler,
+)
+
+
+class SamplingConfig(BaseModel):
+    """SDXL LoRA sampling configuration. Serialized to/from YAML."""
+
+    base_model_name: str = "stabilityai/stable-diffusion-xl-base-1.0"
+    output_dir: str = "output"
+    lora_name: str = "lora"
+    sample_prompts: list[str] = Field(default_factory=list)
+    sample_negative_prompt: str = ""
+    sample_steps: int = Field(default=30, ge=1)
+    sample_cfg_scale: float = Field(default=7.5, gt=0.0)
+    sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
+    sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
+    sample_scheduler: SampleScheduler = SampleScheduler.EULER
+    use_reforge_sampler: bool = False
+    sample_sampler: ReforgeSampleSampler = ReforgeSampleSampler.EULER_A
+    sample_scheduler_mode: ReforgeSampleSchedulerMode = ReforgeSampleSchedulerMode.NORMAL
+    lora_paths: list[str] = Field(default_factory=list)
+
+    @classmethod
+    def from_yaml(cls, yaml_str: str) -> "SamplingConfig":
+        data = yaml.safe_load(yaml_str)
+        return cls.model_validate(data)
+
+    def to_yaml(self) -> str:
+        return yaml.dump(self.model_dump(mode="json"), allow_unicode=True, sort_keys=False)
+
+    @classmethod
+    def default_yaml(cls) -> str:
+        return cls().to_yaml()
+
+    def to_train_config(self) -> "TrainConfig":
+        from src.trainer.config import ModelPartConfig, TrainConfig, WeightDtype
+
+        return TrainConfig(
+            base_model_name=self.base_model_name,
+            output_dir=self.output_dir,
+            lora_name=self.lora_name,
+            sample_prompts=self.sample_prompts,
+            sample_negative_prompt=self.sample_negative_prompt,
+            sample_steps=self.sample_steps,
+            sample_cfg_scale=self.sample_cfg_scale,
+            sample_width=self.sample_width,
+            sample_height=self.sample_height,
+            sample_scheduler=self.sample_scheduler,
+            use_reforge_sampler=self.use_reforge_sampler,
+            sample_sampler=self.sample_sampler,
+            sample_scheduler_mode=self.sample_scheduler_mode,
+            unet=ModelPartConfig(train=True, weight_dtype=WeightDtype.FLOAT_16),
+            text_encoder_1=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),
+            text_encoder_2=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),
+        )

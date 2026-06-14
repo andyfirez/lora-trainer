@@ -1,0 +1,109 @@
+import pytest
+
+from src.db.tables.job_config import ConfigType
+from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
+from src.services.configs.service import JobConfigService
+
+
+@pytest.mark.asyncio
+async def test_list_configs_returns_all(config_service: JobConfigService) -> None:
+    await config_service.create_config(
+        name="train",
+        config_type=ConfigType.TRAINING,
+        config_yaml="base_model_name: x",
+    )
+    await config_service.create_config(
+        name="sample",
+        config_type=ConfigType.SAMPLING,
+        config_yaml="sample_prompts:\n  - prompt\n",
+    )
+
+    configs = await config_service.list_configs()
+
+    assert len(configs) == 2
+    assert {config.name for config in configs} == {"train", "sample"}
+
+
+@pytest.mark.asyncio
+async def test_list_configs_filters_by_type(config_service: JobConfigService) -> None:
+    await config_service.create_config(
+        name="train",
+        config_type=ConfigType.TRAINING,
+        config_yaml="base_model_name: x",
+    )
+    await config_service.create_config(
+        name="sample",
+        config_type=ConfigType.SAMPLING,
+        config_yaml="sample_prompts:\n  - prompt\n",
+    )
+
+    training_configs = await config_service.list_configs(config_type=ConfigType.TRAINING)
+
+    assert len(training_configs) == 1
+    assert training_configs[0].name == "train"
+
+
+@pytest.mark.asyncio
+async def test_get_config_returns_entity(config_service: JobConfigService) -> None:
+    created = await config_service.create_config(
+        name="train",
+        config_type=ConfigType.TRAINING,
+        config_yaml="base_model_name: x",
+        description="demo",
+    )
+
+    fetched = await config_service.get_config(created.id)
+
+    assert fetched.id == created.id
+    assert fetched.name == "train"
+    assert fetched.description == "demo"
+
+
+@pytest.mark.asyncio
+async def test_get_config_raises_when_missing(config_service: JobConfigService) -> None:
+    with pytest.raises(JobConfigNotFoundError):
+        await config_service.get_config(999)
+
+
+@pytest.mark.asyncio
+async def test_create_config_validates_yaml(config_service: JobConfigService) -> None:
+    with pytest.raises(JobConfigValidationError):
+        await config_service.create_config(
+            name="bad",
+            config_type=ConfigType.TRAINING,
+            config_yaml="not_a_valid_config: [[[",
+        )
+
+
+@pytest.mark.asyncio
+async def test_update_config_changes_fields(config_service: JobConfigService) -> None:
+    created = await config_service.create_config(
+        name="train",
+        config_type=ConfigType.TRAINING,
+        config_yaml="base_model_name: x",
+    )
+
+    updated = await config_service.update_config(
+        created.id,
+        name="renamed",
+        config_yaml="base_model_name: y",
+        description="updated",
+    )
+
+    assert updated.name == "renamed"
+    assert "base_model_name: y" in updated.config_yaml
+    assert updated.description == "updated"
+
+
+@pytest.mark.asyncio
+async def test_delete_config_removes_entity(config_service: JobConfigService) -> None:
+    created = await config_service.create_config(
+        name="train",
+        config_type=ConfigType.TRAINING,
+        config_yaml="base_model_name: x",
+    )
+
+    await config_service.delete_config(created.id)
+
+    with pytest.raises(JobConfigNotFoundError):
+        await config_service.get_config(created.id)

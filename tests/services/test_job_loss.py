@@ -6,10 +6,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.dependencies import _get_jobs_service
 from src.api.main import app
-from src.db.migrations import migrate_schema
+from src.db.repositories.job_config_repo import JobConfigRepository
+from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
-from src.db.repositories.training_job_repo import TrainingJobRepository
-from src.db.tables.training_job import TrainingJob
+from src.db.session import register_all_tables
+from src.db.tables.job import Job, JobType
 from src.services.jobs.service import JobsService
 from src.trainer.metric_logger import MetricLogger
 
@@ -25,17 +26,21 @@ concepts:
 
 @pytest.mark.asyncio
 async def test_get_job_loss_api_endpoint(tmp_path) -> None:
+    register_all_tables()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        await migrate_schema(conn)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     output_dir = tmp_path / "output"
     config_yaml = CONFIG_YAML.replace("output_dir: output", f"output_dir: {output_dir.as_posix()}")
 
     async with factory() as db_session:
-        job = TrainingJob(name="loss-api-test", config_yaml=config_yaml)
+        job = Job(
+            job_type=JobType.TRAINING,
+            name="loss-api-test",
+            config_yaml=config_yaml,
+        )
         db_session.add(job)
         await db_session.commit()
         await db_session.refresh(job)
@@ -48,7 +53,11 @@ async def test_get_job_loss_api_endpoint(tmp_path) -> None:
         logger.finish()
 
         async def _override_jobs_service():
-            yield JobsService(TrainingJobRepository(db_session), QueueRepository(db_session))
+            yield JobsService(
+                JobRepository(db_session),
+                QueueRepository(db_session),
+                JobConfigRepository(db_session),
+            )
 
         app.dependency_overrides[_get_jobs_service] = _override_jobs_service
         try:
@@ -74,20 +83,28 @@ async def test_get_job_loss_api_endpoint(tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_get_job_loss_empty_when_no_file() -> None:
+    register_all_tables()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        await migrate_schema(conn)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with factory() as db_session:
-        job = TrainingJob(name="no-loss", config_yaml=CONFIG_YAML)
+        job = Job(
+            job_type=JobType.TRAINING,
+            name="no-loss",
+            config_yaml=CONFIG_YAML,
+        )
         db_session.add(job)
         await db_session.commit()
         await db_session.refresh(job)
 
         async def _override_jobs_service():
-            yield JobsService(TrainingJobRepository(db_session), QueueRepository(db_session))
+            yield JobsService(
+                JobRepository(db_session),
+                QueueRepository(db_session),
+                JobConfigRepository(db_session),
+            )
 
         app.dependency_overrides[_get_jobs_service] = _override_jobs_service
         try:

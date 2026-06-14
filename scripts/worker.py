@@ -8,7 +8,7 @@ import asyncio
 import logging
 import sys
 
-from src.db.session import create_tables
+from src.db.session import run_migrations
 from src.services.worker.service import QueueWorker
 
 logging.basicConfig(
@@ -19,7 +19,7 @@ logging.basicConfig(
 
 
 async def _main() -> None:
-    await create_tables()
+    await run_migrations()
     worker = QueueWorker(echo_subprocess_output=True)
     await worker.start()
     try:

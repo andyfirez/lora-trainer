@@ -14,20 +14,21 @@ from src.api.exception_handlers import (
     dataset_not_found_handler,
     job_already_queued_handler,
     job_checkpoint_not_found_handler,
+    job_config_not_found_handler,
+    job_config_validation_handler,
     job_not_cancellable_handler,
     job_not_found_handler,
     job_not_resumable_handler,
+    job_operation_not_supported_handler,
     queue_entry_not_found_handler,
     sampling_checkpoints_not_found_handler,
     sampling_lora_path_not_found_handler,
     sampling_prompts_not_configured_handler,
-    sampling_run_already_queued_handler,
-    sampling_run_not_cancellable_handler,
-    sampling_run_not_found_handler,
 )
-from src.api.routers import datasets, files, jobs, queues, sampling_runs
-from src.db.session import create_tables
+from src.api.routers import configs, datasets, files, jobs, queues
+from src.db.session import run_migrations
 from src.services.worker.service import QueueWorker
+from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetNameConflictError,
@@ -39,15 +40,13 @@ from src.services.jobs.exceptions import (
     JobNotCancellableError,
     JobNotFoundError,
     JobNotResumableError,
+    JobOperationNotSupportedError,
 )
 from src.services.queues.exceptions import QueueEntryNotFoundError
 from src.services.sampling.exceptions import (
     SamplingCheckpointsNotFoundError,
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
-    SamplingRunAlreadyQueuedError,
-    SamplingRunNotCancellableError,
-    SamplingRunNotFoundError,
 )
 from src.settings.app_settings import settings
 
@@ -57,8 +56,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    logger.info("Starting up — creating database tables")
-    await create_tables()
+    logger.info("Starting up — running database migrations")
+    await run_migrations()
     worker = QueueWorker(echo_subprocess_output=False)
     await worker.start()
     app.state.queue_worker = worker
@@ -82,10 +81,10 @@ app.add_exception_handler(JobAlreadyQueuedError, job_already_queued_handler)  # 
 app.add_exception_handler(JobNotCancellableError, job_not_cancellable_handler)  # type: ignore[arg-type]
 app.add_exception_handler(JobNotResumableError, job_not_resumable_handler)  # type: ignore[arg-type]
 app.add_exception_handler(JobCheckpointNotFoundError, job_checkpoint_not_found_handler)  # type: ignore[arg-type]
+app.add_exception_handler(JobOperationNotSupportedError, job_operation_not_supported_handler)  # type: ignore[arg-type]
 app.add_exception_handler(QueueEntryNotFoundError, queue_entry_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(SamplingRunNotFoundError, sampling_run_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(SamplingRunAlreadyQueuedError, sampling_run_already_queued_handler)  # type: ignore[arg-type]
-app.add_exception_handler(SamplingRunNotCancellableError, sampling_run_not_cancellable_handler)  # type: ignore[arg-type]
+app.add_exception_handler(JobConfigNotFoundError, job_config_not_found_handler)  # type: ignore[arg-type]
+app.add_exception_handler(JobConfigValidationError, job_config_validation_handler)  # type: ignore[arg-type]
 app.add_exception_handler(SamplingLoRAPathNotFoundError, sampling_lora_path_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(SamplingCheckpointsNotFoundError, sampling_checkpoints_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(SamplingPromptsNotConfiguredError, sampling_prompts_not_configured_handler)  # type: ignore[arg-type]
@@ -93,9 +92,9 @@ app.add_exception_handler(DatasetNotFoundError, dataset_not_found_handler)  # ty
 app.add_exception_handler(DatasetNameConflictError, dataset_name_conflict_handler)  # type: ignore[arg-type]
 app.add_exception_handler(DatasetDirectoryNotFoundError, dataset_dir_not_found_handler)  # type: ignore[arg-type]
 
+app.include_router(configs.router)
 app.include_router(jobs.router)
 app.include_router(queues.router)
-app.include_router(sampling_runs.router)
 app.include_router(datasets.router)
 app.include_router(files.router)
 

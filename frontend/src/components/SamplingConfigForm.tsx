@@ -1,0 +1,340 @@
+"use client";
+
+import { Plus, X } from "lucide-react";
+import PathInput from "@/components/PathInput";
+
+type Config = Record<string, unknown>;
+
+interface SamplingConfigFormProps {
+  config: Config;
+  onChange: (config: Config) => void;
+}
+
+const inputClass =
+  "w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)]";
+const selectClass =
+  "w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]";
+const labelClass = "block text-xs font-medium text-[var(--muted)] mb-1";
+const sectionClass = "bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5 space-y-4";
+const sectionTitleClass = "text-sm font-semibold text-white mb-3";
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className={labelClass}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function NumberInput({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  placeholder,
+}: {
+  label: string;
+  value: number | null | undefined;
+  onChange: (v: number | null) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  placeholder?: string;
+}) {
+  return (
+    <Field label={label}>
+      <input
+        type="number"
+        className={inputClass}
+        value={value ?? ""}
+        min={min}
+        max={max}
+        step={step}
+        placeholder={placeholder}
+        onChange={(e) => {
+          const raw = e.target.value;
+          onChange(raw === "" ? null : Number(raw));
+        }}
+      />
+    </Field>
+  );
+}
+
+function SelectInput({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <Field label={label}>
+      <select className={selectClass} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
+function CheckboxInput({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input
+        type="checkbox"
+        className="w-4 h-4 rounded accent-[var(--accent)]"
+        checked={!!checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className="text-sm text-white">{label}</span>
+    </label>
+  );
+}
+
+export default function SamplingConfigForm({ config, onChange }: SamplingConfigFormProps) {
+  function set(key: string, value: unknown) {
+    onChange({ ...config, [key]: value });
+  }
+
+  const samplePrompts: string[] = (config.sample_prompts as string[]) ?? [];
+  const loraPaths: string[] = (config.lora_paths as string[]) ?? [];
+
+  function updatePrompt(i: number, value: string) {
+    const next = samplePrompts.map((p, idx) => (idx === i ? value : p));
+    set("sample_prompts", next);
+  }
+
+  function addPrompt() {
+    set("sample_prompts", [...samplePrompts, ""]);
+  }
+
+  function removePrompt(i: number) {
+    set("sample_prompts", samplePrompts.filter((_, idx) => idx !== i));
+  }
+
+  function updateLoraPath(i: number, value: string) {
+    const next = loraPaths.map((p, idx) => (idx === i ? value : p));
+    set("lora_paths", next);
+  }
+
+  function addLoraPath() {
+    set("lora_paths", [...loraPaths, ""]);
+  }
+
+  function removeLoraPath(i: number) {
+    set("lora_paths", loraPaths.length === 1 ? [""] : loraPaths.filter((_, idx) => idx !== i));
+  }
+
+  return (
+    <div className="space-y-5">
+      <section className={sectionClass}>
+        <div className={sectionTitleClass}>Model & Output</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <PathInput
+            label="Base Model"
+            value={(config.base_model_name as string) ?? ""}
+            onChange={(v) => set("base_model_name", v)}
+            placeholder="stabilityai/stable-diffusion-xl-base-1.0"
+            pickerTitle="Select Base Model"
+            kind="model"
+          />
+          <PathInput
+            label="Output Folder"
+            value={(config.output_dir as string) ?? ""}
+            onChange={(v) => set("output_dir", v)}
+            placeholder="D:\loras\output"
+            pickerTitle="Select Output Folder"
+            kind="directory"
+          />
+        </div>
+        <Field label="LoRA Name">
+          <input
+            type="text"
+            className={inputClass}
+            value={(config.lora_name as string) ?? ""}
+            onChange={(e) => set("lora_name", e.target.value)}
+            placeholder="my_lora"
+          />
+        </Field>
+      </section>
+
+      <section className={sectionClass}>
+        <div className={sectionTitleClass}>LoRA Files</div>
+        <div className="space-y-3">
+          {loraPaths.length === 0 ? (
+            <PathInput
+              label="LoRA 1"
+              value=""
+              onChange={(v) => set("lora_paths", [v])}
+              placeholder="D:\loras\model.safetensors"
+              pickerTitle="Select LoRA file"
+              kind="model"
+            />
+          ) : (
+            loraPaths.map((path, i) => (
+              <div key={i} className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <PathInput
+                    label={`LoRA ${i + 1}`}
+                    value={path}
+                    onChange={(v) => updateLoraPath(i, v)}
+                    placeholder="D:\loras\model.safetensors"
+                    pickerTitle="Select LoRA file"
+                    kind="model"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeLoraPath(i)}
+                  className="mb-0.5 p-2 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-white/5 hover:text-white"
+                  title="Remove LoRA"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))
+          )}
+          <button
+            type="button"
+            onClick={addLoraPath}
+            className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-white border border-dashed border-[var(--border)] hover:border-white/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
+          >
+            <Plus size={13} /> Add LoRA
+          </button>
+        </div>
+      </section>
+
+      <section className={sectionClass}>
+        <div className={sectionTitleClass}>Sampling</div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Sample Steps">
+            <input
+              type="number"
+              className={inputClass}
+              value={(config.sample_steps as number) ?? 30}
+              min={1}
+              onChange={(e) => set("sample_steps", Number(e.target.value))}
+            />
+          </Field>
+          <Field label="CFG Scale">
+            <input
+              type="number"
+              className={inputClass}
+              value={(config.sample_cfg_scale as number) ?? 7.5}
+              min={0}
+              step={0.5}
+              onChange={(e) => set("sample_cfg_scale", Number(e.target.value))}
+            />
+          </Field>
+          <NumberInput
+            label="Sample Width (optional)"
+            value={(config.sample_width as number | null | undefined) ?? null}
+            onChange={(v) => set("sample_width", v)}
+            min={64}
+            max={2048}
+            step={64}
+            placeholder="1024"
+          />
+          <NumberInput
+            label="Sample Height (optional)"
+            value={(config.sample_height as number | null | undefined) ?? null}
+            onChange={(v) => set("sample_height", v)}
+            min={64}
+            max={2048}
+            step={64}
+            placeholder="1024"
+          />
+          <SelectInput
+            label="Sample Scheduler"
+            value={(config.sample_scheduler as string) ?? "euler"}
+            onChange={(v) => set("sample_scheduler", v)}
+            options={[
+              { value: "euler", label: "Euler" },
+              { value: "euler_a", label: "Euler Ancestral" },
+              { value: "ddim", label: "DDIM" },
+              { value: "dpm++", label: "DPM++ (multistep)" },
+            ]}
+          />
+          <SelectInput
+            label="Reforge Sampler"
+            value={(config.sample_sampler as string) ?? "euler_a"}
+            onChange={(v) => set("sample_sampler", v)}
+            options={[
+              { value: "euler_a", label: "Euler Ancestral" },
+              { value: "dpmpp_2m", label: "DPM++ 2M" },
+            ]}
+          />
+          <SelectInput
+            label="Reforge Scheduler Mode"
+            value={(config.sample_scheduler_mode as string) ?? "normal"}
+            onChange={(v) => set("sample_scheduler_mode", v)}
+            options={[
+              { value: "normal", label: "Normal" },
+              { value: "karras", label: "Karras" },
+            ]}
+          />
+        </div>
+        <CheckboxInput
+          label="Use reForge-style sampler"
+          checked={(config.use_reforge_sampler as boolean) ?? false}
+          onChange={(v) => set("use_reforge_sampler", v)}
+        />
+        <Field label="Negative Prompt">
+          <input
+            type="text"
+            className={inputClass}
+            value={(config.sample_negative_prompt as string) ?? ""}
+            onChange={(e) => set("sample_negative_prompt", e.target.value)}
+            placeholder="low quality, blurry, ..."
+          />
+        </Field>
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-[var(--muted)]">Prompts</div>
+          {samplePrompts.map((prompt, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                type="text"
+                className={inputClass}
+                value={prompt}
+                onChange={(e) => updatePrompt(i, e.target.value)}
+                placeholder={`Prompt ${i + 1}`}
+              />
+              <button
+                type="button"
+                onClick={() => removePrompt(i)}
+                className="p-1.5 rounded hover:bg-white/10 text-[var(--muted)] hover:text-red-400 shrink-0"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addPrompt}
+            className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-white border border-dashed border-[var(--border)] hover:border-white/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
+          >
+            <Plus size={13} /> Add Prompt
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}

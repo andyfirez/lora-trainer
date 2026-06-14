@@ -7,10 +7,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.dependencies import _get_jobs_service
 from src.api.main import app
-from src.db.migrations import migrate_schema
+from src.db.repositories.job_config_repo import JobConfigRepository
+from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
-from src.db.repositories.training_job_repo import TrainingJobRepository
-from src.db.tables.training_job import JobStatus, TrainingJob
+from src.db.session import register_all_tables
+from src.db.tables.job import Job, JobStatus, JobType
+from src.db.tables.job_config import ConfigType
+from src.services.configs.service import JobConfigService
 from src.services.jobs.exceptions import JobNotCancellableError
 from src.services.jobs.service import JobsService
 from src.trainer.metric_logger import MetricLogger
@@ -18,34 +21,23 @@ from src.trainer.sdxl.checkpoint_state import save_resume_state
 from src.trainer.training_log import JobTrainingLogger
 
 
-@pytest_asyncio.fixture
-async def session() -> AsyncSession:
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-        await migrate_schema(conn)
-    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with factory() as db_session:
-        yield db_session
-    await engine.dispose()
-
-
-@pytest_asyncio.fixture
-async def jobs_service(session: AsyncSession) -> JobsService:
-    return JobsService(TrainingJobRepository(session), QueueRepository(session))
-
-
 @pytest.mark.asyncio
-async def test_cancel_running_job(jobs_service: JobsService, session: AsyncSession) -> None:
-    job = await jobs_service.create_job("test", "base_model_name: x")
+async def test_cancel_running_job(
+    jobs_service: JobsService,
+    create_training_job,
+) -> None:
+    job = await create_training_job()
     await jobs_service._job_repo.update_status(job, JobStatus.RUNNING, pid=1234)
     cancelled = await jobs_service.cancel_job(job.id)
     assert cancelled.status == JobStatus.CANCELLED
 
 
 @pytest.mark.asyncio
-async def test_cancel_clears_progress_and_error(jobs_service: JobsService, session: AsyncSession) -> None:
-    job = await jobs_service.create_job("test", "base_model_name: x")
+async def test_cancel_clears_progress_and_error(
+    jobs_service: JobsService,
+    create_training_job,
+) -> None:
+    job = await create_training_job()
     await jobs_service._job_repo.update_status(
         job,
         JobStatus.RUNNING,
@@ -84,8 +76,11 @@ async def test_cancel_clears_progress_and_error(jobs_service: JobsService, sessi
 
 
 @pytest.mark.asyncio
-async def test_enqueue_clears_stale_runtime_state(jobs_service: JobsService, session: AsyncSession) -> None:
-    job = await jobs_service.create_job("test", "base_model_name: x")
+async def test_enqueue_clears_stale_runtime_state(
+    jobs_service: JobsService,
+    create_training_job,
+) -> None:
+    job = await create_training_job()
     await jobs_service._job_repo.update_status(
         job,
         JobStatus.FAILED,
@@ -96,7 +91,7 @@ async def test_enqueue_clears_stale_runtime_state(jobs_service: JobsService, ses
     queued = await jobs_service.enqueue_job(job.id)
     refreshed = await jobs_service.get_job(job.id)
 
-    assert queued.item_id == job.id
+    assert queued.job_id == job.id
     assert refreshed.status == JobStatus.QUEUED
     assert refreshed.error_message is None
     assert refreshed.progress_step is None
@@ -108,7 +103,7 @@ async def test_enqueue_clears_stale_runtime_state(jobs_service: JobsService, ses
 @pytest.mark.asyncio
 async def test_resume_job_queues_with_resume_state(
     jobs_service: JobsService,
-    session: AsyncSession,
+    create_training_job,
     tmp_path,
 ) -> None:
     output_dir = tmp_path / "output"
@@ -132,7 +127,7 @@ base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 concepts:
   - image_dir: /tmp/images
 """
-    job = await jobs_service.create_job("test", config_yaml)
+    job = await create_training_job(config_yaml=config_yaml)
     await jobs_service._job_repo.update_status(job, JobStatus.FAILED, error_message="boom")
 
     await jobs_service.resume_job(job.id)
@@ -147,9 +142,9 @@ concepts:
 @pytest.mark.asyncio
 async def test_cancel_running_job_with_save_sets_request_flag(
     jobs_service: JobsService,
-    session: AsyncSession,
+    create_training_job,
 ) -> None:
-    job = await jobs_service.create_job("test", "base_model_name: x")
+    job = await create_training_job()
     await jobs_service._job_repo.update_status(job, JobStatus.RUNNING, pid=1234)
 
     result = await jobs_service.cancel_job(job.id, save_checkpoint=True)
@@ -161,7 +156,7 @@ async def test_cancel_running_job_with_save_sets_request_flag(
 @pytest.mark.asyncio
 async def test_enqueue_clears_loss_log(
     jobs_service: JobsService,
-    session: AsyncSession,
+    create_training_job,
     tmp_path,
 ) -> None:
     output_dir = tmp_path / "output"
@@ -172,7 +167,7 @@ base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 concepts:
   - image_dir: /tmp/images
 """
-    job = await jobs_service.create_job("test", config_yaml)
+    job = await create_training_job(config_yaml=config_yaml)
     loss_log = output_dir / "test_lora" / "loss_log.db"
     logger = MetricLogger(loss_log)
     logger.log({"loss/loss": 0.9})
@@ -187,16 +182,24 @@ concepts:
 
 
 @pytest.mark.asyncio
-async def test_cancel_completed_job_raises(jobs_service: JobsService, session: AsyncSession) -> None:
-    job = await jobs_service.create_job("test", "base_model_name: x")
+async def test_cancel_completed_job_raises(
+    jobs_service: JobsService,
+    create_training_job,
+) -> None:
+    job = await create_training_job()
     await jobs_service._job_repo.update_status(job, JobStatus.COMPLETED)
     with pytest.raises(JobNotCancellableError):
         await jobs_service.cancel_job(job.id)
 
 
 @pytest.mark.asyncio
-async def test_get_job_logs_tail(tmp_path, jobs_service: JobsService, session: AsyncSession) -> None:
-    job = await jobs_service.create_job("test", "base_model_name: x")
+async def test_get_job_logs_tail(
+    tmp_path,
+    jobs_service: JobsService,
+    create_training_job,
+    session: AsyncSession,
+) -> None:
+    job = await create_training_job()
     log_path = tmp_path / "job.log"
     log_path.write_text("line1\nline2\nline3\n", encoding="utf-8")
     job.log_path = str(log_path)
@@ -208,14 +211,18 @@ async def test_get_job_logs_tail(tmp_path, jobs_service: JobsService, session: A
 
 @pytest.mark.asyncio
 async def test_job_logs_api_endpoint(tmp_path) -> None:
+    register_all_tables()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-        await migrate_schema(conn)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with factory() as db_session:
-        job = TrainingJob(name="api-test", config_yaml="base_model_name: x")
+        job = Job(
+            job_type=JobType.TRAINING,
+            name="api-test",
+            config_yaml="base_model_name: x",
+        )
         db_session.add(job)
         await db_session.commit()
         await db_session.refresh(job)
@@ -226,7 +233,11 @@ async def test_job_logs_api_endpoint(tmp_path) -> None:
         await db_session.commit()
 
         async def _override_jobs_service():
-            yield JobsService(TrainingJobRepository(db_session), QueueRepository(db_session))
+            yield JobsService(
+                JobRepository(db_session),
+                QueueRepository(db_session),
+                JobConfigRepository(db_session),
+            )
 
         app.dependency_overrides[_get_jobs_service] = _override_jobs_service
         try:

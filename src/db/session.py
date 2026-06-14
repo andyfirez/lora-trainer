@@ -5,19 +5,18 @@ from types import TracebackType
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.db.migrations import migrate_schema
+from src.db.alembic_runner import run_migrations as _run_alembic_migrations
 from src.settings.app_settings import settings
 
 
 def register_all_tables() -> None:
     """Import every table model so SQLAlchemy metadata resolves foreign keys."""
     import src.db.tables.dataset  # noqa: F401
+    import src.db.tables.job  # noqa: F401
+    import src.db.tables.job_config  # noqa: F401
     import src.db.tables.queue_entry  # noqa: F401
-    import src.db.tables.sampling_run  # noqa: F401
-    import src.db.tables.training_job  # noqa: F401
 
 
 register_all_tables()
@@ -77,10 +76,7 @@ async def get_uow() -> AsyncGenerator[UnitOfWork, None]:
         yield uow
 
 
-async def create_tables() -> None:
-    """Create all SQLModel tables (first-run bootstrap)."""
+async def run_migrations() -> None:
+    """Apply Alembic migrations (first-run bootstrap and schema upgrades)."""
     register_all_tables()
-
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-        await migrate_schema(conn)
+    _run_alembic_migrations()

@@ -31,3 +31,10 @@ class JobCheckpointNotFoundError(Exception):
     def __init__(self, job_id: int) -> None:
         super().__init__(f"No checkpoint found for training job id={job_id}")
         self.job_id = job_id
+
+
+class JobOperationNotSupportedError(Exception):
+    def __init__(self, job_id: int, operation: str) -> None:
+        super().__init__(f"Operation '{operation}' is not supported for job id={job_id}")
+        self.job_id = job_id
+        self.operation = operation

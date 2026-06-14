@@ -1,4 +1,4 @@
-"""Queue worker — polls SQLite and spawns training subprocesses."""
+"""Queue worker — polls SQLite and spawns job subprocesses."""
 
 import asyncio
 import logging
@@ -8,24 +8,17 @@ from dataclasses import dataclass
 
 import psutil
 
+from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
-from src.db.repositories.sampling_run_repo import SamplingRunRepository
-from src.db.repositories.training_job_repo import TrainingJobRepository
 from src.db.session import session_factory
-from src.db.tables.queue_entry import QueueEntry, QueueItemType
-from src.db.tables.sampling_run import SamplingRunStatus
-from src.db.tables.training_job import JobStatus
-from src.settings.app_settings import settings
+from src.db.tables.job import JobStatus, JobType
+from src.db.tables.queue_entry import QueueEntry
+from src.services.jobs.handlers import get_job_handler
+from src.services.jobs.service import JobsService
 from src.services.sampling.exceptions import SamplingCheckpointsNotFoundError
-from src.services.sampling.service import SamplingService
+from src.settings.app_settings import settings
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class _QueueItemKey:
-    item_type: QueueItemType
-    item_id: int
 
 
 @dataclass
@@ -64,7 +57,7 @@ def _log_subprocess_output(proc: subprocess.Popen[bytes], label: str) -> None:
 class QueueWorker:
     def __init__(self, *, echo_subprocess_output: bool = False) -> None:
         self._echo_subprocess_output = echo_subprocess_output
-        self._active_jobs: dict[_QueueItemKey, _ManagedProcess] = {}
+        self._active_jobs: dict[int, _ManagedProcess] = {}
         self._poll_task: asyncio.Task[None] | None = None
         self._cancel_task: asyncio.Task[None] | None = None
         self._job_tasks: set[asyncio.Task[None]] = set()
@@ -95,14 +88,9 @@ class QueueWorker:
                 pass
             self._cancel_task = None
 
-        for key, managed in list(self._active_jobs.items()):
+        for job_id, managed in list(self._active_jobs.items()):
             if managed.is_running() and managed.pid is not None:
-                logger.info(
-                    "Shutting down — terminating %s id=%d pid=%d",
-                    key.item_type,
-                    key.item_id,
-                    managed.pid,
-                )
+                logger.info("Shutting down — terminating job id=%d pid=%d", job_id, managed.pid)
                 self._kill_process_tree(managed.pid)
 
         if self._job_tasks:
@@ -124,43 +112,29 @@ class QueueWorker:
 
     async def _is_any_job_running(self) -> bool:
         async with session_factory() as session:
-            job_repo = TrainingJobRepository(session)
-            sampling_run_repo = SamplingRunRepository(session)
+            job_repo = JobRepository(session)
             running_job = await job_repo.get_running()
-            running_sampling_run = await sampling_run_repo.get_running()
-            return running_job is not None or running_sampling_run is not None
+            return running_job is not None
 
     async def _get_next_queued_entry(self) -> QueueEntry | None:
         async with session_factory() as session:
             queue_repo = QueueRepository(session)
             return await queue_repo.get_next()
 
-    async def _mark_item_running(self, key: _QueueItemKey, pid: int) -> None:
+    async def _mark_job_running(self, job_id: int, pid: int) -> None:
         async with session_factory() as session:
-            if key.item_type == QueueItemType.TRAINING:
-                repo = TrainingJobRepository(session)
-                job = await repo.get_by_id(key.item_id)
-                if job is not None:
-                    await repo.update_status(job, JobStatus.RUNNING, pid=pid)
-            elif key.item_type == QueueItemType.SAMPLING:
-                repo = SamplingRunRepository(session)
-                sampling_run = await repo.get_by_id(key.item_id)
-                if sampling_run is not None:
-                    await repo.update_status(sampling_run, SamplingRunStatus.RUNNING, pid=pid)
+            repo = JobRepository(session)
+            job = await repo.get_by_id(job_id)
+            if job is not None:
+                await repo.update_status(job, JobStatus.RUNNING, pid=pid)
             await session.commit()
 
-    async def _mark_item_spawn_failed(self, key: _QueueItemKey, error_message: str) -> None:
+    async def _mark_job_spawn_failed(self, job_id: int, error_message: str) -> None:
         async with session_factory() as session:
-            if key.item_type == QueueItemType.TRAINING:
-                repo = TrainingJobRepository(session)
-                job = await repo.get_by_id(key.item_id)
-                if job is not None and job.status != JobStatus.RUNNING:
-                    await repo.update_status(job, JobStatus.FAILED, error_message=error_message)
-            elif key.item_type == QueueItemType.SAMPLING:
-                repo = SamplingRunRepository(session)
-                sampling_run = await repo.get_by_id(key.item_id)
-                if sampling_run is not None and sampling_run.status != SamplingRunStatus.RUNNING:
-                    await repo.update_status(sampling_run, SamplingRunStatus.FAILED, error_message=error_message)
+            repo = JobRepository(session)
+            job = await repo.get_by_id(job_id)
+            if job is not None and job.status != JobStatus.RUNNING:
+                await repo.update_status(job, JobStatus.FAILED, error_message=error_message)
             await session.commit()
 
     async def _dequeue_entry(self, entry_id: int) -> None:
@@ -172,114 +146,59 @@ class QueueWorker:
                 await queue_repo.delete(entry)
                 await session.commit()
 
-    async def _get_item_cancelled(self, key: _QueueItemKey) -> bool:
+    async def _is_job_cancelled(self, job_id: int) -> bool:
         async with session_factory() as session:
-            if key.item_type == QueueItemType.TRAINING:
-                repo = TrainingJobRepository(session)
-                job = await repo.get_by_id(key.item_id)
-                return job is not None and job.status == JobStatus.CANCELLED
-            if key.item_type == QueueItemType.SAMPLING:
-                repo = SamplingRunRepository(session)
-                sampling_run = await repo.get_by_id(key.item_id)
-                return sampling_run is not None and sampling_run.status == SamplingRunStatus.CANCELLED
-            return False
-
-    async def _finalize_item(self, key: _QueueItemKey, return_code: int) -> None:
-        if key.item_type == QueueItemType.TRAINING:
-            await self._finalize_training_job(key.item_id, return_code)
-        elif key.item_type == QueueItemType.SAMPLING:
-            await self._finalize_sampling_run(key.item_id, return_code)
-
-    async def _finalize_training_job(self, job_id: int, return_code: int) -> None:
-        async with session_factory() as session:
-            repo = TrainingJobRepository(session)
+            repo = JobRepository(session)
             job = await repo.get_by_id(job_id)
+            return job is not None and job.status == JobStatus.CANCELLED
+
+    async def _finalize_job(self, job_id: int, return_code: int) -> None:
+        async with session_factory() as session:
+            job_repo = JobRepository(session)
+            queue_repo = QueueRepository(session)
+            from src.db.repositories.job_config_repo import JobConfigRepository
+
+            job = await job_repo.get_by_id(job_id)
             if job is None:
                 return
             if job.status == JobStatus.CANCELLED:
                 logger.info("Job id=%d finished after cancellation (exit code %d)", job_id, return_code)
-                await repo.clear_process_state(job)
+                await job_repo.clear_process_state(job)
                 await session.commit()
                 return
             if job.status == JobStatus.RUNNING:
                 status = JobStatus.COMPLETED if return_code == 0 else JobStatus.FAILED
-                error_message = None if return_code == 0 else f"Training process exited with code {return_code}"
-                await repo.update_status(job, status, error_message=error_message)
+                error_message = None if return_code == 0 else f"Process exited with code {return_code}"
+                await job_repo.update_status(job, status, error_message=error_message)
                 await session.commit()
                 logger.info("Job id=%d finished with status=%s (exit code %d)", job_id, status, return_code)
-            if return_code == 0 and job.status == JobStatus.COMPLETED:
-                await self._enqueue_auto_sampling(job_id)
-
-    async def _finalize_sampling_run(self, sampling_run_id: int, return_code: int) -> None:
-        async with session_factory() as session:
-            repo = SamplingRunRepository(session)
-            sampling_run = await repo.get_by_id(sampling_run_id)
-            if sampling_run is None:
-                return
-            if sampling_run.status == SamplingRunStatus.CANCELLED:
-                logger.info(
-                    "Sampling run id=%d finished after cancellation (exit code %d)",
-                    sampling_run_id,
-                    return_code,
-                )
-                await repo.clear_process_state(sampling_run)
-                await session.commit()
-                return
-            if sampling_run.status in (SamplingRunStatus.RUNNING, SamplingRunStatus.QUEUED):
-                if return_code == 0:
-                    final_status = SamplingRunStatus.COMPLETED
-                    await repo.update_status(sampling_run, final_status)
-                else:
-                    final_status = SamplingRunStatus.FAILED
-                    error_message = (
-                        sampling_run.error_message
-                        or f"Sampling process exited with code {return_code}"
-                    )
-                    await repo.update_status(
-                        sampling_run,
-                        final_status,
-                        error_message=error_message,
-                    )
-                await session.commit()
-                logger.info(
-                    "Sampling run id=%d finished with status=%s (exit code %d)",
-                    sampling_run_id,
-                    final_status,
-                    return_code,
-                )
-
-    async def _enqueue_auto_sampling(self, job_id: int) -> None:
-        async with session_factory() as session:
-            job_repo = TrainingJobRepository(session)
-            queue_repo = QueueRepository(session)
-            sampling_run_repo = SamplingRunRepository(session)
-            job = await job_repo.get_by_id(job_id)
-            if job is None:
-                return
-            service = SamplingService(sampling_run_repo, queue_repo, job_repo)
-            try:
-                sampling_run = await service.create_auto_run_for_job(job)
-            except SamplingCheckpointsNotFoundError:
-                logger.warning("Post-training sampling requested for job id=%d, but no checkpoints were found", job_id)
-                return
-            if sampling_run is not None:
-                await session.commit()
-                logger.info("Queued post-training sampling run id=%d for job id=%d", sampling_run.id, job_id)
+                if return_code == 0 and status == JobStatus.COMPLETED and job.job_type == JobType.TRAINING:
+                    jobs_service = JobsService(job_repo, queue_repo, JobConfigRepository(session))
+                    try:
+                        sampling_job = await jobs_service.create_auto_sampling_for_training_job(job)
+                    except SamplingCheckpointsNotFoundError:
+                        logger.warning(
+                            "Post-training sampling requested for job id=%d, but no checkpoints were found",
+                            job_id,
+                        )
+                        sampling_job = None
+                    if sampling_job is not None:
+                        await session.commit()
+                        logger.info(
+                            "Queued post-training sampling job id=%d for training job id=%d",
+                            sampling_job.id,
+                            job_id,
+                        )
 
     async def _watch_cancellations(self) -> None:
         interval = settings.training.cancel_poll_interval_seconds
         while True:
             try:
-                for key, managed in list(self._active_jobs.items()):
+                for job_id, managed in list(self._active_jobs.items()):
                     if not managed.is_running():
                         continue
-                    if await self._get_item_cancelled(key) and managed.pid is not None:
-                        logger.info(
-                            "Cancellation requested for %s id=%d, killing pid=%d",
-                            key.item_type,
-                            key.item_id,
-                            managed.pid,
-                        )
+                    if await self._is_job_cancelled(job_id) and managed.pid is not None:
+                        logger.info("Cancellation requested for job id=%d, killing pid=%d", job_id, managed.pid)
                         self._kill_process_tree(managed.pid)
             except asyncio.CancelledError:
                 raise
@@ -287,34 +206,37 @@ class QueueWorker:
                 logger.exception("Cancellation watcher error")
             await asyncio.sleep(interval)
 
-    def _build_command(self, key: _QueueItemKey) -> list[str]:
-        if key.item_type == QueueItemType.TRAINING:
-            return [sys.executable, "-u", "-m", "src.trainer.runner", "--job-id", str(key.item_id)]
-        if key.item_type == QueueItemType.SAMPLING:
-            return [sys.executable, "-u", "-m", "src.sampler.runner", "--sampling-run-id", str(key.item_id)]
-        raise ValueError(f"Unsupported queue item type: {key.item_type}")
+    def _build_command(self, job_id: int, job_type: JobType) -> list[str]:
+        return get_job_handler(job_type).build_command(job_id)
 
     async def _run_entry(self, entry: QueueEntry) -> None:
         if entry.id is None:
             return
-        key = _QueueItemKey(entry.item_type, entry.item_id)
+        job_id = entry.job_id
+        async with session_factory() as session:
+            job_repo = JobRepository(session)
+            job = await job_repo.get_by_id(job_id)
+            if job is None:
+                return
+            job_type = job.job_type
+
         await self._dequeue_entry(entry.id)
         managed: _ManagedProcess | None = None
         try:
-            logger.info("Spawning %s subprocess for id=%d", key.item_type, key.item_id)
+            logger.info("Spawning %s subprocess for job id=%d", job_type, job_id)
             proc = subprocess.Popen(
-                self._build_command(key),
+                self._build_command(job_id, job_type),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
             )
             managed = _ManagedProcess(proc)
-            self._active_jobs[key] = managed
+            self._active_jobs[job_id] = managed
             if managed.pid is not None:
-                await self._mark_item_running(key, managed.pid)
+                await self._mark_job_running(job_id, managed.pid)
 
             if self._echo_subprocess_output:
                 await asyncio.gather(
-                    asyncio.to_thread(_log_subprocess_output, proc, f"{key.item_type} {key.item_id}"),
+                    asyncio.to_thread(_log_subprocess_output, proc, f"{job_type} {job_id}"),
                     managed.wait(),
                 )
             else:
@@ -323,12 +245,12 @@ class QueueWorker:
                     managed.wait(),
                 )
         except Exception as exc:
-            logger.exception("Failed to spawn %s for id=%d", key.item_type, key.item_id)
-            await self._mark_item_spawn_failed(key, str(exc))
+            logger.exception("Failed to spawn %s for job id=%d", job_type, job_id)
+            await self._mark_job_spawn_failed(job_id, str(exc))
         finally:
-            self._active_jobs.pop(key, None)
+            self._active_jobs.pop(job_id, None)
             if managed is not None:
-                await self._finalize_item(key, managed.returncode or 0)
+                await self._finalize_job(job_id, managed.returncode or 0)
 
     async def _poll_loop(self) -> None:
         interval = settings.training.worker_poll_interval_seconds
@@ -336,12 +258,10 @@ class QueueWorker:
             try:
                 if not await self._is_any_job_running():
                     entry = await self._get_next_queued_entry()
-                    if entry is not None:
-                        key = _QueueItemKey(entry.item_type, entry.item_id)
-                        if key not in self._active_jobs:
-                            task = asyncio.create_task(self._run_entry(entry))
-                            self._job_tasks.add(task)
-                            task.add_done_callback(self._job_tasks.discard)
+                    if entry is not None and entry.job_id not in self._active_jobs:
+                        task = asyncio.create_task(self._run_entry(entry))
+                        self._job_tasks.add(task)
+                        task.add_done_callback(self._job_tasks.discard)
             except asyncio.CancelledError:
                 raise
             except Exception:

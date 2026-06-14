@@ -1,4 +1,4 @@
-"""Repository for TrainingJob table."""
+"""Repository for unified Job table."""
 
 from datetime import datetime, timezone
 from typing import Optional, Sequence
@@ -7,33 +7,47 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.repositories.base_repo import BaseRepository
-from src.db.tables.training_job import JobStatus, TrainingJob
+from src.db.tables.job import Job, JobStatus, JobType
 
 
-class TrainingJobRepository(BaseRepository[TrainingJob]):
+class JobRepository(BaseRepository[Job]):
     def __init__(self, session: AsyncSession) -> None:
-        super().__init__(TrainingJob, session)
+        super().__init__(Job, session)
 
-    async def get_by_status(self, status: JobStatus) -> Sequence[TrainingJob]:
+    async def get_by_status(self, status: JobStatus) -> Sequence[Job]:
         result = await self._exec(
-            select(TrainingJob).where(TrainingJob.status == status).order_by(TrainingJob.created_at)
+            select(Job).where(Job.status == status).order_by(Job.created_at)
         )
         return result.all()
 
-    async def get_running(self) -> Optional[TrainingJob]:
+    async def get_by_type(self, job_type: JobType) -> Sequence[Job]:
         result = await self._exec(
-            select(TrainingJob).where(TrainingJob.status == JobStatus.RUNNING).limit(1)
+            select(Job).where(Job.job_type == job_type).order_by(Job.created_at)
+        )
+        return result.all()
+
+    async def get_by_source_job_id(self, source_job_id: int) -> Sequence[Job]:
+        result = await self._exec(
+            select(Job)
+            .where(Job.source_job_id == source_job_id)
+            .order_by(Job.created_at.desc())
+        )
+        return result.all()
+
+    async def get_running(self) -> Optional[Job]:
+        result = await self._exec(
+            select(Job).where(Job.status == JobStatus.RUNNING).limit(1)
         )
         return result.first()
 
     async def update_status(
         self,
-        job: TrainingJob,
+        job: Job,
         status: JobStatus,
         *,
         pid: Optional[int] = None,
         error_message: Optional[str] = None,
-    ) -> TrainingJob:
+    ) -> Job:
         job.status = status
         job.updated_at = datetime.now(timezone.utc)
         if pid is not None:
@@ -47,7 +61,7 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
 
     async def update_progress(
         self,
-        job: TrainingJob,
+        job: Job,
         step: int,
         total: int,
         *,
@@ -55,7 +69,7 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         avr_loss: Optional[float] = None,
         epoch: Optional[int] = None,
         epoch_total: Optional[int] = None,
-    ) -> TrainingJob:
+    ) -> Job:
         job.progress_step = step
         job.progress_total = total
         if loss is not None:
@@ -72,12 +86,7 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
-    async def update_cache_progress(
-        self,
-        job: TrainingJob,
-        step: int,
-        total: int,
-    ) -> TrainingJob:
+    async def update_cache_progress(self, job: Job, step: int, total: int) -> Job:
         job.cache_progress_step = step
         job.cache_progress_total = total
         job.updated_at = datetime.now(timezone.utc)
@@ -86,7 +95,7 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
-    async def update_sampling_status(self, job: TrainingJob, status: Optional[str]) -> TrainingJob:
+    async def update_sampling_status(self, job: Job, status: Optional[str]) -> Job:
         job.sampling_status = status
         if status is None:
             job.sampling_step = None
@@ -97,7 +106,7 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
-    async def update_sampling_progress(self, job: TrainingJob, step: int, total: int) -> TrainingJob:
+    async def update_sampling_progress(self, job: Job, step: int, total: int) -> Job:
         job.sampling_step = step
         job.sampling_total = total
         job.updated_at = datetime.now(timezone.utc)
@@ -106,7 +115,18 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
-    async def update_log_path(self, job: TrainingJob, log_path: str) -> TrainingJob:
+    async def update_progress_status(self, job: Job, status: Optional[str]) -> Job:
+        job.progress_status = status
+        if status is None:
+            job.progress_step = None
+            job.progress_total = None
+        job.updated_at = datetime.now(timezone.utc)
+        self._session.add(job)
+        await self._session.flush()
+        await self._session.refresh(job)
+        return job
+
+    async def update_log_path(self, job: Job, log_path: str) -> Job:
         job.log_path = log_path
         job.updated_at = datetime.now(timezone.utc)
         self._session.add(job)
@@ -114,7 +134,7 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
-    async def update_output_path(self, job: TrainingJob, output_path: str) -> TrainingJob:
+    async def update_output_path(self, job: Job, output_path: str) -> Job:
         job.output_path = output_path
         job.updated_at = datetime.now(timezone.utc)
         self._session.add(job)
@@ -124,12 +144,12 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
 
     async def update_last_checkpoint(
         self,
-        job: TrainingJob,
+        job: Job,
         *,
         checkpoint_path: str,
         epoch: int,
         step: int,
-    ) -> TrainingJob:
+    ) -> Job:
         job.last_checkpoint_path = checkpoint_path
         job.last_checkpoint_epoch = epoch
         job.last_checkpoint_step = step
@@ -141,12 +161,12 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
 
     async def set_resume_state(
         self,
-        job: TrainingJob,
+        job: Job,
         *,
         checkpoint_path: str,
         epoch: int,
         step: int,
-    ) -> TrainingJob:
+    ) -> Job:
         job.resume_checkpoint_path = checkpoint_path
         job.resume_from_epoch = epoch
         job.resume_from_step = step
@@ -156,7 +176,7 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
-    async def clear_resume_state(self, job: TrainingJob) -> TrainingJob:
+    async def clear_resume_state(self, job: Job) -> Job:
         job.resume_checkpoint_path = None
         job.resume_from_epoch = None
         job.resume_from_step = None
@@ -166,7 +186,7 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
-    async def request_checkpoint_save(self, job: TrainingJob, requested: bool) -> TrainingJob:
+    async def request_checkpoint_save(self, job: Job, requested: bool) -> Job:
         job.save_checkpoint_requested = requested
         job.updated_at = datetime.now(timezone.utc)
         self._session.add(job)
@@ -174,23 +194,29 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
-    async def clear_runtime_state(self, job: TrainingJob) -> TrainingJob:
+    async def clear_runtime_state(self, job: Job) -> Job:
         job.pid = None
         job.error_message = None
-        job.progress_step = None
-        job.progress_total = None
-        job.progress_loss = None
-        job.progress_avr_loss = None
-        job.progress_epoch = None
-        job.progress_epoch_total = None
-        job.cache_progress_step = None
-        job.cache_progress_total = None
-        job.save_checkpoint_requested = False
-        await self.update_sampling_status(job, None)
+        if job.job_type == JobType.TRAINING:
+            job.progress_step = None
+            job.progress_total = None
+            job.progress_loss = None
+            job.progress_avr_loss = None
+            job.progress_epoch = None
+            job.progress_epoch_total = None
+            job.cache_progress_step = None
+            job.cache_progress_total = None
+            job.save_checkpoint_requested = False
+            await self.update_sampling_status(job, None)
+        else:
+            await self.update_progress_status(job, None)
         return job
 
-    async def clear_process_state(self, job: TrainingJob) -> TrainingJob:
+    async def clear_process_state(self, job: Job) -> Job:
         job.pid = None
-        job.save_checkpoint_requested = False
-        await self.update_sampling_status(job, None)
+        if job.job_type == JobType.TRAINING:
+            job.save_checkpoint_requested = False
+            await self.update_sampling_status(job, None)
+        else:
+            await self.update_progress_status(job, None)
         return job

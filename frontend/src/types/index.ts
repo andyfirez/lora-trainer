@@ -1,18 +1,8 @@
 export type JobStatus = "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
-export type QueueItemType = "training" | "sampling";
-export type SamplingRunStatus = "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
+export type ConfigType = "training" | "sampling";
+export type JobType = "training" | "sampling";
 
-export interface Job {
-  id: number;
-  name: string;
-  config_yaml: string;
-  status: JobStatus;
-  output_path: string | null;
-  log_path: string | null;
-  pid: number | null;
-  error_message: string | null;
-  progress_step: number | null;
-  progress_total: number | null;
+export interface TrainingJobDetails {
   progress_loss: number | null;
   progress_avr_loss: number | null;
   progress_epoch: number | null;
@@ -29,51 +19,64 @@ export interface Job {
   resume_from_epoch: number | null;
   resume_from_step: number | null;
   save_checkpoint_requested: boolean;
+}
+
+export interface SamplingJobDetails {
+  lora_paths: string[];
+  source_job_id: number | null;
+  progress_status: string | null;
+}
+
+export interface Job {
+  id: number;
+  job_type: JobType;
+  name: string;
+  status: JobStatus;
+  config_id: number | null;
+  config_yaml: string;
+  output_path: string | null;
+  log_path: string | null;
+  pid: number | null;
+  error_message: string | null;
+  progress_step: number | null;
+  progress_total: number | null;
+  training: TrainingJobDetails | null;
+  sampling: SamplingJobDetails | null;
   can_resume: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobConfig {
+  id: number;
+  name: string;
+  config_type: ConfigType;
+  config_yaml: string;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface QueueEntry {
   id: number;
-  item_type: QueueItemType;
-  item_id: number;
+  job_id: number;
   position: number;
   added_at: string;
 }
 
-export interface SamplingRun {
-  id: number;
-  name: string;
-  config_yaml: string;
-  lora_paths: string[];
-  status: SamplingRunStatus;
-  source_job_id: number | null;
-  output_path: string | null;
-  log_path: string | null;
-  pid: number | null;
-  error_message: string | null;
-  progress_status: string | null;
-  progress_step: number | null;
-  progress_total: number | null;
-  created_at: string;
-  updated_at: string;
+export interface QueueEntryWithJob {
+  entry: QueueEntry;
+  job: Job;
 }
 
-export interface SamplingRunSample {
+export interface JobSample {
   filename: string;
   path: string;
   url: string;
 }
 
-export interface SamplingRunSamplesResponse {
-  samples: SamplingRunSample[];
-}
-
-export interface QueueEntryWithItem {
-  entry: QueueEntry;
-  job: Job | null;
-  sampling_run: SamplingRun | null;
+export interface JobSamplesResponse {
+  samples: JobSample[];
 }
 
 export interface Dataset {
@@ -90,4 +93,11 @@ export interface DatasetImages {
   dataset_id: number;
   image_dir: string;
   images: string[];
+}
+
+export interface CreateJobFromConfigRequest {
+  name?: string;
+  lora_paths?: string[];
+  source_job_id?: number;
+  enqueue?: boolean;
 }

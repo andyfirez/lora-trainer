@@ -1,55 +1,35 @@
-"""Jobs router: CRUD + enqueue/cancel actions."""
+"""Jobs router: list/get + enqueue/cancel actions."""
 
 from typing import Sequence
 
-import yaml
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
-from src.api.dependencies import JobsServiceDep, SamplingServiceDep
+from src.api.converters import to_job_response
+from src.api.dependencies import JobsServiceDep
 from src.api.schemas.job_logs import JobLogsResponse
 from src.api.schemas.job_loss import JobLossResponse
-from src.api.schemas.jobs import JobCreate, JobResponse, JobUpdate
-from src.api.schemas.sampling_runs import JobSamplingRunCreate, SamplingRunResponse
-from src.db.tables.sampling_run import SamplingRun
-from src.db.tables.training_job import JobStatus, TrainingJob
+from src.api.schemas.jobs import JobResponse, JobSampleResponse, JobSamplesResponse
+from src.db.tables.job import JobType
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-def _to_job_response(job: TrainingJob) -> JobResponse:
-    payload = JobResponse.model_validate(job, from_attributes=True).model_dump()
-    payload["can_resume"] = bool(
-        job.status in (JobStatus.FAILED, JobStatus.CANCELLED) and job.last_checkpoint_path
-    )
-    return JobResponse.model_validate(payload)
-
-
-def _to_sampling_run_response(sampling_run: SamplingRun) -> SamplingRunResponse:
-    payload = sampling_run.model_dump()
-    payload["lora_paths"] = yaml.safe_load(sampling_run.lora_paths_yaml) or []
-    return SamplingRunResponse.model_validate(payload)
-
-
 @router.get("/", response_model=list[JobResponse])
-async def list_jobs(service: JobsServiceDep) -> Sequence[JobResponse]:
-    jobs = await service.list_jobs()
-    return [_to_job_response(job) for job in jobs]
-
-
-@router.post("/", response_model=JobResponse, status_code=201)
-async def create_job(body: JobCreate, service: JobsServiceDep) -> JobResponse:
-    job = await service.create_job(name=body.name, config_yaml=body.config_yaml)
-    return _to_job_response(job)
+async def list_jobs(
+    service: JobsServiceDep,
+    job_type: JobType | None = Query(default=None),
+    source_job_id: int | None = Query(default=None),
+) -> Sequence[JobResponse]:
+    if source_job_id is not None:
+        jobs = await service.list_jobs_by_source(source_job_id)
+    else:
+        jobs = await service.list_jobs(job_type=job_type)
+    return [to_job_response(job, service) for job in jobs]
 
 
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(job_id: int, service: JobsServiceDep) -> JobResponse:
-    return _to_job_response(await service.get_job(job_id))
-
-
-@router.patch("/{job_id}", response_model=JobResponse)
-async def update_job(job_id: int, body: JobUpdate, service: JobsServiceDep) -> JobResponse:
-    return _to_job_response(await service.update_job(job_id, name=body.name, config_yaml=body.config_yaml))
+    return to_job_response(await service.get_job(job_id), service)
 
 
 @router.delete("/{job_id}", status_code=204)
@@ -60,18 +40,18 @@ async def delete_job(job_id: int, service: JobsServiceDep) -> None:
 @router.post("/{job_id}/enqueue", response_model=JobResponse, status_code=200)
 async def enqueue_job(job_id: int, service: JobsServiceDep) -> JobResponse:
     await service.enqueue_job(job_id)
-    return _to_job_response(await service.get_job(job_id))
+    return to_job_response(await service.get_job(job_id), service)
 
 
 @router.post("/{job_id}/resume", response_model=JobResponse, status_code=200)
 async def resume_job(job_id: int, service: JobsServiceDep) -> JobResponse:
     await service.resume_job(job_id)
-    return _to_job_response(await service.get_job(job_id))
+    return to_job_response(await service.get_job(job_id), service)
 
 
 @router.post("/{job_id}/cancel", response_model=JobResponse)
 async def cancel_job(job_id: int, service: JobsServiceDep, save_checkpoint: bool = False) -> JobResponse:
-    return _to_job_response(await service.cancel_job(job_id, save_checkpoint=save_checkpoint))
+    return to_job_response(await service.cancel_job(job_id, save_checkpoint=save_checkpoint), service)
 
 
 @router.get("/{job_id}/logs", response_model=JobLogsResponse)
@@ -98,27 +78,15 @@ async def get_job_loss(
     )
 
 
-@router.get("/{job_id}/sampling-runs", response_model=list[SamplingRunResponse])
-async def list_job_sampling_runs(
-    job_id: int,
-    service: SamplingServiceDep,
-) -> Sequence[SamplingRunResponse]:
-    runs = await service.list_runs(source_job_id=job_id)
-    return [_to_sampling_run_response(run) for run in runs]
-
-
-@router.post("/{job_id}/sample", response_model=SamplingRunResponse, status_code=201)
-async def create_job_sampling_run(
-    job_id: int,
-    body: JobSamplingRunCreate,
-    service: SamplingServiceDep,
-) -> SamplingRunResponse:
-    sampling_run = await service.create_for_job(
-        job_id,
-        name=body.name,
-        lora_paths=body.lora_paths,
-    )
-    if body.enqueue:
-        await service.enqueue_run(sampling_run.id)
-        sampling_run = await service.get_run(sampling_run.id)
-    return _to_sampling_run_response(sampling_run)
+@router.get("/{job_id}/samples", response_model=JobSamplesResponse)
+async def get_job_samples(job_id: int, service: JobsServiceDep) -> JobSamplesResponse:
+    job = await service.get_job(job_id)
+    samples = [
+        JobSampleResponse(
+            filename=sample.name,
+            path=str(sample),
+            url=f"/files/samples/{job_id}/{sample.name}",
+        )
+        for sample in service.list_samples(job)
+    ]
+    return JobSamplesResponse(samples=samples)

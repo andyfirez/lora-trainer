@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ListOrdered, Database } from "lucide-react";
+import { LayoutDashboard, ListOrdered, Database, FileCog } from "lucide-react";
 import classNames from "classnames";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/configs", label: "Configs", icon: FileCog },
   { href: "/jobs", label: "Jobs", icon: ListOrdered },
   { href: "/datasets", label: "Datasets", icon: Database },
 ];

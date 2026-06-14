@@ -6,7 +6,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.repositories.base_repo import BaseRepository
-from src.db.tables.queue_entry import QueueEntry, QueueItemType
+from src.db.tables.queue_entry import QueueEntry
 
 
 class QueueRepository(BaseRepository[QueueEntry]):
@@ -17,20 +17,11 @@ class QueueRepository(BaseRepository[QueueEntry]):
         result = await self._exec(select(QueueEntry).order_by(QueueEntry.position))
         return result.all()
 
-    async def get_by_item(self, item_type: QueueItemType, item_id: int) -> Optional[QueueEntry]:
+    async def get_by_job_id(self, job_id: int) -> Optional[QueueEntry]:
         result = await self._exec(
-            select(QueueEntry)
-            .where(QueueEntry.item_type == item_type)
-            .where(QueueEntry.item_id == item_id)
-            .limit(1)
+            select(QueueEntry).where(QueueEntry.job_id == job_id).limit(1)
         )
         return result.first()
-
-    async def get_by_job_id(self, job_id: int) -> Optional[QueueEntry]:
-        return await self.get_by_item(QueueItemType.TRAINING, job_id)
-
-    async def get_by_sampling_run_id(self, sampling_run_id: int) -> Optional[QueueEntry]:
-        return await self.get_by_item(QueueItemType.SAMPLING, sampling_run_id)
 
     async def get_next(self) -> Optional[QueueEntry]:
         result = await self._exec(
