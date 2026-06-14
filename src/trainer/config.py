@@ -131,6 +131,7 @@ class TrainConfig(BaseModel):
     resume_from_checkpoint: Optional[str] = None
     sample_every_n_epochs: Optional[int] = None
     sample_before_training: bool = False
+    sample_after_training: bool = False
     sample_prompts: list[str] = Field(default_factory=list)
     sample_negative_prompt: str = ""
     sample_steps: int = Field(default=30, ge=1)

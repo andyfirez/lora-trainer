@@ -42,16 +42,17 @@ export function computeProgressTiming(
     completedSteps > 0 && elapsedSeconds > 0
       ? elapsedSeconds / completedSteps
       : secondsPerIteration;
+  const effectiveSecondsPerIteration = secondsPerIteration ?? avgSecondsPerIteration;
 
   const remaining =
     step != null && total != null && total > step ? total - step : null;
   const etaSeconds =
-    remaining != null && avgSecondsPerIteration != null
-      ? remaining * avgSecondsPerIteration
+    remaining != null && effectiveSecondsPerIteration != null
+      ? remaining * effectiveSecondsPerIteration
       : null;
 
   return {
-    secondsPerIteration,
+    secondsPerIteration: effectiveSecondsPerIteration,
     elapsedSeconds,
     etaSeconds,
   };

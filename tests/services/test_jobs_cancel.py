@@ -96,7 +96,7 @@ async def test_enqueue_clears_stale_runtime_state(jobs_service: JobsService, ses
     queued = await jobs_service.enqueue_job(job.id)
     refreshed = await jobs_service.get_job(job.id)
 
-    assert queued.job_id == job.id
+    assert queued.item_id == job.id
     assert refreshed.status == JobStatus.QUEUED
     assert refreshed.error_message is None
     assert refreshed.progress_step is None

@@ -9,9 +9,18 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.db.migrations import migrate_schema
-
-
 from src.settings.app_settings import settings
+
+
+def register_all_tables() -> None:
+    """Import every table model so SQLAlchemy metadata resolves foreign keys."""
+    import src.db.tables.dataset  # noqa: F401
+    import src.db.tables.queue_entry  # noqa: F401
+    import src.db.tables.sampling_run  # noqa: F401
+    import src.db.tables.training_job  # noqa: F401
+
+
+register_all_tables()
 
 
 def _create_engine() -> AsyncEngine:
@@ -70,9 +79,7 @@ async def get_uow() -> AsyncGenerator[UnitOfWork, None]:
 
 async def create_tables() -> None:
     """Create all SQLModel tables (first-run bootstrap)."""
-    import src.db.tables.dataset  # noqa: F401
-    import src.db.tables.queue_entry  # noqa: F401
-    import src.db.tables.training_job  # noqa: F401
+    register_all_tables()
 
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)

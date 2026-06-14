@@ -540,13 +540,13 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={1}
             placeholder="1"
           />
-          <NumberInput
-            label="Sample Every N Epochs (optional)"
-            value={config.sample_every_n_epochs ?? null}
-            onChange={(v) => set("sample_every_n_epochs", v)}
-            min={1}
-            placeholder="disabled"
-          />
+          <div className="flex items-center pb-1">
+            <CheckboxInput
+              label="Run sampling after training for intermediate checkpoints"
+              checked={config.sample_after_training ?? false}
+              onChange={(v) => set("sample_after_training", v)}
+            />
+          </div>
           <NumberInput
             label="Sample Steps"
             value={config.sample_steps ?? 30}
@@ -623,13 +623,6 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             value={config.sample_negative_prompt ?? ""}
             onChange={(v) => set("sample_negative_prompt", v)}
             placeholder="low quality, blurry, ..."
-          />
-        </div>
-        <div className="mt-3">
-          <CheckboxInput
-            label="Sample before training starts (epoch 0)"
-            checked={config.sample_before_training ?? false}
-            onChange={(v) => set("sample_before_training", v)}
           />
         </div>
         <div className="space-y-2 mt-2">

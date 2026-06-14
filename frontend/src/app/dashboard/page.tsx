@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import Link from "next/link";
 import { jobsApi } from "@/lib/api/jobs";
+import { samplingRunsApi } from "@/lib/api/samplingRuns";
 import { queuesApi } from "@/lib/api/queues";
 import StatusBadge from "@/components/StatusBadge";
 import ProgressTimingInfo from "@/components/ProgressTimingInfo";
@@ -10,9 +11,13 @@ import { Loader2, ListOrdered } from "lucide-react";
 
 export default function DashboardPage() {
   const { data: jobs } = useSWR("/jobs", () => jobsApi.list(), { refreshInterval: 5000 });
+  const { data: samplingRuns } = useSWR("/sampling-runs", () => samplingRunsApi.list(), {
+    refreshInterval: (latest) => (latest?.some((run) => run.status === "running") ? 1000 : 5000),
+  });
   const { data: queue } = useSWR("/queues", () => queuesApi.list(), { refreshInterval: 5000 });
 
-  const running = jobs?.filter((j) => j.status === "running") ?? [];
+  const runningJobs = jobs?.filter((j) => j.status === "running") ?? [];
+  const runningSampling = samplingRuns?.filter((r) => r.status === "running") ?? [];
   const queued = jobs?.filter((j) => j.status === "queued") ?? [];
   const completed = jobs?.filter((j) => j.status === "completed") ?? [];
   const failed = jobs?.filter((j) => j.status === "failed") ?? [];
@@ -21,13 +26,12 @@ export default function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-[var(--muted)] mt-1">Overview of your LoRA training jobs</p>
+        <p className="text-[var(--muted)] mt-1">Overview of training jobs and sampling runs</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: "Running", value: running.length, color: "text-blue-400" },
+          { label: "Running", value: runningJobs.length + runningSampling.length, color: "text-blue-400" },
           { label: "Queued", value: queued.length, color: "text-yellow-400" },
           { label: "Completed", value: completed.length, color: "text-green-400" },
           { label: "Failed", value: failed.length, color: "text-red-400" },
@@ -39,11 +43,10 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Active job */}
-      {running.length > 0 && (
+      {runningJobs.length > 0 && (
         <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Active Training</h2>
-          {running.map((job) => {
+          {runningJobs.map((job) => {
             const pct =
               job.progress_step != null && job.progress_total != null && job.progress_total > 0
                 ? Math.round((job.progress_step / job.progress_total) * 100)
@@ -91,31 +94,98 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Queue */}
+      {runningSampling.length > 0 && (
+        <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Active Sampling</h2>
+          {runningSampling.map((run) => {
+            const pct =
+              run.progress_step != null && run.progress_total != null && run.progress_total > 0
+                ? Math.round((run.progress_step / run.progress_total) * 100)
+                : null;
+            return (
+              <div key={run.id} className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Link href={`/sampling-runs/${run.id}`} className="font-medium text-white hover:text-purple-400">
+                    {run.name}
+                  </Link>
+                  <StatusBadge status={run.status} />
+                </div>
+                {run.progress_status && (
+                  <div className="text-xs text-[var(--muted)]">{run.progress_status}</div>
+                )}
+                {pct != null && (
+                  <div>
+                    <div className="flex justify-between text-xs text-[var(--muted)] mb-1">
+                      <span>step {run.progress_step} / {run.progress_total}</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="bg-[var(--border)] rounded-full h-2">
+                      <div
+                        className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <ProgressTimingInfo
+                      step={run.progress_step}
+                      total={run.progress_total}
+                      active
+                      compact
+                      className="mt-1"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {(queue?.length ?? 0) > 0 && (
         <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-6">
           <div className="flex items-center gap-2 mb-4">
             <ListOrdered size={18} className="text-[var(--muted)]" />
             <h2 className="text-lg font-semibold text-white">Queue</h2>
-            <span className="ml-auto text-xs text-[var(--muted)]">{queue?.length} job(s)</span>
+            <span className="ml-auto text-xs text-[var(--muted)]">{queue?.length} item(s)</span>
           </div>
           <div className="space-y-2">
-            {queue?.map(({ entry, job }) => (
-              <div key={entry.id} className="flex items-center gap-3 text-sm">
-                <span className="w-6 h-6 rounded-full bg-[var(--border)] text-[var(--muted)] text-xs flex items-center justify-center shrink-0">
-                  {entry.position}
-                </span>
-                <Link href={`/jobs/${job.id}`} className="text-white hover:text-[var(--accent)]">
-                  {job.name}
-                </Link>
-                <StatusBadge status={job.status} />
-              </div>
-            ))}
+            {queue?.map(({ entry, job, sampling_run }) => {
+              const name = entry.item_type === "training" ? job?.name : sampling_run?.name;
+              const href =
+                entry.item_type === "training" && job
+                  ? `/jobs/${job.id}`
+                  : entry.item_type === "sampling" && sampling_run
+                    ? `/sampling-runs/${sampling_run.id}`
+                    : null;
+              const status = entry.item_type === "training" ? job?.status : sampling_run?.status;
+              return (
+                <div key={entry.id} className="flex items-center gap-3 text-sm">
+                  <span className="w-6 h-6 rounded-full bg-[var(--border)] text-[var(--muted)] text-xs flex items-center justify-center shrink-0">
+                    {entry.position}
+                  </span>
+                  {href ? (
+                    <Link
+                      href={href}
+                      className={
+                        entry.item_type === "sampling"
+                          ? "text-white hover:text-purple-400"
+                          : "text-white hover:text-[var(--accent)]"
+                      }
+                    >
+                      {name}
+                    </Link>
+                  ) : (
+                    <span className="text-white">{name}</span>
+                  )}
+                  <span className="text-xs text-[var(--muted)]">{entry.item_type}</span>
+                  {status && <StatusBadge status={status} />}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {running.length === 0 && (queue?.length ?? 0) === 0 && (
+      {runningJobs.length === 0 && runningSampling.length === 0 && (queue?.length ?? 0) === 0 && (
         <div className="text-center py-16 text-[var(--muted)]">
           No active jobs.{" "}
           <Link href="/jobs/new" className="text-[var(--accent)] hover:underline">

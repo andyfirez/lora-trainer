@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { PlusCircle } from "lucide-react";
 import JobsTable from "@/components/JobsTable";
+import SamplingRunsTable from "@/components/SamplingRunsTable";
 
 export default function JobsPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Jobs</h1>
-          <p className="text-[var(--muted)] mt-1">All training jobs and queue</p>
+          <p className="text-[var(--muted)] mt-1">Training jobs and sampling runs</p>
         </div>
         <Link
           href="/jobs/new"
@@ -18,7 +19,16 @@ export default function JobsPage() {
           New Job
         </Link>
       </div>
-      <JobsTable />
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-white">Training Jobs</h2>
+        <JobsTable />
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-white">Sampling Runs</h2>
+        <SamplingRunsTable />
+      </section>
     </div>
   );
 }

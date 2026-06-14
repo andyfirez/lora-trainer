@@ -323,15 +323,6 @@ class SDXLLoRATrainer:
             self._progress.epoch_step = resume_state.epoch_step
 
         try:
-            if config.sample_before_training and start_step == 0:
-                log.info("Running pre-training samples (epoch 0)...")
-                self._run_sampling(
-                    0, unet, text_encoder_1, text_encoder_2, vae,
-                    tokenizer_1, tokenizer_2, noise_scheduler, config, device,
-                    self._training_logger, self._sampling_status_callback,
-                    self._sampling_progress_callback,
-                )
-
             for epoch in range(start_epoch, config.epochs):
                 self._progress.next_epoch()
                 if self._training_logger is not None:
@@ -492,17 +483,6 @@ class SDXLLoRATrainer:
                         epoch_step=0,
                         checkpoint_name=f"{config.lora_name}_epoch{epoch + 1}",
                         log=log,
-                    )
-
-                if (
-                    config.sample_every_n_epochs is not None
-                    and (epoch + 1) % config.sample_every_n_epochs == 0
-                ):
-                    self._run_sampling(
-                        epoch + 1, unet, text_encoder_1, text_encoder_2, vae,
-                        tokenizer_1, tokenizer_2, noise_scheduler, config, device,
-                        self._training_logger, self._sampling_status_callback,
-                        self._sampling_progress_callback,
                     )
 
             self._save_final(unet, text_encoder_1, text_encoder_2, config)

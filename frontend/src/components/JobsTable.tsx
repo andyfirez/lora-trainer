@@ -2,7 +2,7 @@
 
 import useSWR, { mutate as globalMutate } from "swr";
 import Link from "next/link";
-import { Loader2, Play, X, Trash2, ChevronUp } from "lucide-react";
+import { Loader2, Play, X, Trash2, ChevronUp, Sparkles } from "lucide-react";
 import { jobsApi } from "@/lib/api/jobs";
 import { queuesApi } from "@/lib/api/queues";
 import StatusBadge from "@/components/StatusBadge";
@@ -44,11 +44,15 @@ export default function JobsTable() {
   };
 
   const handleMoveToTop = async (jobId: number) => {
-    await queuesApi.moveToTop(jobId);
+    await queuesApi.moveToTop("training", jobId);
     refresh();
   };
 
-  const queuedIds = new Set((queue ?? []).map((q) => q.entry.job_id));
+  const queuedIds = new Set(
+    (queue ?? [])
+      .filter((q) => q.entry.item_type === "training")
+      .map((q) => q.entry.item_id),
+  );
 
   if (isLoading) {
     return (
@@ -130,6 +134,13 @@ export default function JobsTable() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
+                    <Link
+                      href={`/jobs/${job.id}#sampling`}
+                      title="Run sampling"
+                      className="p-1.5 rounded hover:bg-white/10 text-purple-400 hover:text-purple-300"
+                    >
+                      <Sparkles size={14} />
+                    </Link>
                     {(job.status === "pending" || job.status === "failed" || job.status === "cancelled") && (
                       <button
                         onClick={() => handleEnqueue(job)}

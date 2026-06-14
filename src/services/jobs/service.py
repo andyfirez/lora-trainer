@@ -8,6 +8,7 @@ from src.api.schemas.job_loss import JobLossResponse
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.repositories.training_job_repo import TrainingJobRepository
 from src.db.tables.queue_entry import QueueEntry
+from src.db.tables.queue_entry import QueueItemType
 from src.db.tables.training_job import JobStatus, TrainingJob
 from src.services.jobs.exceptions import (
     JobAlreadyQueuedError,
@@ -73,7 +74,7 @@ class JobsService:
         if existing is not None:
             raise JobAlreadyQueuedError(job.id)
         max_pos = await self._queue_repo.get_max_position()
-        entry = QueueEntry(job_id=job.id, position=max_pos + 1)
+        entry = QueueEntry(item_type=QueueItemType.TRAINING, item_id=job.id, position=max_pos + 1)
         if reset_runtime:
             await self._job_repo.clear_runtime_state(job)
             await self._job_repo.clear_resume_state(job)

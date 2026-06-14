@@ -1,4 +1,6 @@
 export type JobStatus = "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
+export type QueueItemType = "training" | "sampling";
+export type SamplingRunStatus = "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
 
 export interface Job {
   id: number;
@@ -34,14 +36,44 @@ export interface Job {
 
 export interface QueueEntry {
   id: number;
-  job_id: number;
+  item_type: QueueItemType;
+  item_id: number;
   position: number;
   added_at: string;
 }
 
-export interface QueueEntryWithJob {
+export interface SamplingRun {
+  id: number;
+  name: string;
+  config_yaml: string;
+  lora_paths: string[];
+  status: SamplingRunStatus;
+  source_job_id: number | null;
+  output_path: string | null;
+  log_path: string | null;
+  pid: number | null;
+  error_message: string | null;
+  progress_status: string | null;
+  progress_step: number | null;
+  progress_total: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SamplingRunSample {
+  filename: string;
+  path: string;
+  url: string;
+}
+
+export interface SamplingRunSamplesResponse {
+  samples: SamplingRunSample[];
+}
+
+export interface QueueEntryWithItem {
   entry: QueueEntry;
-  job: Job;
+  job: Job | null;
+  sampling_run: SamplingRun | null;
 }
 
 export interface Dataset {

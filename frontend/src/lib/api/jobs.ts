@@ -1,5 +1,5 @@
 import { api } from "@/lib/api/client";
-import type { Job } from "@/types";
+import type { Job, SamplingRun } from "@/types";
 
 export interface JobLogs {
   lines: string[];
@@ -37,4 +37,7 @@ export const jobsApi = {
     const qs = search.toString();
     return api.get<JobLossResponse>(`/jobs/${id}/loss${qs ? `?${qs}` : ""}`);
   },
+  listSamplingRuns: (id: number) => api.get<SamplingRun[]>(`/jobs/${id}/sampling-runs`),
+  createSamplingRun: (id: number, data: { lora_paths: string[]; name?: string; enqueue?: boolean }) =>
+    api.post<SamplingRun>(`/jobs/${id}/sample`, data),
 };

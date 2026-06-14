@@ -45,6 +45,7 @@ mixed_precision: bfloat16
 save_every_n_epochs: 1
 sample_every_n_epochs: null
 sample_before_training: false
+sample_after_training: false
 sample_prompts: []
 sample_negative_prompt: ''
 sample_steps: 30

@@ -1,7 +1,7 @@
 import { api } from "@/lib/api/client";
-import type { QueueEntryWithJob } from "@/types";
+import type { QueueEntryWithItem, QueueItemType } from "@/types";
 
 export const queuesApi = {
-  list: () => api.get<QueueEntryWithJob[]>("/queues/"),
-  moveToTop: (jobId: number) => api.post(`/queues/${jobId}/move-to-top`),
+  list: () => api.get<QueueEntryWithItem[]>("/queues/"),
+  moveToTop: (itemType: QueueItemType, itemId: number) => api.post(`/queues/${itemType}/${itemId}/move-to-top`),
 };

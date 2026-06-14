@@ -18,7 +18,7 @@ export function useProgressTiming(
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
-    if (step == null || step <= 0) {
+    if (step == null || step < 0) {
       startRef.current = null;
       lastStepRef.current = null;
       lastStepTimeRef.current = null;

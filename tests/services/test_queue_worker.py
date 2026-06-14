@@ -11,9 +11,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.migrations import migrate_schema
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.repositories.training_job_repo import TrainingJobRepository
-from src.db.tables.queue_entry import QueueEntry
+from src.db.tables.queue_entry import QueueEntry, QueueItemType
+from src.db.tables.sampling_run import SamplingRun, SamplingRunStatus
 from src.db.tables.training_job import JobStatus, TrainingJob
-from src.services.worker.service import QueueWorker
+from src.services.worker.service import QueueWorker, _QueueItemKey
 
 
 class _FakeStdout:
@@ -54,7 +55,7 @@ class _FakePopen:
 async def test_queue_worker_start_stop() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
     with patch.object(worker, "_is_any_job_running", AsyncMock(return_value=False)), patch.object(
-        worker, "_get_next_queued_job_id", AsyncMock(return_value=None)
+        worker, "_get_next_queued_entry", AsyncMock(return_value=None)
     ):
         await worker.start()
         await asyncio.sleep(0.05)
@@ -72,12 +73,12 @@ async def test_echo_subprocess_output_false_drains_without_logging(
         with patch(
             "src.services.worker.service.subprocess.Popen",
             MagicMock(return_value=fake_proc),
-        ), patch.object(worker, "_dequeue_job", AsyncMock()), patch.object(
-            worker, "_mark_job_running", AsyncMock()
-        ), patch.object(worker, "_finalize_job", AsyncMock()):
-            await worker._run_job(7)
+        ), patch.object(worker, "_dequeue_entry", AsyncMock()), patch.object(
+            worker, "_mark_item_running", AsyncMock()
+        ), patch.object(worker, "_finalize_item", AsyncMock()):
+            await worker._run_entry(QueueEntry(id=1, item_type=QueueItemType.TRAINING, item_id=7, position=1))
 
-    assert not any("[job 7]" in record.message for record in caplog.records)
+    assert not any("[training 7]" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -91,12 +92,12 @@ async def test_echo_subprocess_output_true_logs_subprocess_lines(
         with patch(
             "src.services.worker.service.subprocess.Popen",
             MagicMock(return_value=fake_proc),
-        ), patch.object(worker, "_dequeue_job", AsyncMock()), patch.object(
-            worker, "_mark_job_running", AsyncMock()
-        ), patch.object(worker, "_finalize_job", AsyncMock()):
-            await worker._run_job(9)
+        ), patch.object(worker, "_dequeue_entry", AsyncMock()), patch.object(
+            worker, "_mark_item_running", AsyncMock()
+        ), patch.object(worker, "_finalize_item", AsyncMock()):
+            await worker._run_entry(QueueEntry(id=1, item_type=QueueItemType.TRAINING, item_id=9, position=1))
 
-    assert any("[job 9] visible line" in record.message for record in caplog.records)
+    assert any("[training 9] visible line" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -105,7 +106,7 @@ async def test_run_job_dequeues_before_spawn() -> None:
     fake_proc = _FakePopen([])
     call_order: list[str] = []
 
-    async def _dequeue(job_id: int) -> None:
+    async def _dequeue(entry_id: int) -> None:
         call_order.append("dequeue")
 
     def _popen(*_args: object, **_kwargs: object) -> _FakePopen:
@@ -115,10 +116,10 @@ async def test_run_job_dequeues_before_spawn() -> None:
     with patch(
         "src.services.worker.service.subprocess.Popen",
         side_effect=_popen,
-    ), patch.object(worker, "_dequeue_job", side_effect=_dequeue), patch.object(
-        worker, "_mark_job_running", AsyncMock()
-    ), patch.object(worker, "_finalize_job", AsyncMock()):
-        await worker._run_job(3)
+    ), patch.object(worker, "_dequeue_entry", side_effect=_dequeue), patch.object(
+        worker, "_mark_item_running", AsyncMock()
+    ), patch.object(worker, "_finalize_item", AsyncMock()):
+        await worker._run_entry(QueueEntry(id=5, item_type=QueueItemType.TRAINING, item_id=3, position=1))
 
     assert call_order == ["dequeue", "popen"]
 
@@ -127,8 +128,8 @@ async def test_run_job_dequeues_before_spawn() -> None:
 async def test_finalize_job_does_not_dequeue() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
 
-    with patch.object(worker, "_dequeue_job", AsyncMock()) as dequeue_mock:
-        await worker._finalize_job(5, 0)
+    with patch.object(worker, "_dequeue_entry", AsyncMock()) as dequeue_mock:
+        await worker._finalize_training_job(5, 0)
 
     dequeue_mock.assert_not_called()
 
@@ -136,11 +137,14 @@ async def test_finalize_job_does_not_dequeue() -> None:
 @pytest.mark.asyncio
 async def test_poll_loop_skips_active_job() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
-    worker._active_jobs[42] = MagicMock()
+    key = _QueueItemKey(QueueItemType.TRAINING, 42)
+    worker._active_jobs[key] = MagicMock()
 
     with patch.object(worker, "_is_any_job_running", AsyncMock(return_value=False)), patch.object(
-        worker, "_get_next_queued_job_id", AsyncMock(return_value=42)
-    ), patch.object(worker, "_run_job", AsyncMock()) as run_job_mock:
+        worker, "_get_next_queued_entry", AsyncMock(
+            return_value=QueueEntry(id=1, item_type=QueueItemType.TRAINING, item_id=42, position=1)
+        )
+    ), patch.object(worker, "_run_entry", AsyncMock()) as run_job_mock:
         poll_task = asyncio.create_task(worker._poll_loop())
         await asyncio.sleep(0.05)
         poll_task.cancel()
@@ -156,15 +160,15 @@ async def test_poll_loop_skips_active_job() -> None:
 async def test_run_job_spawn_failure_marks_failed() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
 
-    with patch.object(worker, "_dequeue_job", AsyncMock()), patch(
+    with patch.object(worker, "_dequeue_entry", AsyncMock()), patch(
         "src.services.worker.service.subprocess.Popen",
         side_effect=OSError("spawn failed"),
-    ), patch.object(worker, "_mark_job_spawn_failed", AsyncMock()) as mark_failed_mock, patch.object(
-        worker, "_finalize_job", AsyncMock()
+    ), patch.object(worker, "_mark_item_spawn_failed", AsyncMock()) as mark_failed_mock, patch.object(
+        worker, "_finalize_item", AsyncMock()
     ) as finalize_mock:
-        await worker._run_job(11)
+        await worker._run_entry(QueueEntry(id=1, item_type=QueueItemType.TRAINING, item_id=11, position=1))
 
-    mark_failed_mock.assert_awaited_once_with(11, "spawn failed")
+    mark_failed_mock.assert_awaited_once_with(_QueueItemKey(QueueItemType.TRAINING, 11), "spawn failed")
     finalize_mock.assert_not_called()
 
 
@@ -190,19 +194,76 @@ async def test_dequeue_on_start_prevents_requeue_after_completion(
     job = TrainingJob(name="test", config_yaml="base_model_name: x", status=JobStatus.QUEUED)
     session.add(job)
     await session.flush()
-    await queue_repo.add(QueueEntry(job_id=job.id, position=1))
+    entry = await queue_repo.add(QueueEntry(item_type=QueueItemType.TRAINING, item_id=job.id, position=1))
     await session.commit()
     job_id = job.id
 
     worker = QueueWorker()
 
     with patch("src.services.worker.service.session_factory", test_session_factory):
-        await worker._dequeue_job(job_id)
+        await worker._dequeue_entry(entry.id)
         async with test_session_factory() as db_session:
             repo = TrainingJobRepository(db_session)
             stored_job = await repo.get_by_id(job_id)
             assert stored_job is not None
             await repo.update_status(stored_job, JobStatus.COMPLETED)
             await db_session.commit()
-        assert await worker._get_next_queued_job_id() is None
+        assert await worker._get_next_queued_entry() is None
         assert await worker._is_any_job_running() is False
+
+
+@pytest.mark.asyncio
+async def test_build_command_dispatches_sampling_runner() -> None:
+    worker = QueueWorker()
+
+    command = worker._build_command(_QueueItemKey(QueueItemType.SAMPLING, 12))
+
+    assert command[-3:] == ["src.sampler.runner", "--sampling-run-id", "12"]
+
+
+@pytest.mark.asyncio
+async def test_finalize_sampling_run_marks_completed(
+    worker_db: tuple[AsyncSession, async_sessionmaker[AsyncSession]],
+) -> None:
+    session, test_session_factory = worker_db
+    sampling_run = SamplingRun(
+        name="sample",
+        config_yaml="base_model_name: x",
+        lora_paths_yaml="[]",
+        status=SamplingRunStatus.RUNNING,
+    )
+    session.add(sampling_run)
+    await session.commit()
+    await session.refresh(sampling_run)
+
+    worker = QueueWorker()
+    with patch("src.services.worker.service.session_factory", test_session_factory):
+        await worker._finalize_sampling_run(sampling_run.id, 0)
+
+    await session.refresh(sampling_run)
+    assert sampling_run.status == SamplingRunStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_finalize_sampling_run_preserves_error_message(
+    worker_db: tuple[AsyncSession, async_sessionmaker[AsyncSession]],
+) -> None:
+    session, test_session_factory = worker_db
+    sampling_run = SamplingRun(
+        name="sample",
+        config_yaml="base_model_name: x",
+        lora_paths_yaml="[]",
+        status=SamplingRunStatus.RUNNING,
+        error_message="CUDA is not available",
+    )
+    session.add(sampling_run)
+    await session.commit()
+    await session.refresh(sampling_run)
+
+    worker = QueueWorker()
+    with patch("src.services.worker.service.session_factory", test_session_factory):
+        await worker._finalize_sampling_run(sampling_run.id, 1)
+
+    await session.refresh(sampling_run)
+    assert sampling_run.status == SamplingRunStatus.FAILED
+    assert sampling_run.error_message == "CUDA is not available"
