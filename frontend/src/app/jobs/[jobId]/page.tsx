@@ -45,20 +45,10 @@ function LiveLogs({
 
   useEffect(() => {
     if (prevRunningRef.current && !isRunning && showLogs) {
-      if (jobStatus === "cancelled") {
-        void mutate({ lines: [] }, { revalidate: false });
-      } else {
-        void mutate();
-      }
+      void mutate();
     }
     prevRunningRef.current = isRunning;
   }, [isRunning, showLogs, mutate, jobStatus]);
-
-  useEffect(() => {
-    if (jobStatus === "cancelled") {
-      void mutate({ lines: [] }, { revalidate: false });
-    }
-  }, [jobStatus, mutate]);
 
   useEffect(() => {
     if (logRef.current && (isRunning || data?.lines.length)) {
@@ -94,7 +84,7 @@ export default function JobDetailPage({ params }: Props) {
       return;
     }
     const prevStatus = prevJobStatusRef.current;
-    if (job.status === "queued" && prevStatus !== "queued") {
+    if (job.status === "queued" && prevStatus !== "queued" && !job.resume_checkpoint_path) {
       setLossGraphRunKey((key) => key + 1);
     }
     prevJobStatusRef.current = job.status;
@@ -119,11 +109,20 @@ export default function JobDetailPage({ params }: Props) {
       ? Math.round((job.sampling_step / job.sampling_total) * 100)
       : null;
   const isRunning = job.status === "running";
-  const showLogs = isRunning || job.status === "completed" || job.status === "failed";
+  const showLogs = isRunning || job.status === "completed" || job.status === "failed" || job.status === "cancelled";
   const showLossGraph = showLogs;
 
   const handleEnqueue = async () => { await jobsApi.enqueue(id); mutate(); };
-  const handleCancel = async () => { await jobsApi.cancel(id); mutate(); };
+  const handleResume = async () => { await jobsApi.resume(id); mutate(); };
+  const handleCancel = async () => {
+    if (job.status === "running") {
+      const saveCheckpoint = window.confirm("Save checkpoint before stopping this job?");
+      await jobsApi.cancel(id, saveCheckpoint);
+    } else {
+      await jobsApi.cancel(id);
+    }
+    mutate();
+  };
   const handleDownloadYaml = () => {
     const blob = new Blob([job.config_yaml], { type: "text/yaml" });
     const a = document.createElement("a");
@@ -149,6 +148,11 @@ export default function JobDetailPage({ params }: Props) {
           {(job.status === "pending" || job.status === "failed" || job.status === "cancelled") && (
             <button onClick={handleEnqueue} className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg px-3 py-1.5 text-sm">
               <Play size={13} /> Enqueue
+            </button>
+          )}
+          {(job.status === "failed" || job.status === "cancelled") && job.can_resume && (
+            <button onClick={handleResume} className="flex items-center gap-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-lg px-3 py-1.5 text-sm">
+              <Play size={13} /> Resume
             </button>
           )}
           {(job.status === "queued" || job.status === "pending" || job.status === "running") && (

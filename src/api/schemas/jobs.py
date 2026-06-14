@@ -38,6 +38,14 @@ class JobResponse(BaseModel):
     sampling_status: Optional[str]
     sampling_step: Optional[int]
     sampling_total: Optional[int]
+    last_checkpoint_path: Optional[str]
+    last_checkpoint_epoch: Optional[int]
+    last_checkpoint_step: Optional[int]
+    resume_checkpoint_path: Optional[str]
+    resume_from_epoch: Optional[int]
+    resume_from_step: Optional[int]
+    save_checkpoint_requested: bool
+    can_resume: bool = False
     created_at: datetime
     updated_at: datetime
 

@@ -6,7 +6,7 @@ import math
 import random
 import time
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import torch
 from diffusers import (
@@ -31,6 +31,7 @@ from src.trainer.sdxl.dataset import (
     count_latent_cache_items,
     count_te_cache_items,
 )
+from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
 from src.trainer.sdxl.latent_cache import build_latent_cache
 from src.trainer.sdxl.model_loader import load_sdxl_components
 from src.trainer.sdxl.reforge_sampler import generate_preview_image
@@ -60,6 +61,10 @@ def _build_inference_scheduler(
     return _SCHEDULER_MAP[sample_scheduler].from_config(noise_scheduler.config)
 
 
+class TrainingCancelledAfterSave(Exception):
+    """Raised when cancellation with save-checkpoint was requested."""
+
+
 class SDXLLoRATrainer:
     def __init__(
         self,
@@ -68,12 +73,16 @@ class SDXLLoRATrainer:
         sampling_status_callback: Optional[Callable[[Optional[str]], None]] = None,
         sampling_progress_callback: Optional[Callable[[int, int], None]] = None,
         training_logger: Optional[JobTrainingLogger] = None,
+        checkpoint_callback: Optional[Callable[[str, int, int], None]] = None,
+        save_checkpoint_requested_callback: Optional[Callable[[], bool]] = None,
     ) -> None:
         self._config = config
         self._progress_callback = progress_callback
         self._sampling_status_callback = sampling_status_callback
         self._sampling_progress_callback = sampling_progress_callback
         self._training_logger = training_logger
+        self._checkpoint_callback = checkpoint_callback
+        self._save_checkpoint_requested_callback = save_checkpoint_requested_callback
         self._progress = TrainProgress()
         self._total_steps: int = 0
         self._optimizer: Optional[object] = None
@@ -102,6 +111,19 @@ class SDXLLoRATrainer:
 
         log = self._training_logger.logger if self._training_logger is not None else logger
         log.info("Loading SDXL pipeline from %s", config.base_model_name)
+        resume_state = None
+        start_epoch = 0
+        start_step = 0
+        if config.resume_from_checkpoint:
+            resume_state = load_resume_state(Path(config.resume_from_checkpoint))
+            start_epoch = resume_state.epoch
+            start_step = resume_state.global_step
+            log.info(
+                "Resuming from checkpoint %s (epoch_index=%d, global_step=%d)",
+                config.resume_from_checkpoint,
+                start_epoch,
+                start_step,
+            )
 
         components = load_sdxl_components(
             config.base_model_name,
@@ -153,6 +175,15 @@ class SDXLLoRATrainer:
             )
             text_encoder_2 = get_peft_model(text_encoder_2, te2_lora_config)
             trainable_params += list(text_encoder_2.parameters())
+
+        if resume_state is not None:
+            self._load_lora_state_dict(
+                resume_state.lora_state_dict,
+                unet=unet,
+                text_encoder_1=text_encoder_1,
+                text_encoder_2=text_encoder_2,
+                config=config,
+            )
 
         if config.gradient_checkpointing:
             unet.enable_gradient_checkpointing()
@@ -266,7 +297,15 @@ class SDXLLoRATrainer:
             self._training_logger.create_progress_bar(total_steps, desc="steps")
 
         if self._progress_callback is not None:
-            self._progress_callback(0, total_steps, 0.0, 0.0, 0, config.epochs, 0.0)
+            self._progress_callback(
+                start_step,
+                total_steps,
+                0.0,
+                0.0,
+                start_epoch,
+                config.epochs,
+                0.0,
+            )
 
         self._save_config(config)
 
@@ -277,9 +316,14 @@ class SDXLLoRATrainer:
             num_warmup_steps=config.lr_warmup_steps * config.gradient_accumulation_steps,
             num_training_steps=total_steps * config.gradient_accumulation_steps,
         )
+        if resume_state is not None:
+            optimizer.load_state_dict(resume_state.optimizer_state_dict)
+            lr_scheduler.load_state_dict(resume_state.lr_scheduler_state_dict)
+            self._progress.global_step = resume_state.global_step
+            self._progress.epoch_step = resume_state.epoch_step
 
         try:
-            if config.sample_before_training:
+            if config.sample_before_training and start_step == 0:
                 log.info("Running pre-training samples (epoch 0)...")
                 self._run_sampling(
                     0, unet, text_encoder_1, text_encoder_2, vae,
@@ -288,7 +332,7 @@ class SDXLLoRATrainer:
                     self._sampling_progress_callback,
                 )
 
-            for epoch in range(config.epochs):
+            for epoch in range(start_epoch, config.epochs):
                 self._progress.next_epoch()
                 if self._training_logger is not None:
                     self._training_logger.log_epoch(epoch + 1, config.epochs)
@@ -301,7 +345,17 @@ class SDXLLoRATrainer:
                 accumulated_loss = 0.0
                 optimizer.zero_grad()
 
+                skip_batches = 0
+                if (
+                    resume_state is not None
+                    and epoch == start_epoch
+                    and resume_state.epoch_step > 0
+                ):
+                    skip_batches = resume_state.epoch_step * config.gradient_accumulation_steps
+
                 for step, batch in enumerate(dataloader):
+                    if step < skip_batches:
+                        continue
                     captions: list[str] = batch["caption"]
 
                     # --- Latents ---
@@ -403,9 +457,42 @@ class SDXLLoRATrainer:
                                 config.epochs,
                                 current_lr,
                             )
+                        if (
+                            self._save_checkpoint_requested_callback is not None
+                            and self._save_checkpoint_requested_callback()
+                        ):
+                            checkpoint_path = self._save_checkpoint(
+                                unet,
+                                text_encoder_1,
+                                text_encoder_2,
+                                optimizer,
+                                lr_scheduler,
+                                config,
+                                epoch=epoch + 1,
+                                resume_epoch_index=epoch,
+                                checkpoint_step=self._progress.global_step,
+                                epoch_step=self._progress.epoch_step,
+                                checkpoint_name=f"{config.lora_name}_step{self._progress.global_step}",
+                                log=log,
+                            )
+                            log.info("Cancellation requested with checkpoint save: %s", checkpoint_path)
+                            raise TrainingCancelledAfterSave()
 
                 if (epoch + 1) % config.save_every_n_epochs == 0:
-                    self._save_checkpoint(unet, text_encoder_1, text_encoder_2, config, epoch + 1, log)
+                    self._save_checkpoint(
+                        unet,
+                        text_encoder_1,
+                        text_encoder_2,
+                        optimizer,
+                        lr_scheduler,
+                        config,
+                        epoch=epoch + 1,
+                        resume_epoch_index=epoch + 1,
+                        checkpoint_step=self._progress.global_step,
+                        epoch_step=0,
+                        checkpoint_name=f"{config.lora_name}_epoch{epoch + 1}",
+                        log=log,
+                    )
 
                 if (
                     config.sample_every_n_epochs is not None
@@ -524,14 +611,33 @@ class SDXLLoRATrainer:
         unet: torch.nn.Module,
         text_encoder_1: torch.nn.Module,
         text_encoder_2: torch.nn.Module,
+        optimizer: Any,
+        lr_scheduler: Any,
         config: TrainConfig,
         epoch: int,
+        resume_epoch_index: int,
+        checkpoint_step: int,
+        epoch_step: int,
+        checkpoint_name: str,
         log: logging.Logger,
-    ) -> None:
+    ) -> Path:
         ext = f".{config.output_format.value}"
-        checkpoint_path = self._work_dir(config) / f"{config.lora_name}_epoch{epoch}{ext}"
+        checkpoint_path = self._work_dir(config) / f"{checkpoint_name}{ext}"
         self._export_lora(unet, text_encoder_1, text_encoder_2, config, checkpoint_path)
+        lora_state_dict = self._collect_lora_state_dict(unet, text_encoder_1, text_encoder_2, config)
+        save_resume_state(
+            checkpoint_path=checkpoint_path,
+            lora_state_dict=lora_state_dict,
+            optimizer_state_dict=optimizer.state_dict(),
+            lr_scheduler_state_dict=lr_scheduler.state_dict(),
+            epoch=resume_epoch_index,
+            global_step=checkpoint_step,
+            epoch_step=epoch_step,
+        )
+        if self._checkpoint_callback is not None:
+            self._checkpoint_callback(str(checkpoint_path), epoch, checkpoint_step)
         log.info("Checkpoint saved to %s", checkpoint_path)
+        return checkpoint_path
 
     def _save_final(
         self,
@@ -866,3 +972,56 @@ class SDXLLoRATrainer:
             save_file(state_dict, str(path))
         else:
             torch.save(state_dict, str(path))
+
+    def _collect_lora_state_dict(
+        self,
+        unet: torch.nn.Module,
+        text_encoder_1: torch.nn.Module,
+        text_encoder_2: torch.nn.Module,
+        config: TrainConfig,
+    ) -> dict[str, Tensor]:
+        state_dict: dict[str, Tensor] = {}
+        for name, param in unet.named_parameters():
+            if "lora_" in name and param.requires_grad:
+                state_dict[f"lora_unet_{name.replace('.', '_')}"] = param.detach().cpu()
+        if config.text_encoder_1.train:
+            for name, param in text_encoder_1.named_parameters():
+                if "lora_" in name and param.requires_grad:
+                    state_dict[f"lora_te1_{name.replace('.', '_')}"] = param.detach().cpu()
+        if config.text_encoder_2.train:
+            for name, param in text_encoder_2.named_parameters():
+                if "lora_" in name and param.requires_grad:
+                    state_dict[f"lora_te2_{name.replace('.', '_')}"] = param.detach().cpu()
+        return state_dict
+
+    def _load_lora_state_dict(
+        self,
+        state_dict: dict[str, Any],
+        *,
+        unet: torch.nn.Module,
+        text_encoder_1: torch.nn.Module,
+        text_encoder_2: torch.nn.Module,
+        config: TrainConfig,
+    ) -> None:
+        self._apply_lora_state_to_module(unet, state_dict, prefix="lora_unet_")
+        if config.text_encoder_1.train:
+            self._apply_lora_state_to_module(text_encoder_1, state_dict, prefix="lora_te1_")
+        if config.text_encoder_2.train:
+            self._apply_lora_state_to_module(text_encoder_2, state_dict, prefix="lora_te2_")
+
+    def _apply_lora_state_to_module(
+        self,
+        module: torch.nn.Module,
+        state_dict: dict[str, Any],
+        *,
+        prefix: str,
+    ) -> None:
+        for name, param in module.named_parameters():
+            if "lora_" not in name or not param.requires_grad:
+                continue
+            key = f"{prefix}{name.replace('.', '_')}"
+            value = state_dict.get(key)
+            if value is None:
+                continue
+            with torch.no_grad():
+                param.copy_(value.to(dtype=param.dtype, device=param.device))

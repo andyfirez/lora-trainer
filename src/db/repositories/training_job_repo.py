@@ -114,6 +114,66 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         await self._session.refresh(job)
         return job
 
+    async def update_output_path(self, job: TrainingJob, output_path: str) -> TrainingJob:
+        job.output_path = output_path
+        job.updated_at = datetime.now(timezone.utc)
+        self._session.add(job)
+        await self._session.flush()
+        await self._session.refresh(job)
+        return job
+
+    async def update_last_checkpoint(
+        self,
+        job: TrainingJob,
+        *,
+        checkpoint_path: str,
+        epoch: int,
+        step: int,
+    ) -> TrainingJob:
+        job.last_checkpoint_path = checkpoint_path
+        job.last_checkpoint_epoch = epoch
+        job.last_checkpoint_step = step
+        job.updated_at = datetime.now(timezone.utc)
+        self._session.add(job)
+        await self._session.flush()
+        await self._session.refresh(job)
+        return job
+
+    async def set_resume_state(
+        self,
+        job: TrainingJob,
+        *,
+        checkpoint_path: str,
+        epoch: int,
+        step: int,
+    ) -> TrainingJob:
+        job.resume_checkpoint_path = checkpoint_path
+        job.resume_from_epoch = epoch
+        job.resume_from_step = step
+        job.updated_at = datetime.now(timezone.utc)
+        self._session.add(job)
+        await self._session.flush()
+        await self._session.refresh(job)
+        return job
+
+    async def clear_resume_state(self, job: TrainingJob) -> TrainingJob:
+        job.resume_checkpoint_path = None
+        job.resume_from_epoch = None
+        job.resume_from_step = None
+        job.updated_at = datetime.now(timezone.utc)
+        self._session.add(job)
+        await self._session.flush()
+        await self._session.refresh(job)
+        return job
+
+    async def request_checkpoint_save(self, job: TrainingJob, requested: bool) -> TrainingJob:
+        job.save_checkpoint_requested = requested
+        job.updated_at = datetime.now(timezone.utc)
+        self._session.add(job)
+        await self._session.flush()
+        await self._session.refresh(job)
+        return job
+
     async def clear_runtime_state(self, job: TrainingJob) -> TrainingJob:
         job.pid = None
         job.error_message = None
@@ -125,5 +185,12 @@ class TrainingJobRepository(BaseRepository[TrainingJob]):
         job.progress_epoch_total = None
         job.cache_progress_step = None
         job.cache_progress_total = None
+        job.save_checkpoint_requested = False
+        await self.update_sampling_status(job, None)
+        return job
+
+    async def clear_process_state(self, job: TrainingJob) -> TrainingJob:
+        job.pid = None
+        job.save_checkpoint_requested = False
         await self.update_sampling_status(job, None)
         return job

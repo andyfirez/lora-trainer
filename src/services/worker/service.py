@@ -126,6 +126,14 @@ class QueueWorker:
                 await repo.update_status(job, JobStatus.RUNNING, pid=pid)
                 await session.commit()
 
+    async def _mark_job_spawn_failed(self, job_id: int, error_message: str) -> None:
+        async with session_factory() as session:
+            repo = TrainingJobRepository(session)
+            job = await repo.get_by_id(job_id)
+            if job is not None and job.status != JobStatus.RUNNING:
+                await repo.update_status(job, JobStatus.FAILED, error_message=error_message)
+                await session.commit()
+
     async def _dequeue_job(self, job_id: int) -> None:
         async with session_factory() as session:
             queue_repo = QueueRepository(session)
@@ -142,7 +150,6 @@ class QueueWorker:
             return job.status if job is not None else None
 
     async def _finalize_job(self, job_id: int, return_code: int) -> None:
-        await self._dequeue_job(job_id)
         async with session_factory() as session:
             repo = TrainingJobRepository(session)
             job = await repo.get_by_id(job_id)
@@ -150,12 +157,13 @@ class QueueWorker:
                 return
             if job.status == JobStatus.CANCELLED:
                 logger.info("Job id=%d finished after cancellation (exit code %d)", job_id, return_code)
-                await repo.clear_runtime_state(job)
+                await repo.clear_process_state(job)
                 await session.commit()
                 return
             if job.status == JobStatus.RUNNING:
                 status = JobStatus.COMPLETED if return_code == 0 else JobStatus.FAILED
-                await repo.update_status(job, status)
+                error_message = None if return_code == 0 else f"Training process exited with code {return_code}"
+                await repo.update_status(job, status, error_message=error_message)
                 await session.commit()
                 logger.info("Job id=%d finished with status=%s (exit code %d)", job_id, status, return_code)
 
@@ -177,18 +185,20 @@ class QueueWorker:
             await asyncio.sleep(interval)
 
     async def _run_job(self, job_id: int) -> None:
-        logger.info("Spawning trainer subprocess for job id=%d", job_id)
-        proc = subprocess.Popen(
-            [sys.executable, "-u", "-m", "src.trainer.runner", "--job-id", str(job_id)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        managed = _ManagedProcess(proc)
-        self._active_jobs[job_id] = managed
-        if managed.pid is not None:
-            await self._mark_job_running(job_id, managed.pid)
-
+        await self._dequeue_job(job_id)
+        managed: _ManagedProcess | None = None
         try:
+            logger.info("Spawning trainer subprocess for job id=%d", job_id)
+            proc = subprocess.Popen(
+                [sys.executable, "-u", "-m", "src.trainer.runner", "--job-id", str(job_id)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            managed = _ManagedProcess(proc)
+            self._active_jobs[job_id] = managed
+            if managed.pid is not None:
+                await self._mark_job_running(job_id, managed.pid)
+
             if self._echo_subprocess_output:
                 await asyncio.gather(
                     asyncio.to_thread(_log_subprocess_output, proc, job_id),
@@ -199,9 +209,13 @@ class QueueWorker:
                     asyncio.to_thread(_drain_subprocess_output, proc),
                     managed.wait(),
                 )
+        except Exception as exc:
+            logger.exception("Failed to spawn trainer for job id=%d", job_id)
+            await self._mark_job_spawn_failed(job_id, str(exc))
         finally:
             self._active_jobs.pop(job_id, None)
-            await self._finalize_job(job_id, managed.returncode or 0)
+            if managed is not None:
+                await self._finalize_job(job_id, managed.returncode or 0)
 
     async def _poll_loop(self) -> None:
         interval = settings.training.worker_poll_interval_seconds
@@ -209,7 +223,7 @@ class QueueWorker:
             try:
                 if not await self._is_any_job_running():
                     job_id = await self._get_next_queued_job_id()
-                    if job_id is not None:
+                    if job_id is not None and job_id not in self._active_jobs:
                         task = asyncio.create_task(self._run_job(job_id))
                         self._job_tasks.add(task)
                         task.add_done_callback(self._job_tasks.discard)

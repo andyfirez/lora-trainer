@@ -20,6 +20,14 @@ export interface Job {
   sampling_status: string | null;
   sampling_step: number | null;
   sampling_total: number | null;
+  last_checkpoint_path: string | null;
+  last_checkpoint_epoch: number | null;
+  last_checkpoint_step: number | null;
+  resume_checkpoint_path: string | null;
+  resume_from_epoch: number | null;
+  resume_from_step: number | null;
+  save_checkpoint_requested: boolean;
+  can_resume: boolean;
   created_at: string;
   updated_at: string;
 }

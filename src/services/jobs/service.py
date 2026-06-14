@@ -11,11 +11,14 @@ from src.db.tables.queue_entry import QueueEntry
 from src.db.tables.training_job import JobStatus, TrainingJob
 from src.services.jobs.exceptions import (
     JobAlreadyQueuedError,
+    JobCheckpointNotFoundError,
     JobNotCancellableError,
     JobNotFoundError,
+    JobNotResumableError,
 )
 from src.services.jobs.loss_log_reader import read_loss_log
 from src.trainer.config import TrainConfig
+from src.trainer.sdxl.checkpoint_state import find_latest_checkpoint, load_resume_state
 from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
 from src.trainer.training_log import JobTrainingLogger
 
@@ -63,30 +66,59 @@ class JobsService:
 
     async def enqueue_job(self, job_id: int) -> QueueEntry:
         job = await self.get_job(job_id)
-        existing = await self._queue_repo.get_by_job_id(job_id)
+        return await self._enqueue_job(job, reset_runtime=True)
+
+    async def _enqueue_job(self, job: TrainingJob, *, reset_runtime: bool) -> QueueEntry:
+        existing = await self._queue_repo.get_by_job_id(job.id)
         if existing is not None:
-            raise JobAlreadyQueuedError(job_id)
+            raise JobAlreadyQueuedError(job.id)
         max_pos = await self._queue_repo.get_max_position()
-        entry = QueueEntry(job_id=job_id, position=max_pos + 1)
-        await self._job_repo.clear_runtime_state(job)
+        entry = QueueEntry(job_id=job.id, position=max_pos + 1)
+        if reset_runtime:
+            await self._job_repo.clear_runtime_state(job)
+            await self._job_repo.clear_resume_state(job)
         config = TrainConfig.from_yaml(job.config_yaml)
-        if config.logging.use_ui_logger:
+        if reset_runtime and config.logging.use_ui_logger:
             reset_loss_log(build_loss_log_path(config))
         await self._job_repo.update_status(job, JobStatus.QUEUED)
         return await self._queue_repo.add(entry)
 
-    async def cancel_job(self, job_id: int) -> TrainingJob:
+    async def resume_job(self, job_id: int) -> QueueEntry:
+        job = await self.get_job(job_id)
+        if job.status not in (JobStatus.FAILED, JobStatus.CANCELLED):
+            raise JobNotResumableError(job_id, job.status)
+        config = TrainConfig.from_yaml(job.config_yaml)
+        work_dir = Path(config.output_dir) / config.lora_name
+        checkpoint = find_latest_checkpoint(work_dir, config.lora_name, config.output_format.value)
+        if checkpoint is None:
+            raise JobCheckpointNotFoundError(job_id)
+        resume_state = load_resume_state(checkpoint)
+        await self._job_repo.set_resume_state(
+            job,
+            checkpoint_path=str(checkpoint),
+            epoch=resume_state.epoch,
+            step=resume_state.global_step,
+        )
+        await self._job_repo.request_checkpoint_save(job, False)
+        return await self._enqueue_job(job, reset_runtime=False)
+
+    async def cancel_job(self, job_id: int, *, save_checkpoint: bool = False) -> TrainingJob:
         job = await self.get_job(job_id)
         if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
             raise JobNotCancellableError(job_id, job.status)
         if job.status == JobStatus.RUNNING:
+            if save_checkpoint:
+                await self._job_repo.request_checkpoint_save(job, True)
+                return job
             await self._job_repo.update_status(job, JobStatus.CANCELLED)
-            return await self._job_repo.clear_runtime_state(job)
+            await self._job_repo.request_checkpoint_save(job, False)
+            return await self._job_repo.clear_process_state(job)
         entry = await self._queue_repo.get_by_job_id(job_id)
         if entry is not None:
             await self._queue_repo.shift_positions_down(entry.position)
             await self._queue_repo.delete(entry)
         await self._job_repo.update_status(job, JobStatus.CANCELLED)
+        await self._job_repo.request_checkpoint_save(job, False)
         return await self._job_repo.clear_runtime_state(job)
 
     async def get_job_logs(self, job_id: int, tail: int = 500) -> list[str]:

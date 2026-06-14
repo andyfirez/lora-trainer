@@ -55,11 +55,17 @@ def build_tensorboard_dir(log_dir: str, job_id: int) -> Path:
     return Path(log_dir) / f"job_{job_id}"
 
 
-def setup_tensorboard_writer(log_dir: str, job_id: int, *, flush_secs: int = 10) -> tuple[Any, Path]:
+def setup_tensorboard_writer(
+    log_dir: str,
+    job_id: int,
+    *,
+    flush_secs: int = 10,
+    reset_dir: bool = True,
+) -> tuple[Any, Path]:
     from torch.utils.tensorboard import SummaryWriter
 
     summary_dir = build_tensorboard_dir(log_dir, job_id)
-    if summary_dir.exists():
+    if reset_dir and summary_dir.exists():
         shutil.rmtree(summary_dir)
     summary_dir.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(str(summary_dir), flush_secs=flush_secs)
@@ -73,6 +79,7 @@ class JobTrainingLogger:
     metric_logger: Optional[MetricLogger] = None
     log_every: int = 1
     tensorboard_writer: Any = None
+    append_log: bool = False
     _loss_recorder: LossRecorder = field(default_factory=LossRecorder)
     _progress_bar: Optional[tqdm] = None
     _logger: logging.Logger = field(init=False)
@@ -84,7 +91,8 @@ class JobTrainingLogger:
         self._logger.propagate = False
         if not self._logger.handlers:
             formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-            file_handler = logging.FileHandler(self.log_path, mode="w", encoding="utf-8")
+            mode = "a" if self.append_log else "w"
+            file_handler = logging.FileHandler(self.log_path, mode=mode, encoding="utf-8")
             file_handler.setFormatter(formatter)
             stream_handler = logging.StreamHandler(sys.stdout)
             stream_handler.setFormatter(formatter)

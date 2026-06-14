@@ -24,7 +24,9 @@ export const jobsApi = {
   update: (id: number, data: { name?: string; config_yaml?: string }) => api.patch<Job>(`/jobs/${id}`, data),
   delete: (id: number) => api.delete(`/jobs/${id}`),
   enqueue: (id: number) => api.post<Job>(`/jobs/${id}/enqueue`),
-  cancel: (id: number) => api.post<Job>(`/jobs/${id}/cancel`),
+  resume: (id: number) => api.post<Job>(`/jobs/${id}/resume`),
+  cancel: (id: number, saveCheckpoint = false) =>
+    api.post<Job>(`/jobs/${id}/cancel${saveCheckpoint ? "?save_checkpoint=true" : ""}`),
   getLogs: (id: number, tail = 500) => api.get<JobLogs>(`/jobs/${id}/logs?tail=${tail}`),
   getLoss: (id: number, params: { key?: string; limit?: number; since_step?: number; stride?: number } = {}) => {
     const search = new URLSearchParams();

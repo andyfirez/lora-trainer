@@ -8,29 +8,39 @@ from src.api.dependencies import JobsServiceDep
 from src.api.schemas.job_logs import JobLogsResponse
 from src.api.schemas.job_loss import JobLossResponse
 from src.api.schemas.jobs import JobCreate, JobResponse, JobUpdate
+from src.db.tables.training_job import JobStatus, TrainingJob
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
+def _to_job_response(job: TrainingJob) -> JobResponse:
+    payload = JobResponse.model_validate(job, from_attributes=True).model_dump()
+    payload["can_resume"] = bool(
+        job.status in (JobStatus.FAILED, JobStatus.CANCELLED) and job.last_checkpoint_path
+    )
+    return JobResponse.model_validate(payload)
+
+
 @router.get("/", response_model=list[JobResponse])
 async def list_jobs(service: JobsServiceDep) -> Sequence[JobResponse]:
-    return await service.list_jobs()  # type: ignore[return-value]
+    jobs = await service.list_jobs()
+    return [_to_job_response(job) for job in jobs]
 
 
 @router.post("/", response_model=JobResponse, status_code=201)
 async def create_job(body: JobCreate, service: JobsServiceDep) -> JobResponse:
     job = await service.create_job(name=body.name, config_yaml=body.config_yaml)
-    return job  # type: ignore[return-value]
+    return _to_job_response(job)
 
 
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(job_id: int, service: JobsServiceDep) -> JobResponse:
-    return await service.get_job(job_id)  # type: ignore[return-value]
+    return _to_job_response(await service.get_job(job_id))
 
 
 @router.patch("/{job_id}", response_model=JobResponse)
 async def update_job(job_id: int, body: JobUpdate, service: JobsServiceDep) -> JobResponse:
-    return await service.update_job(job_id, name=body.name, config_yaml=body.config_yaml)  # type: ignore[return-value]
+    return _to_job_response(await service.update_job(job_id, name=body.name, config_yaml=body.config_yaml))
 
 
 @router.delete("/{job_id}", status_code=204)
@@ -41,12 +51,18 @@ async def delete_job(job_id: int, service: JobsServiceDep) -> None:
 @router.post("/{job_id}/enqueue", response_model=JobResponse, status_code=200)
 async def enqueue_job(job_id: int, service: JobsServiceDep) -> JobResponse:
     await service.enqueue_job(job_id)
-    return await service.get_job(job_id)  # type: ignore[return-value]
+    return _to_job_response(await service.get_job(job_id))
+
+
+@router.post("/{job_id}/resume", response_model=JobResponse, status_code=200)
+async def resume_job(job_id: int, service: JobsServiceDep) -> JobResponse:
+    await service.resume_job(job_id)
+    return _to_job_response(await service.get_job(job_id))
 
 
 @router.post("/{job_id}/cancel", response_model=JobResponse)
-async def cancel_job(job_id: int, service: JobsServiceDep) -> JobResponse:
-    return await service.cancel_job(job_id)  # type: ignore[return-value]
+async def cancel_job(job_id: int, service: JobsServiceDep, save_checkpoint: bool = False) -> JobResponse:
+    return _to_job_response(await service.cancel_job(job_id, save_checkpoint=save_checkpoint))
 
 
 @router.get("/{job_id}/logs", response_model=JobLogsResponse)

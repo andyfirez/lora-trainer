@@ -12,6 +12,13 @@ _TRAINING_JOB_COLUMNS: list[tuple[str, str]] = [
     ("sampling_status", "TEXT"),
     ("sampling_step", "INTEGER"),
     ("sampling_total", "INTEGER"),
+    ("last_checkpoint_path", "TEXT"),
+    ("last_checkpoint_epoch", "INTEGER"),
+    ("last_checkpoint_step", "INTEGER"),
+    ("resume_checkpoint_path", "TEXT"),
+    ("resume_from_epoch", "INTEGER"),
+    ("resume_from_step", "INTEGER"),
+    ("save_checkpoint_requested", "INTEGER DEFAULT 0"),
 ]
 
 

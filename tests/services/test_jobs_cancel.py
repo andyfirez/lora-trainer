@@ -14,6 +14,7 @@ from src.db.tables.training_job import JobStatus, TrainingJob
 from src.services.jobs.exceptions import JobNotCancellableError
 from src.services.jobs.service import JobsService
 from src.trainer.metric_logger import MetricLogger
+from src.trainer.sdxl.checkpoint_state import save_resume_state
 from src.trainer.training_log import JobTrainingLogger
 
 
@@ -68,15 +69,15 @@ async def test_cancel_clears_progress_and_error(jobs_service: JobsService, sessi
 
     assert cancelled.status == JobStatus.CANCELLED
     assert cancelled.pid is None
-    assert cancelled.error_message is None
-    assert cancelled.progress_step is None
-    assert cancelled.progress_total is None
-    assert cancelled.progress_loss is None
-    assert cancelled.progress_avr_loss is None
-    assert cancelled.progress_epoch is None
-    assert cancelled.progress_epoch_total is None
-    assert cancelled.cache_progress_step is None
-    assert cancelled.cache_progress_total is None
+    assert cancelled.error_message == "previous failure"
+    assert cancelled.progress_step == 50
+    assert cancelled.progress_total == 100
+    assert cancelled.progress_loss == 0.5
+    assert cancelled.progress_avr_loss == 0.4
+    assert cancelled.progress_epoch == 1
+    assert cancelled.progress_epoch_total == 10
+    assert cancelled.cache_progress_step == 3
+    assert cancelled.cache_progress_total == 10
     assert cancelled.sampling_status is None
     assert cancelled.sampling_step is None
     assert cancelled.sampling_total is None
@@ -102,6 +103,59 @@ async def test_enqueue_clears_stale_runtime_state(jobs_service: JobsService, ses
     assert refreshed.progress_total is None
     assert refreshed.progress_loss is None
     assert refreshed.progress_avr_loss is None
+
+
+@pytest.mark.asyncio
+async def test_resume_job_queues_with_resume_state(
+    jobs_service: JobsService,
+    session: AsyncSession,
+    tmp_path,
+) -> None:
+    output_dir = tmp_path / "output"
+    work_dir = output_dir / "test_lora"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = work_dir / "test_lora_epoch3.safetensors"
+    checkpoint_path.write_bytes(b"checkpoint")
+    save_resume_state(
+        checkpoint_path=checkpoint_path,
+        lora_state_dict={},
+        optimizer_state_dict={},
+        lr_scheduler_state_dict={},
+        epoch=3,
+        global_step=123,
+        epoch_step=0,
+    )
+    config_yaml = f"""
+output_dir: {output_dir.as_posix()}
+lora_name: test_lora
+base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+concepts:
+  - image_dir: /tmp/images
+"""
+    job = await jobs_service.create_job("test", config_yaml)
+    await jobs_service._job_repo.update_status(job, JobStatus.FAILED, error_message="boom")
+
+    await jobs_service.resume_job(job.id)
+    resumed = await jobs_service.get_job(job.id)
+
+    assert resumed.status == JobStatus.QUEUED
+    assert resumed.resume_checkpoint_path == str(checkpoint_path)
+    assert resumed.resume_from_epoch == 3
+    assert resumed.resume_from_step == 123
+
+
+@pytest.mark.asyncio
+async def test_cancel_running_job_with_save_sets_request_flag(
+    jobs_service: JobsService,
+    session: AsyncSession,
+) -> None:
+    job = await jobs_service.create_job("test", "base_model_name: x")
+    await jobs_service._job_repo.update_status(job, JobStatus.RUNNING, pid=1234)
+
+    result = await jobs_service.cancel_job(job.id, save_checkpoint=True)
+
+    assert result.status == JobStatus.RUNNING
+    assert result.save_checkpoint_requested is True
 
 
 @pytest.mark.asyncio

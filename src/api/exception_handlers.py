@@ -9,9 +9,11 @@ from src.services.datasets.exceptions import (
     DatasetNotFoundError,
 )
 from src.services.jobs.exceptions import (
+    JobCheckpointNotFoundError,
     JobAlreadyQueuedError,
     JobNotCancellableError,
     JobNotFoundError,
+    JobNotResumableError,
 )
 from src.services.queues.exceptions import QueueEntryNotFoundError
 
@@ -26,6 +28,14 @@ async def job_already_queued_handler(request: Request, exc: JobAlreadyQueuedErro
 
 async def job_not_cancellable_handler(request: Request, exc: JobNotCancellableError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+async def job_not_resumable_handler(request: Request, exc: JobNotResumableError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+async def job_checkpoint_not_found_handler(request: Request, exc: JobCheckpointNotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 async def queue_entry_not_found_handler(request: Request, exc: QueueEntryNotFoundError) -> JSONResponse:

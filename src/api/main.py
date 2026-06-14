@@ -13,8 +13,10 @@ from src.api.exception_handlers import (
     dataset_name_conflict_handler,
     dataset_not_found_handler,
     job_already_queued_handler,
+    job_checkpoint_not_found_handler,
     job_not_cancellable_handler,
     job_not_found_handler,
+    job_not_resumable_handler,
     queue_entry_not_found_handler,
 )
 from src.api.routers import datasets, files, jobs, queues
@@ -27,8 +29,10 @@ from src.services.datasets.exceptions import (
 )
 from src.services.jobs.exceptions import (
     JobAlreadyQueuedError,
+    JobCheckpointNotFoundError,
     JobNotCancellableError,
     JobNotFoundError,
+    JobNotResumableError,
 )
 from src.services.queues.exceptions import QueueEntryNotFoundError
 from src.settings.app_settings import settings
@@ -62,6 +66,8 @@ app.add_middleware(
 app.add_exception_handler(JobNotFoundError, job_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(JobAlreadyQueuedError, job_already_queued_handler)  # type: ignore[arg-type]
 app.add_exception_handler(JobNotCancellableError, job_not_cancellable_handler)  # type: ignore[arg-type]
+app.add_exception_handler(JobNotResumableError, job_not_resumable_handler)  # type: ignore[arg-type]
+app.add_exception_handler(JobCheckpointNotFoundError, job_checkpoint_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(QueueEntryNotFoundError, queue_entry_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(DatasetNotFoundError, dataset_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(DatasetNameConflictError, dataset_name_conflict_handler)  # type: ignore[arg-type]

@@ -23,7 +23,17 @@ export default function JobsTable() {
   };
 
   const handleCancel = async (job: Job) => {
-    await jobsApi.cancel(job.id);
+    if (job.status === "running") {
+      const saveCheckpoint = window.confirm("Save checkpoint before stopping this job?");
+      await jobsApi.cancel(job.id, saveCheckpoint);
+    } else {
+      await jobsApi.cancel(job.id);
+    }
+    refresh();
+  };
+
+  const handleResume = async (job: Job) => {
+    await jobsApi.resume(job.id);
     refresh();
   };
 
@@ -125,6 +135,15 @@ export default function JobsTable() {
                         onClick={() => handleEnqueue(job)}
                         title="Add to queue"
                         className="p-1.5 rounded hover:bg-white/10 text-green-400 hover:text-green-300"
+                      >
+                        <Play size={14} />
+                      </button>
+                    )}
+                    {(job.status === "failed" || job.status === "cancelled") && job.can_resume && (
+                      <button
+                        onClick={() => handleResume(job)}
+                        title="Resume from latest checkpoint"
+                        className="p-1.5 rounded hover:bg-white/10 text-blue-400 hover:text-blue-300"
                       >
                         <Play size={14} />
                       </button>

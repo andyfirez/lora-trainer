@@ -128,6 +128,7 @@ class TrainConfig(BaseModel):
 
     # Checkpointing / sampling
     save_every_n_epochs: int = Field(default=1, ge=1)
+    resume_from_checkpoint: Optional[str] = None
     sample_every_n_epochs: Optional[int] = None
     sample_before_training: bool = False
     sample_prompts: list[str] = Field(default_factory=list)
