@@ -33,6 +33,7 @@ from src.trainer.sdxl.dataset import (
 )
 from src.trainer.sdxl.latent_cache import build_latent_cache
 from src.trainer.sdxl.model_loader import load_sdxl_components
+from src.trainer.sdxl.reforge_sampler import generate_preview_image
 from src.trainer.sdxl.te_cache import build_te_cache
 from src.trainer.training_log import JobTrainingLogger
 
@@ -668,25 +669,34 @@ class SDXLLoRATrainer:
             inference_te2 = inference_te2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
             vae = vae.to(device=device, dtype=torch.float32)
 
-            inference_scheduler = _build_inference_scheduler(config.sample_scheduler, noise_scheduler)
-            pipe = StableDiffusionXLPipeline(
-                vae=vae,
-                text_encoder=inference_te1,
-                text_encoder_2=inference_te2,
-                tokenizer=tokenizer_1,
-                tokenizer_2=tokenizer_2,
-                unet=inference_unet,
-                scheduler=inference_scheduler,
-            )
-            pipe.set_progress_bar_config(disable=True)
+            width = config.sample_width or config.resolution
+            height = config.sample_height or config.resolution
+            autocast_dtype = _DTYPE_MAP[config.mixed_precision]
+
+            pipe: Optional[StableDiffusionXLPipeline] = None
+            if not config.use_reforge_sampler:
+                inference_scheduler = _build_inference_scheduler(config.sample_scheduler, noise_scheduler)
+                pipe = StableDiffusionXLPipeline(
+                    vae=vae,
+                    text_encoder=inference_te1,
+                    text_encoder_2=inference_te2,
+                    tokenizer=tokenizer_1,
+                    tokenizer_2=tokenizer_2,
+                    unet=inference_unet,
+                    scheduler=inference_scheduler,
+                )
+                pipe.set_progress_bar_config(disable=True)
+            else:
+                log.info(
+                    "[sampling e%d] using reForge sampler path (%s, %s)",
+                    epoch,
+                    config.sample_sampler,
+                    config.sample_scheduler_mode,
+                )
             inference_unet.eval()
             inference_te1.eval()
             inference_te2.eval()
             log.info("[sampling e%d] move/build pipeline: %.2fs", epoch, time.perf_counter() - build_started_at)
-
-            width = config.sample_width or config.resolution
-            height = config.sample_height or config.resolution
-            autocast_dtype = _DTYPE_MAP[config.mixed_precision]
 
             with torch.no_grad():
                 for i, prompt in enumerate(config.sample_prompts):
@@ -713,18 +723,85 @@ class SDXLLoRATrainer:
                         return callback_kwargs
 
                     image_started_at = time.perf_counter()
-                    with torch.autocast(device_type=device.type, dtype=autocast_dtype):
-                        image = pipe(
-                            prompt=prompt,
-                            negative_prompt=config.sample_negative_prompt or None,
+                    if config.use_reforge_sampler:
+                        prompt_embeds, pooled_prompt_embeds = self._encode_prompt(
+                            [prompt],
+                            tokenizer_1,
+                            tokenizer_2,
+                            inference_te1,
+                            inference_te2,
+                            device,
+                            autocast_dtype,
+                            train_te1=False,
+                            train_te2=False,
+                        )
+                        negative_prompt_embeds, negative_pooled_prompt_embeds = self._encode_prompt(
+                            [config.sample_negative_prompt or ""],
+                            tokenizer_1,
+                            tokenizer_2,
+                            inference_te1,
+                            inference_te2,
+                            device,
+                            autocast_dtype,
+                            train_te1=False,
+                            train_te2=False,
+                        )
+                        add_time_ids = self._get_add_time_ids(
+                            original_size=(height, width),
+                            crops_coords_top_left=(0, 0),
+                            target_size=(height, width),
+                            dtype=autocast_dtype,
+                            device=device,
+                            batch_size=1,
+                        )
+
+                        def _on_reforge_step(completed: int, total: int) -> None:
+                            if sampling_progress_callback is not None:
+                                sampling_progress_callback(completed, total)
+                            if completed % log_interval == 0 or completed == total:
+                                log.info(
+                                    "[sample %d/%d e%d] step %d/%d",
+                                    i + 1,
+                                    n_prompts,
+                                    epoch,
+                                    completed,
+                                    total,
+                                )
+
+                        image = generate_preview_image(
+                            unet=inference_unet,
+                            vae=vae,
+                            noise_scheduler_config=noise_scheduler.config,
+                            sampler_name=config.sample_sampler.value,
+                            scheduler_mode=config.sample_scheduler_mode.value,
+                            prompt_embeds=prompt_embeds,
+                            negative_prompt_embeds=negative_prompt_embeds,
+                            pooled_prompt_embeds=pooled_prompt_embeds,
+                            negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
+                            add_time_ids=add_time_ids,
                             width=width,
                             height=height,
                             num_inference_steps=config.sample_steps,
                             guidance_scale=config.sample_cfg_scale,
                             generator=generator,
-                            callback_on_step_end=_on_step_end,
-                            callback_on_step_end_tensor_inputs=[],
-                        ).images[0]
+                            autocast_dtype=autocast_dtype,
+                            device=device,
+                            on_step_end=_on_reforge_step,
+                        )
+                    else:
+                        assert pipe is not None
+                        with torch.autocast(device_type=device.type, dtype=autocast_dtype):
+                            image = pipe(
+                                prompt=prompt,
+                                negative_prompt=config.sample_negative_prompt or None,
+                                width=width,
+                                height=height,
+                                num_inference_steps=config.sample_steps,
+                                guidance_scale=config.sample_cfg_scale,
+                                generator=generator,
+                                callback_on_step_end=_on_step_end,
+                                callback_on_step_end_tensor_inputs=[],
+                            ).images[0]
 
                     filename = f"{config.lora_name}_epoch{epoch}_{i:02d}.png"
                     image.save(sample_dir / filename)
