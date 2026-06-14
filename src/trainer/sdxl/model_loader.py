@@ -7,7 +7,7 @@ import torch
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionXLPipeline, UNet2DConditionModel
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
-from src.trainer.config import WeightDtype
+from src.trainer.config import VaeDtype, WeightDtype
 
 _CHECKPOINT_EXTENSIONS = {".safetensors", ".ckpt"}
 _SDXL_ORIGINAL_CONFIG = Path(__file__).resolve().parent / "resources" / "sd_xl_base.yaml"
@@ -16,6 +16,9 @@ _DTYPE_MAP = {
     WeightDtype.FLOAT_32: torch.float32,
     WeightDtype.FLOAT_16: torch.float16,
     WeightDtype.BFLOAT_16: torch.bfloat16,
+    VaeDtype.FLOAT_32: torch.float32,
+    VaeDtype.FLOAT_16: torch.float16,
+    VaeDtype.BFLOAT_16: torch.bfloat16,
 }
 
 
@@ -34,13 +37,25 @@ def is_checkpoint_file(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in _CHECKPOINT_EXTENSIONS
 
 
+def resolve_vae_dtype(vae_dtype: VaeDtype) -> torch.dtype:
+    if vae_dtype != VaeDtype.AUTO:
+        return _DTYPE_MAP[vae_dtype]
+    if torch.cuda.is_available():
+        major, _minor = torch.cuda.get_device_capability()
+        if major >= 8 and torch.cuda.is_bf16_supported():
+            return torch.bfloat16
+    return torch.float32
+
+
 def load_sdxl_components(
     base_model_name: str,
     *,
     unet_dtype: WeightDtype,
     text_encoder_1_dtype: WeightDtype,
     text_encoder_2_dtype: WeightDtype,
+    vae_dtype: VaeDtype = VaeDtype.AUTO,
 ) -> SDXLComponents:
+    resolved_vae_dtype = resolve_vae_dtype(vae_dtype)
     path = Path(base_model_name)
     if is_checkpoint_file(path):
         return _load_from_checkpoint(
@@ -48,12 +63,14 @@ def load_sdxl_components(
             unet_dtype=unet_dtype,
             text_encoder_1_dtype=text_encoder_1_dtype,
             text_encoder_2_dtype=text_encoder_2_dtype,
+            vae_dtype=resolved_vae_dtype,
         )
     return _load_from_pretrained(
         base_model_name,
         unet_dtype=unet_dtype,
         text_encoder_1_dtype=text_encoder_1_dtype,
         text_encoder_2_dtype=text_encoder_2_dtype,
+        vae_dtype=resolved_vae_dtype,
     )
 
 
@@ -63,6 +80,7 @@ def _load_from_pretrained(
     unet_dtype: WeightDtype,
     text_encoder_1_dtype: WeightDtype,
     text_encoder_2_dtype: WeightDtype,
+    vae_dtype: torch.dtype,
 ) -> SDXLComponents:
     return SDXLComponents(
         tokenizer_1=CLIPTokenizer.from_pretrained(base_model_name, subfolder="tokenizer"),
@@ -78,7 +96,7 @@ def _load_from_pretrained(
             subfolder="text_encoder_2",
             torch_dtype=_DTYPE_MAP[text_encoder_2_dtype],
         ),
-        vae=AutoencoderKL.from_pretrained(base_model_name, subfolder="vae", torch_dtype=torch.float32),
+        vae=AutoencoderKL.from_pretrained(base_model_name, subfolder="vae", torch_dtype=vae_dtype),
         unet=UNet2DConditionModel.from_pretrained(
             base_model_name,
             subfolder="unet",
@@ -93,6 +111,7 @@ def _load_from_checkpoint(
     unet_dtype: WeightDtype,
     text_encoder_1_dtype: WeightDtype,
     text_encoder_2_dtype: WeightDtype,
+    vae_dtype: torch.dtype,
 ) -> SDXLComponents:
     pipeline = StableDiffusionXLPipeline.from_single_file(
         str(checkpoint_path),
@@ -105,6 +124,6 @@ def _load_from_checkpoint(
         noise_scheduler=pipeline.scheduler,
         text_encoder_1=pipeline.text_encoder.to(dtype=_DTYPE_MAP[text_encoder_1_dtype]),
         text_encoder_2=pipeline.text_encoder_2.to(dtype=_DTYPE_MAP[text_encoder_2_dtype]),
-        vae=pipeline.vae.to(dtype=torch.float32),
+        vae=pipeline.vae.to(dtype=vae_dtype),
         unet=pipeline.unet.to(dtype=_DTYPE_MAP[unet_dtype]),
     )

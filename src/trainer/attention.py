@@ -3,10 +3,19 @@
 import logging
 from typing import Literal
 
+import torch
 from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 from diffusers.utils.import_utils import is_xformers_available
 
 AttentionMechanism = Literal["default", "sdpa", "xformers"]
+
+
+def _enable_pytorch_sdp_backends() -> None:
+    if not torch.cuda.is_available():
+        return
+    torch.backends.cuda.enable_math_sdp(True)
+    torch.backends.cuda.enable_flash_sdp(True)
+    torch.backends.cuda.enable_mem_efficient_sdp(True)
 
 
 def configure_unet_attention(
@@ -16,13 +25,14 @@ def configure_unet_attention(
 ) -> None:
     """Apply the requested attention backend."""
     if mechanism in ("default", "sdpa"):
-        log.info("Using PyTorch SDPA attention (diffusers default on torch 2.x).")
+        _enable_pytorch_sdp_backends()
+        log.info("Using PyTorch SDPA attention with flash/mem-efficient backends enabled.")
         return
 
     if not is_xformers_available():
         raise RuntimeError(
             "attention_mechanism='xformers' requires xformers, but it is not installed. "
-            "Install it with `uv add xformers` and re-run training."
+            "Install it with `uv add xformers` and re-run."
         )
 
     try:

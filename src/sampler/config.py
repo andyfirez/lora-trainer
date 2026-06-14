@@ -1,6 +1,6 @@
 """Sampling configuration — Pydantic model, serialized as YAML."""
 
-from typing import Optional
+from typing import Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field
@@ -9,7 +9,10 @@ from src.trainer.config import (
     ReforgeSampleSampler,
     ReforgeSampleSchedulerMode,
     SampleScheduler,
+    VaeDtype,
+    WeightDtype,
 )
+from src.trainer.gpu_config_validation import validate_gpu_config
 
 
 class SamplingConfig(BaseModel):
@@ -29,6 +32,10 @@ class SamplingConfig(BaseModel):
     sample_sampler: ReforgeSampleSampler = ReforgeSampleSampler.EULER_A
     sample_scheduler_mode: ReforgeSampleSchedulerMode = ReforgeSampleSchedulerMode.NORMAL
     lora_paths: list[str] = Field(default_factory=list)
+    attention_mechanism: Literal["default", "sdpa", "xformers"] = "sdpa"
+    mixed_precision: WeightDtype = WeightDtype.FLOAT_16
+    vae_dtype: VaeDtype = VaeDtype.AUTO
+    tf32: bool = True
 
     @classmethod
     def from_yaml(cls, yaml_str: str) -> "SamplingConfig":
@@ -42,8 +49,15 @@ class SamplingConfig(BaseModel):
     def default_yaml(cls) -> str:
         return cls().to_yaml()
 
+    def validate_gpu(self) -> None:
+        validate_gpu_config(
+            attention_mechanism=self.attention_mechanism,
+            mixed_precision=self.mixed_precision,
+            vae_dtype=self.vae_dtype,
+        )
+
     def to_train_config(self) -> "TrainConfig":
-        from src.trainer.config import ModelPartConfig, TrainConfig, WeightDtype
+        from src.trainer.config import ModelPartConfig, TrainConfig
 
         return TrainConfig(
             base_model_name=self.base_model_name,
@@ -59,6 +73,10 @@ class SamplingConfig(BaseModel):
             use_reforge_sampler=self.use_reforge_sampler,
             sample_sampler=self.sample_sampler,
             sample_scheduler_mode=self.sample_scheduler_mode,
+            attention_mechanism=self.attention_mechanism,
+            mixed_precision=self.mixed_precision,
+            vae_dtype=self.vae_dtype,
+            tf32=self.tf32,
             unet=ModelPartConfig(train=True, weight_dtype=WeightDtype.FLOAT_16),
             text_encoder_1=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),
             text_encoder_2=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),

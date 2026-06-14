@@ -33,7 +33,8 @@ from src.trainer.sdxl.dataset import (
 )
 from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
 from src.trainer.sdxl.latent_cache import build_latent_cache
-from src.trainer.sdxl.model_loader import load_sdxl_components
+from src.trainer.sdxl.lora_io import apply_lora_state_dict, apply_lora_state_to_module
+from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.reforge_sampler import generate_preview_image
 from src.trainer.sdxl.te_cache import build_te_cache
 from src.trainer.training_log import JobTrainingLogger
@@ -130,6 +131,7 @@ class SDXLLoRATrainer:
             unet_dtype=config.unet.weight_dtype,
             text_encoder_1_dtype=config.text_encoder_1.weight_dtype,
             text_encoder_2_dtype=config.text_encoder_2.weight_dtype,
+            vae_dtype=config.vae_dtype,
         )
         tokenizer_1 = components.tokenizer_1
         tokenizer_2 = components.tokenizer_2
@@ -493,6 +495,7 @@ class SDXLLoRATrainer:
 
     @staticmethod
     def _validate_config(config: TrainConfig) -> None:
+        config.validate_gpu()
         if config.cache_text_encoder_outputs and (
             config.text_encoder_1.train or config.text_encoder_2.train
         ):
@@ -726,13 +729,6 @@ class SDXLLoRATrainer:
             unet.merge_adapter()
             unet_merged = True
             inference_unet = unet.base_model.model
-            log.info(
-                "[sampling e%d] applying attention backend for inference: %s",
-                epoch,
-                config.attention_mechanism,
-            )
-            configure_unet_attention(inference_unet, config.attention_mechanism, log)
-
             if config.text_encoder_1.train:
                 text_encoder_1.merge_adapter()
                 te1_merged = True
@@ -752,7 +748,7 @@ class SDXLLoRATrainer:
             inference_unet = inference_unet.to(device=device, dtype=_DTYPE_MAP[config.unet.weight_dtype])
             inference_te1 = inference_te1.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_1.weight_dtype])
             inference_te2 = inference_te2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
-            vae = vae.to(device=device, dtype=torch.float32)
+            vae = vae.to(device=device, dtype=resolve_vae_dtype(config.vae_dtype))
 
             width = config.sample_width or config.resolution
             height = config.sample_height or config.resolution
@@ -983,11 +979,13 @@ class SDXLLoRATrainer:
         text_encoder_2: torch.nn.Module,
         config: TrainConfig,
     ) -> None:
-        self._apply_lora_state_to_module(unet, state_dict, prefix="lora_unet_")
-        if config.text_encoder_1.train:
-            self._apply_lora_state_to_module(text_encoder_1, state_dict, prefix="lora_te1_")
-        if config.text_encoder_2.train:
-            self._apply_lora_state_to_module(text_encoder_2, state_dict, prefix="lora_te2_")
+        apply_lora_state_dict(
+            state_dict,
+            unet=unet,
+            text_encoder_1=text_encoder_1,
+            text_encoder_2=text_encoder_2,
+            config=config,
+        )
 
     def _apply_lora_state_to_module(
         self,
@@ -996,12 +994,4 @@ class SDXLLoRATrainer:
         *,
         prefix: str,
     ) -> None:
-        for name, param in module.named_parameters():
-            if "lora_" not in name or not param.requires_grad:
-                continue
-            key = f"{prefix}{name.replace('.', '_')}"
-            value = state_dict.get(key)
-            if value is None:
-                continue
-            with torch.no_grad():
-                param.copy_(value.to(dtype=param.dtype, device=param.device))
+        apply_lora_state_to_module(module, state_dict, prefix=prefix)

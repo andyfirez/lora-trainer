@@ -12,4 +12,5 @@ class TrainingJobHandler(BaseJobHandler):
         return [sys.executable, "-u", "-m", "src.trainer.runner", "--job-id", str(job_id)]
 
     def validate_config_yaml(self, config_yaml: str) -> None:
-        TrainConfig.from_yaml(config_yaml)
+        config = TrainConfig.from_yaml(config_yaml)
+        config.validate_gpu()

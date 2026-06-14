@@ -291,7 +291,43 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
               { value: "karras", label: "Karras" },
             ]}
           />
+          <SelectInput
+            label="Attention"
+            value={(config.attention_mechanism as string) ?? "sdpa"}
+            onChange={(v) => set("attention_mechanism", v)}
+            options={[
+              { value: "xformers", label: "xformers" },
+              { value: "sdpa", label: "SDPA (PyTorch 2.x)" },
+              { value: "default", label: "Default" },
+            ]}
+          />
+          <SelectInput
+            label="Mixed Precision"
+            value={(config.mixed_precision as string) ?? "float16"}
+            onChange={(v) => set("mixed_precision", v)}
+            options={[
+              { value: "bfloat16", label: "bfloat16" },
+              { value: "float16", label: "float16" },
+              { value: "float32", label: "float32" },
+            ]}
+          />
+          <SelectInput
+            label="VAE Dtype"
+            value={(config.vae_dtype as string) ?? "auto"}
+            onChange={(v) => set("vae_dtype", v)}
+            options={[
+              { value: "auto", label: "Auto (bf16 on Ampere+)" },
+              { value: "bfloat16", label: "bfloat16" },
+              { value: "float16", label: "float16" },
+              { value: "float32", label: "float32" },
+            ]}
+          />
         </div>
+        <CheckboxInput
+          label="TF32 matmul"
+          checked={(config.tf32 as boolean) ?? true}
+          onChange={(v) => set("tf32", v)}
+        />
         <CheckboxInput
           label="Use reForge-style sampler"
           checked={(config.use_reforge_sampler as boolean) ?? false}

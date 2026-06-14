@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from src.db.session import register_all_tables
 from src.db.tables.job import Job, JobStatus, JobType
-from src.sampler.runner import _run
+from src.sampler.job_runner import run_sampling_job
 from src.settings.app_settings import settings
 
 
@@ -40,14 +40,14 @@ async def test_run_invalid_config_writes_log_and_marks_failed(
     await session.commit()
     await session.refresh(sampling_job)
 
-    with patch("src.sampler.runner.session_factory", test_session_factory), patch.object(
+    with patch("src.sampler.job_runner.session_factory", test_session_factory), patch.object(
         settings.training,
         "logs_dir",
         logs_dir,
-    ), pytest.raises(SystemExit) as exc_info:
-        await _run(sampling_job.id)
+    ):
+        exit_code = await run_sampling_job(sampling_job.id)
 
-    assert exc_info.value.code == 1
+    assert exit_code == 1
     await session.refresh(sampling_job)
     assert sampling_job.status == JobStatus.FAILED
     assert sampling_job.error_message is not None

@@ -86,8 +86,10 @@ class JobConfigService:
     def _validate_config_yaml(self, config_type: ConfigType, config_yaml: str) -> None:
         try:
             if config_type == ConfigType.TRAINING:
-                TrainConfig.from_yaml(config_yaml)
+                config = TrainConfig.from_yaml(config_yaml)
+                config.validate_gpu()
             else:
-                SamplingConfig.from_yaml(config_yaml)
+                config = SamplingConfig.from_yaml(config_yaml)
+                config.validate_gpu()
         except Exception as exc:
             raise JobConfigValidationError(str(exc)) from exc

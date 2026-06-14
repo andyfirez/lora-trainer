@@ -39,7 +39,7 @@ concepts:
 
 # Optimization
 gradient_checkpointing: true
-mixed_precision: bfloat16
+mixed_precision: float16
 
 # Checkpointing & Sampling
 save_every_n_epochs: 1
@@ -78,6 +78,10 @@ sample_scheduler: euler
 use_reforge_sampler: false
 sample_sampler: euler_a
 sample_scheduler_mode: normal
+attention_mechanism: sdpa
+mixed_precision: float16
+vae_dtype: auto
+tf32: true
 lora_paths: []
 `,
 };

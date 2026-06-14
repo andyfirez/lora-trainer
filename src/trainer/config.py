@@ -34,6 +34,13 @@ class WeightDtype(StrEnum):
     BFLOAT_16 = "bfloat16"
 
 
+class VaeDtype(StrEnum):
+    AUTO = "auto"
+    FLOAT_32 = "float32"
+    FLOAT_16 = "float16"
+    BFLOAT_16 = "bfloat16"
+
+
 class SampleScheduler(StrEnum):
     EULER = "euler"
     EULER_A = "euler_a"
@@ -104,7 +111,7 @@ class TrainConfig(BaseModel):
 
     # Optimization
     gradient_checkpointing: bool = True
-    mixed_precision: WeightDtype = WeightDtype.BFLOAT_16
+    mixed_precision: WeightDtype = WeightDtype.FLOAT_16
     seed: Optional[int] = None
 
     # Caching (latents + text encoder outputs)
@@ -117,6 +124,7 @@ class TrainConfig(BaseModel):
     attention_mechanism: Literal["default", "sdpa", "xformers"] = "sdpa"
 
     # Precision
+    vae_dtype: VaeDtype = VaeDtype.AUTO
     tf32: bool = True
 
     # DataLoader
@@ -157,3 +165,12 @@ class TrainConfig(BaseModel):
     @classmethod
     def default_yaml(cls) -> str:
         return cls().to_yaml()
+
+    def validate_gpu(self) -> None:
+        from src.trainer.gpu_config_validation import validate_gpu_config
+
+        validate_gpu_config(
+            attention_mechanism=self.attention_mechanism,
+            mixed_precision=self.mixed_precision,
+            vae_dtype=self.vae_dtype,
+        )

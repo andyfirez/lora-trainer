@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 
 from src.db.tables.job_config import ConfigType
 from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
@@ -72,6 +73,32 @@ async def test_create_config_validates_yaml(config_service: JobConfigService) ->
             name="bad",
             config_type=ConfigType.TRAINING,
             config_yaml="not_a_valid_config: [[[",
+        )
+
+
+@pytest.mark.asyncio
+@patch("src.trainer.gpu_config_validation.torch.cuda.is_available", return_value=True)
+@patch("src.trainer.gpu_config_validation.torch.cuda.get_device_capability", return_value=(7, 5))
+@patch("src.trainer.gpu_config_validation.torch.cuda.get_device_name", return_value="RTX 2070")
+@patch("src.trainer.gpu_config_validation.torch.cuda.is_bf16_supported", return_value=False)
+@patch("src.trainer.gpu_config_validation.is_xformers_available", return_value=True)
+async def test_create_sampling_config_rejects_unsupported_gpu_settings(
+    _xformers: object,
+    _bf16: object,
+    _name: object,
+    _capability: object,
+    _cuda: object,
+    config_service: JobConfigService,
+) -> None:
+    with pytest.raises(JobConfigValidationError, match="mixed_precision=bfloat16 is not supported"):
+        await config_service.create_config(
+            name="bad gpu settings",
+            config_type=ConfigType.SAMPLING,
+            config_yaml=(
+                "sample_prompts:\n  - test\n"
+                "attention_mechanism: xformers\n"
+                "mixed_precision: bfloat16\n"
+            ),
         )
 
 
