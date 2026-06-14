@@ -1,9 +1,9 @@
 """Training logging utilities — kohya-style step logs and loss tracking."""
 
 import logging
+import shutil
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -51,12 +51,19 @@ def format_step_log(
     )
 
 
-def setup_tensorboard_writer(log_dir: str, run_name: str) -> Any:
+def build_tensorboard_dir(log_dir: str, job_id: int) -> Path:
+    return Path(log_dir) / f"job_{job_id}"
+
+
+def setup_tensorboard_writer(log_dir: str, job_id: int, *, flush_secs: int = 10) -> tuple[Any, Path]:
     from torch.utils.tensorboard import SummaryWriter
 
-    time_str = datetime.now().strftime("%Y%m%d-%H%M%S")
-    summary_dir = Path(log_dir) / f"{run_name}_{time_str}"
-    return SummaryWriter(str(summary_dir))
+    summary_dir = build_tensorboard_dir(log_dir, job_id)
+    if summary_dir.exists():
+        shutil.rmtree(summary_dir)
+    summary_dir.mkdir(parents=True, exist_ok=True)
+    writer = SummaryWriter(str(summary_dir), flush_secs=flush_secs)
+    return writer, summary_dir
 
 
 @dataclass
@@ -182,6 +189,7 @@ class JobTrainingLogger:
                 self.tensorboard_writer.add_scalar("loss", loss, step)
                 self.tensorboard_writer.add_scalar("avr_loss", avr_loss, step)
                 self.tensorboard_writer.add_scalar("lr", lr, step)
+                self.tensorboard_writer.flush()
         if self.metric_logger is not None:
             self.metric_logger.commit(step=step)
         return avr_loss

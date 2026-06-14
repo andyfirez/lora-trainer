@@ -16,7 +16,7 @@ from src.services.jobs.exceptions import (
 )
 from src.services.jobs.loss_log_reader import read_loss_log
 from src.trainer.config import TrainConfig
-from src.trainer.metric_logger import build_loss_log_path
+from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
 from src.trainer.training_log import JobTrainingLogger
 
 
@@ -69,6 +69,9 @@ class JobsService:
         max_pos = await self._queue_repo.get_max_position()
         entry = QueueEntry(job_id=job_id, position=max_pos + 1)
         await self._job_repo.clear_runtime_state(job)
+        config = TrainConfig.from_yaml(job.config_yaml)
+        if config.logging.use_ui_logger:
+            reset_loss_log(build_loss_log_path(config))
         await self._job_repo.update_status(job, JobStatus.QUEUED)
         return await self._queue_repo.add(entry)
 

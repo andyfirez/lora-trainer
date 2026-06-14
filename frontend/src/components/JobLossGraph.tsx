@@ -8,6 +8,7 @@ import "uplot/dist/uPlot.min.css";
 interface Props {
   jobId: number;
   isActive: boolean;
+  resetKey: string | null;
 }
 
 function formatNum(v: number) {
@@ -143,8 +144,12 @@ function ToggleButton({ checked, onClick, label }: { checked: boolean; onClick: 
   );
 }
 
-export default function JobLossGraph({ jobId, isActive }: Props) {
-  const { series, lossKeys, status, refreshLoss } = useJobLossLog(jobId, isActive ? 2000 : null);
+export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
+  const { series, lossKeys, status, refreshLoss } = useJobLossLog(
+    jobId,
+    isActive ? 2000 : null,
+    resetKey,
+  );
 
   const [useLogScale, setUseLogScale] = useState(false);
   const [showTrend, setShowTrend] = useState(true);

@@ -13,6 +13,7 @@ from src.db.repositories.training_job_repo import TrainingJobRepository
 from src.db.tables.training_job import JobStatus, TrainingJob
 from src.services.jobs.exceptions import JobNotCancellableError
 from src.services.jobs.service import JobsService
+from src.trainer.metric_logger import MetricLogger
 from src.trainer.training_log import JobTrainingLogger
 
 
@@ -101,6 +102,34 @@ async def test_enqueue_clears_stale_runtime_state(jobs_service: JobsService, ses
     assert refreshed.progress_total is None
     assert refreshed.progress_loss is None
     assert refreshed.progress_avr_loss is None
+
+
+@pytest.mark.asyncio
+async def test_enqueue_clears_loss_log(
+    jobs_service: JobsService,
+    session: AsyncSession,
+    tmp_path,
+) -> None:
+    output_dir = tmp_path / "output"
+    config_yaml = f"""
+output_dir: {output_dir.as_posix()}
+lora_name: test_lora
+base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+concepts:
+  - image_dir: /tmp/images
+"""
+    job = await jobs_service.create_job("test", config_yaml)
+    loss_log = output_dir / "test_lora" / "loss_log.db"
+    logger = MetricLogger(loss_log)
+    logger.log({"loss/loss": 0.9})
+    logger.commit(step=10)
+    logger.finish()
+
+    await jobs_service.enqueue_job(job.id)
+
+    assert not loss_log.exists()
+    loss = await jobs_service.get_job_loss(job.id)
+    assert loss.points == []
 
 
 @pytest.mark.asyncio

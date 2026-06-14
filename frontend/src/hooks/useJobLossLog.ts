@@ -5,7 +5,11 @@ import { jobsApi, type LossPoint, type JobLossResponse } from "@/lib/api/jobs";
 
 type SeriesMap = Record<string, LossPoint[]>;
 
-export default function useJobLossLog(jobId: number, reloadInterval: number | null = null) {
+export default function useJobLossLog(
+  jobId: number,
+  reloadInterval: number | null = null,
+  resetKey: string | null = null,
+) {
   const [series, setSeries] = useState<SeriesMap>({});
   const [keys, setKeys] = useState<string[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "refreshing">("idle");
@@ -93,7 +97,7 @@ export default function useJobLossLog(jobId: number, reloadInterval: number | nu
       const interval = setInterval(() => void refreshLoss(), reloadInterval);
       return () => clearInterval(interval);
     }
-  }, [jobId, reloadInterval, refreshLoss]);
+  }, [jobId, reloadInterval, resetKey, refreshLoss]);
 
   return { series, keys, lossKeys, status, refreshLoss };
 }

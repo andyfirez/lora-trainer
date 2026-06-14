@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { use, useEffect, useRef } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Play, Square, Download, Pencil } from "lucide-react";
 import { jobsApi } from "@/lib/api/jobs";
@@ -86,6 +86,19 @@ export default function JobDetailPage({ params }: Props) {
   const { jobId } = use(params);
   const id = Number(jobId);
   const { data: job, isLoading, mutate } = useSWR(`/jobs/${id}`, () => jobsApi.get(id), { refreshInterval: 2000 });
+  const [lossGraphRunKey, setLossGraphRunKey] = useState(0);
+  const prevJobStatusRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!job) {
+      return;
+    }
+    const prevStatus = prevJobStatusRef.current;
+    if (job.status === "queued" && prevStatus !== "queued") {
+      setLossGraphRunKey((key) => key + 1);
+    }
+    prevJobStatusRef.current = job.status;
+  }, [job]);
 
   if (isLoading) {
     return (
@@ -96,8 +109,11 @@ export default function JobDetailPage({ params }: Props) {
   }
   if (!job) return <div className="text-red-400">Job not found</div>;
 
-  const cachePct = progressPercent(job.cache_progress_step, job.cache_progress_total);
-  const trainPct = progressPercent(job.progress_step, job.progress_total);
+  const trainStep = job.progress_step ?? 0;
+  const trainPct =
+    job.progress_total != null && job.progress_total > 0
+      ? progressPercent(trainStep, job.progress_total)
+      : null;
   const samplingPct =
     job.sampling_step != null && job.sampling_total != null && job.sampling_total > 0
       ? Math.round((job.sampling_step / job.sampling_total) * 100)
@@ -151,23 +167,7 @@ export default function JobDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {isRunning && cachePct != null && (
-        <JobProgressBar
-          title="Caching Progress"
-          step={job.cache_progress_step}
-          total={job.cache_progress_total}
-          percent={cachePct}
-          active={isRunning}
-          barClassName="bg-amber-500"
-          headerRight={
-            <span className="text-[var(--muted)]">
-              {job.cache_progress_step} / {job.cache_progress_total} ({cachePct}%)
-            </span>
-          }
-        />
-      )}
-
-      {isRunning && (job.sampling_status ? (
+      {isRunning && job.sampling_status != null && (
         <JobProgressBar
           title={job.sampling_status}
           step={job.sampling_step}
@@ -185,10 +185,12 @@ export default function JobDetailPage({ params }: Props) {
             ) : undefined
           }
         />
-      ) : trainPct != null ? (
+      )}
+
+      {isRunning && trainPct != null && (
         <JobProgressBar
           title="Training Progress"
-          step={job.progress_step}
+          step={trainStep}
           total={job.progress_total}
           percent={trainPct}
           active={isRunning}
@@ -197,7 +199,7 @@ export default function JobDetailPage({ params }: Props) {
               {job.progress_epoch != null && job.progress_epoch > 0 && job.progress_epoch_total != null && (
                 <>epoch {job.progress_epoch}/{job.progress_epoch_total} · </>
               )}
-              step {job.progress_step} / {job.progress_total} ({trainPct}%)
+              step {trainStep} / {job.progress_total} ({trainPct}%)
             </span>
           }
           footer={
@@ -209,9 +211,11 @@ export default function JobDetailPage({ params }: Props) {
             ) : undefined
           }
         />
-      ) : null)}
+      )}
 
-      {showLossGraph && <JobLossGraph jobId={id} isActive={isRunning} />}
+      {showLossGraph && (
+        <JobLossGraph jobId={id} isActive={isRunning} resetKey={String(lossGraphRunKey)} />
+      )}
 
       {showLogs && <LiveLogs jobId={id} isRunning={isRunning} showLogs={showLogs} jobStatus={job.status} />}
 

@@ -12,14 +12,16 @@ import asyncio
 import logging
 import sys
 import threading
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import Any
 
 from src.db.repositories.training_job_repo import TrainingJobRepository
 from src.db.session import session_factory
 from src.db.tables.training_job import JobStatus, TrainingJob
 from src.settings.app_settings import settings
 from src.trainer.config import TrainConfig
-from src.trainer.metric_logger import MetricLogger, build_loss_log_path
+from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 from src.trainer.sdxl.trainer import SDXLLoRATrainer
 from src.trainer.training_log import JobTrainingLogger, setup_tensorboard_writer
 
@@ -89,15 +91,6 @@ async def _update_sampling_progress(job_id: int, step: int, total: int) -> None:
             await session.commit()
 
 
-async def _update_cache_progress(job_id: int, step: int, total: int) -> None:
-    async with session_factory() as session:
-        repo = TrainingJobRepository(session)
-        job = await _get_active_job(repo, job_id)
-        if job is not None:
-            await repo.update_cache_progress(job, step, total)
-            await session.commit()
-
-
 async def _update_status(job_id: int, status: JobStatus, error: str | None = None) -> None:
     async with session_factory() as session:
         repo = TrainingJobRepository(session)
@@ -118,6 +111,18 @@ async def _set_log_path(job_id: int, log_path: str) -> None:
             await session.commit()
 
 
+def _submit_to_progress_loop(coro: Coroutine[Any, Any, None]) -> None:
+    future = asyncio.run_coroutine_threadsafe(coro, _progress_loop)
+
+    def _log_exception(fut: asyncio.Future[object]) -> None:
+        try:
+            fut.result()
+        except Exception:
+            logger.exception("Progress DB update failed")
+
+    future.add_done_callback(_log_exception)
+
+
 def _make_progress_callback(job_id: int):
     def callback(
         step: int,
@@ -128,20 +133,8 @@ def _make_progress_callback(job_id: int):
         epoch_total: int,
         _lr: float,
     ) -> None:
-        # Submit to the background event loop — non-blocking from the training thread.
-        asyncio.run_coroutine_threadsafe(
+        _submit_to_progress_loop(
             _update_progress(job_id, step, total, loss, avr_loss, epoch, epoch_total),
-            _progress_loop,
-        )
-
-    return callback
-
-
-def _make_cache_progress_callback(job_id: int):
-    def callback(step: int, total: int) -> None:
-        asyncio.run_coroutine_threadsafe(
-            _update_cache_progress(job_id, step, total),
-            _progress_loop,
         )
 
     return callback
@@ -149,20 +142,14 @@ def _make_cache_progress_callback(job_id: int):
 
 def _make_sampling_status_callback(job_id: int):
     def callback(status: str | None) -> None:
-        asyncio.run_coroutine_threadsafe(
-            _update_sampling_status(job_id, status),
-            _progress_loop,
-        )
+        _submit_to_progress_loop(_update_sampling_status(job_id, status))
 
     return callback
 
 
 def _make_sampling_progress_callback(job_id: int):
     def callback(step: int, total: int) -> None:
-        asyncio.run_coroutine_threadsafe(
-            _update_sampling_progress(job_id, step, total),
-            _progress_loop,
-        )
+        _submit_to_progress_loop(_update_sampling_progress(job_id, step, total))
 
     return callback
 
@@ -186,10 +173,15 @@ async def _run(job_id: int) -> None:
     log_path = _build_log_path(job_id)
     metric_logger: MetricLogger | None = None
     if config.logging.use_ui_logger:
-        metric_logger = MetricLogger(build_loss_log_path(config))
+        loss_log_path = build_loss_log_path(config)
+        reset_loss_log(loss_log_path)
+        metric_logger = MetricLogger(loss_log_path)
     tensorboard_writer = None
     if config.logging.log_dir:
-        tensorboard_writer = setup_tensorboard_writer(config.logging.log_dir, config.lora_name)
+        tensorboard_writer, tensorboard_dir = setup_tensorboard_writer(
+            config.logging.log_dir,
+            job_id,
+        )
     training_logger = JobTrainingLogger(
         job_id=job_id,
         log_path=log_path,
@@ -197,6 +189,8 @@ async def _run(job_id: int) -> None:
         log_every=config.logging.log_every,
         tensorboard_writer=tensorboard_writer,
     )
+    if config.logging.log_dir:
+        training_logger.logger.info("TensorBoard log dir: %s", tensorboard_dir)
     await _set_log_path(job_id, str(log_path))
     training_logger.logger.info(
         "Starting SDXL LoRA training for job id=%d: %s/%s", job_id, config.output_dir, config.lora_name
@@ -208,7 +202,6 @@ async def _run(job_id: int) -> None:
         trainer = SDXLLoRATrainer(
             config,
             progress_callback=_make_progress_callback(job_id),
-            cache_progress_callback=_make_cache_progress_callback(job_id),
             sampling_status_callback=_make_sampling_status_callback(job_id),
             sampling_progress_callback=_make_sampling_progress_callback(job_id),
             training_logger=training_logger,

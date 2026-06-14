@@ -12,6 +12,15 @@ def build_loss_log_path(config: TrainConfig) -> Path:
     return Path(config.output_dir) / config.lora_name / "loss_log.db"
 
 
+def reset_loss_log(log_file: Path | str) -> None:
+    path = Path(log_file)
+    if path.exists():
+        path.unlink()
+    for suffix in ("-wal", "-shm"):
+        sidecar = Path(f"{path}{suffix}")
+        if sidecar.exists():
+            sidecar.unlink()
+
 class MetricLogger:
     def __init__(
         self,

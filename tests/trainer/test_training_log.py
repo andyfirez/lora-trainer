@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from src.trainer.sdxl.dataset import count_latent_cache_items, count_te_cache_items
-from src.trainer.training_log import JobTrainingLogger, LossRecorder, format_step_log
+from src.trainer.training_log import JobTrainingLogger, LossRecorder, build_tensorboard_dir, format_step_log, setup_tensorboard_writer
 
 
 def test_loss_recorder_moving_average() -> None:
@@ -70,3 +70,26 @@ def test_build_latent_cache_uses_job_logger(tmp_path) -> None:
     lines = JobTrainingLogger.read_tail(job_logger.log_path)
     assert any("Caching latents for 0 unique images" in line for line in lines)
     assert any("Latent cache ready" in line for line in lines)
+
+
+def test_build_tensorboard_dir_uses_job_id(tmp_path) -> None:
+    assert build_tensorboard_dir(str(tmp_path), 42) == tmp_path / "job_42"
+
+
+def test_setup_tensorboard_writer_resets_existing_run(tmp_path) -> None:
+    log_dir = tmp_path / "tb"
+    summary_dir = build_tensorboard_dir(str(log_dir), 7)
+    summary_dir.mkdir(parents=True)
+    stale_file = summary_dir / "stale.txt"
+    stale_file.write_text("old run", encoding="utf-8")
+
+    writer, created_dir = setup_tensorboard_writer(str(log_dir), 7)
+
+    try:
+        assert created_dir == summary_dir
+        assert not stale_file.exists()
+        writer.add_scalar("loss", 0.5, 1)
+        writer.flush()
+        assert any(summary_dir.iterdir())
+    finally:
+        writer.close()

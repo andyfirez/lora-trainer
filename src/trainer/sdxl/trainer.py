@@ -65,14 +65,12 @@ class SDXLLoRATrainer:
         self,
         config: TrainConfig,
         progress_callback: Optional[Callable[..., None]] = None,
-        cache_progress_callback: Optional[Callable[[int, int], None]] = None,
         sampling_status_callback: Optional[Callable[[Optional[str]], None]] = None,
         sampling_progress_callback: Optional[Callable[[int, int], None]] = None,
         training_logger: Optional[JobTrainingLogger] = None,
     ) -> None:
         self._config = config
         self._progress_callback = progress_callback
-        self._cache_progress_callback = cache_progress_callback
         self._sampling_status_callback = sampling_status_callback
         self._sampling_progress_callback = sampling_progress_callback
         self._training_logger = training_logger
@@ -229,8 +227,6 @@ class SDXLLoRATrainer:
                     self._training_logger.create_progress_bar(cache_steps, desc=f"cache {phase}")
                 self._training_logger.log_cache_progress(phase, phase_current, phase_total)
                 self._training_logger.advance_progress(1, desc=f"cache {phase}")
-            if self._cache_progress_callback is not None:
-                self._cache_progress_callback(cache_progress, cache_steps)
 
         # --- Build caches (before the training loop) ---
         latent_cache: Optional[dict[str, Tensor]] = None
@@ -268,6 +264,9 @@ class SDXLLoRATrainer:
                 self._training_logger.close_progress_bar()
                 self._training_logger.logger.info("Caching complete, starting training")
             self._training_logger.create_progress_bar(total_steps, desc="steps")
+
+        if self._progress_callback is not None:
+            self._progress_callback(0, total_steps, 0.0, 0.0, 0, config.epochs, 0.0)
 
         self._save_config(config)
 

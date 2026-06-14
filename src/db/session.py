@@ -17,7 +17,11 @@ from src.settings.app_settings import settings
 def _create_engine() -> AsyncEngine:
     db_path = settings.database.path
     url = f"sqlite+aiosqlite:///{db_path}"
-    return create_async_engine(url, echo=settings.database.echo)
+    return create_async_engine(
+        url,
+        echo=settings.database.echo,
+        connect_args={"timeout": 30},
+    )
 
 
 engine: AsyncEngine = _create_engine()

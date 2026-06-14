@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from src.services.jobs.loss_log_reader import read_loss_log
-from src.trainer.metric_logger import MetricLogger, build_loss_log_path
+from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 from src.trainer.config import TrainConfig
 
 
@@ -66,3 +66,37 @@ def test_read_loss_log_missing_file(tmp_path: Path) -> None:
     result = read_loss_log(tmp_path / "missing.db")
     assert result.keys == []
     assert result.points == []
+
+
+def test_reset_loss_log_removes_existing_data(tmp_path: Path) -> None:
+    log_file = tmp_path / "loss_log.db"
+    logger = MetricLogger(log_file)
+    logger.log({"loss/loss": 0.5})
+    logger.commit(step=1)
+    logger.finish()
+
+    reset_loss_log(log_file)
+
+    assert not log_file.exists()
+    result = read_loss_log(log_file, key="loss/loss")
+    assert result.points == []
+
+
+def test_new_run_starts_with_empty_loss_log(tmp_path: Path) -> None:
+    log_file = tmp_path / "loss_log.db"
+    first = MetricLogger(log_file)
+    for step in range(1, 6):
+        first.log({"loss/loss": float(step)})
+        first.commit(step=step)
+    first.finish()
+
+    reset_loss_log(log_file)
+
+    second = MetricLogger(log_file)
+    second.log({"loss/loss": 0.1})
+    second.commit(step=1)
+    second.finish()
+
+    result = read_loss_log(log_file, key="loss/loss")
+    assert [p.step for p in result.points] == [1]
+    assert result.points[0].value == pytest.approx(0.1)
