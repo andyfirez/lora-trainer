@@ -2,6 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import PathInput from "@/components/PathInput";
+import SampleSamplerFields from "@/components/SampleSamplerFields";
 
 type Config = Record<string, any>;
 
@@ -580,41 +581,13 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             step={64}
             placeholder="same as resolution"
           />
-          <SelectInput
-            label="Sample Scheduler"
-            value={config.sample_scheduler ?? "euler"}
-            onChange={(v) => set("sample_scheduler", v)}
-            options={[
-              { value: "euler", label: "Euler" },
-              { value: "euler_a", label: "Euler Ancestral" },
-              { value: "ddim", label: "DDIM" },
-              { value: "dpm++", label: "DPM++ (multistep)" },
-            ]}
-          />
-          <SelectInput
-            label="Reforge Sampler (preview path)"
-            value={config.sample_sampler ?? "euler_a"}
-            onChange={(v) => set("sample_sampler", v)}
-            options={[
-              { value: "euler_a", label: "Euler Ancestral" },
-              { value: "dpmpp_2m", label: "DPM++ 2M" },
-            ]}
-          />
-          <SelectInput
-            label="Reforge Scheduler Mode"
-            value={config.sample_scheduler_mode ?? "normal"}
-            onChange={(v) => set("sample_scheduler_mode", v)}
-            options={[
-              { value: "normal", label: "Normal" },
-              { value: "karras", label: "Karras" },
-            ]}
-          />
-        </div>
-        <div className="mt-3">
-          <CheckboxInput
-            label="Use reForge-style sampler preview path"
-            checked={config.use_reforge_sampler ?? false}
-            onChange={(v) => set("use_reforge_sampler", v)}
+          <SampleSamplerFields
+            useReforgeSampler={config.use_reforge_sampler ?? false}
+            sampleScheduler={config.sample_scheduler ?? "euler"}
+            sampleSampler={config.sample_sampler ?? "euler_a"}
+            sampleSchedulerMode={config.sample_scheduler_mode ?? "normal"}
+            onChange={set}
+            reforgeCheckboxLabel="Use reForge-style sampler preview path"
           />
         </div>
         <div className="mt-3">

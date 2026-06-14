@@ -2,6 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import PathInput from "@/components/PathInput";
+import SampleSamplerFields from "@/components/SampleSamplerFields";
 
 type Config = Record<string, unknown>;
 
@@ -262,34 +263,13 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
             step={64}
             placeholder="1024"
           />
-          <SelectInput
-            label="Sample Scheduler"
-            value={(config.sample_scheduler as string) ?? "euler"}
-            onChange={(v) => set("sample_scheduler", v)}
-            options={[
-              { value: "euler", label: "Euler" },
-              { value: "euler_a", label: "Euler Ancestral" },
-              { value: "ddim", label: "DDIM" },
-              { value: "dpm++", label: "DPM++ (multistep)" },
-            ]}
-          />
-          <SelectInput
-            label="Reforge Sampler"
-            value={(config.sample_sampler as string) ?? "euler_a"}
-            onChange={(v) => set("sample_sampler", v)}
-            options={[
-              { value: "euler_a", label: "Euler Ancestral" },
-              { value: "dpmpp_2m", label: "DPM++ 2M" },
-            ]}
-          />
-          <SelectInput
-            label="Reforge Scheduler Mode"
-            value={(config.sample_scheduler_mode as string) ?? "normal"}
-            onChange={(v) => set("sample_scheduler_mode", v)}
-            options={[
-              { value: "normal", label: "Normal" },
-              { value: "karras", label: "Karras" },
-            ]}
+          <SampleSamplerFields
+            useReforgeSampler={(config.use_reforge_sampler as boolean) ?? false}
+            sampleScheduler={(config.sample_scheduler as string) ?? "euler"}
+            sampleSampler={(config.sample_sampler as string) ?? "euler_a"}
+            sampleSchedulerMode={(config.sample_scheduler_mode as string) ?? "normal"}
+            onChange={set}
+            reforgeCheckboxLabel="Use reForge-style sampler"
           />
           <SelectInput
             label="Attention"
@@ -327,11 +307,6 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
           label="TF32 matmul"
           checked={(config.tf32 as boolean) ?? true}
           onChange={(v) => set("tf32", v)}
-        />
-        <CheckboxInput
-          label="Use reForge-style sampler"
-          checked={(config.use_reforge_sampler as boolean) ?? false}
-          onChange={(v) => set("use_reforge_sampler", v)}
         />
         <Field label="Negative Prompt">
           <input
