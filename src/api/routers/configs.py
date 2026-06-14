@@ -8,6 +8,7 @@ from src.api.converters import to_job_response
 from src.api.dependencies import JobConfigServiceDep, JobsServiceDep
 from src.api.schemas.configs import (
     CreateJobFromConfigRequest,
+    JobConfigCloneRequest,
     JobConfigCreate,
     JobConfigResponse,
     JobConfigUpdate,
@@ -62,6 +63,20 @@ async def update_config(
 @router.delete("/{config_id}", status_code=204)
 async def delete_config(config_id: int, service: JobConfigServiceDep) -> None:
     await service.delete_config(config_id)
+
+
+@router.post("/{config_id}/clone", response_model=JobConfigResponse, status_code=201)
+async def clone_config(
+    config_id: int,
+    body: JobConfigCloneRequest,
+    service: JobConfigServiceDep,
+) -> JobConfigResponse:
+    config = await service.clone_config(
+        config_id,
+        name=body.name,
+        description=body.description,
+    )
+    return JobConfigResponse.model_validate(config, from_attributes=True)
 
 
 @router.post("/{config_id}/jobs", response_model=JobResponse, status_code=201)

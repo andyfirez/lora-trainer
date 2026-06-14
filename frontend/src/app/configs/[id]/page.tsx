@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Play, Loader2, X } from "lucide-react";
+import { ArrowLeft, Play, Loader2, X, Copy } from "lucide-react";
 import { parse as yamlParse } from "yaml";
 import { configsApi } from "@/lib/api/configs";
 import ConfigForm from "@/components/ConfigForm";
@@ -23,6 +23,7 @@ export default function ConfigDetailPage({ params }: Props) {
   const [jobName, setJobName] = useState("");
   const [enqueue, setEnqueue] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [cloning, setCloning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
 
   const openRunModal = () => {
@@ -30,6 +31,16 @@ export default function ConfigDetailPage({ params }: Props) {
     setEnqueue(true);
     setRunError(null);
     setShowRunModal(true);
+  };
+
+  const handleClone = async () => {
+    setCloning(true);
+    try {
+      const cloned = await configsApi.clone(configId);
+      router.push(`/configs/${cloned.id}`);
+    } finally {
+      setCloning(false);
+    }
   };
 
   const handleRunJob = async () => {
@@ -80,12 +91,22 @@ export default function ConfigDetailPage({ params }: Props) {
           <h1 className="text-2xl font-bold text-white">{config.name}</h1>
           <p className="text-[var(--muted)] mt-1 capitalize">{config.config_type} config</p>
         </div>
-        <button
-          onClick={openRunModal}
-          className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg px-4 py-2 text-sm font-medium"
-        >
-          <Play size={14} /> Run Job
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void handleClone()}
+            disabled={cloning}
+            className="flex items-center gap-1.5 border border-[var(--border)] hover:bg-white/5 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            {cloning ? <Loader2 className="animate-spin" size={14} /> : <Copy size={14} />}
+            {cloning ? "Duplicating…" : "Duplicate"}
+          </button>
+          <button
+            onClick={openRunModal}
+            className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            <Play size={14} /> Run Job
+          </button>
+        </div>
       </div>
 
       <ConfigForm

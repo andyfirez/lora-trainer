@@ -21,6 +21,11 @@ class JobConfigUpdate(BaseModel):
     description: Optional[str] = None
 
 
+class JobConfigCloneRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
 class JobConfigResponse(BaseModel):
     id: int
     name: str

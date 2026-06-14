@@ -14,6 +14,11 @@ export interface JobConfigUpdate {
   description?: string | null;
 }
 
+export interface JobConfigCloneRequest {
+  name?: string;
+  description?: string | null;
+}
+
 export const configsApi = {
   list: (configType?: ConfigType) =>
     api.get<JobConfig[]>(
@@ -23,6 +28,8 @@ export const configsApi = {
   create: (body: JobConfigCreate) => api.post<JobConfig>("/configs/", body),
   update: (id: number, body: JobConfigUpdate) => api.patch<JobConfig>(`/configs/${id}`, body),
   delete: (id: number) => api.delete(`/configs/${id}`),
+  clone: (id: number, body: JobConfigCloneRequest = {}) =>
+    api.post<JobConfig>(`/configs/${id}/clone`, body),
   createJob: (configId: number, body: CreateJobFromConfigRequest = {}) =>
     api.post<Job>(`/configs/${configId}/jobs`, body),
 };

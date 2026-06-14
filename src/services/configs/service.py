@@ -68,6 +68,21 @@ class JobConfigService:
         config = await self.get_config(config_id)
         await self._config_repo.delete(config)
 
+    async def clone_config(
+        self,
+        config_id: int,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+    ) -> JobConfig:
+        source = await self.get_config(config_id)
+        return await self.create_config(
+            name=name or f"{source.name} (copy)",
+            config_type=source.config_type,
+            config_yaml=source.config_yaml,
+            description=description if description is not None else source.description,
+        )
+
     def _validate_config_yaml(self, config_type: ConfigType, config_yaml: str) -> None:
         try:
             if config_type == ConfigType.TRAINING:

@@ -3,12 +3,15 @@
 import { useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { PlusCircle, Loader2, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { PlusCircle, Loader2, Trash2, Copy } from "lucide-react";
 import { configsApi } from "@/lib/api/configs";
 import type { ConfigType } from "@/types";
 
 export default function ConfigsPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<ConfigType>("training");
+  const [cloningId, setCloningId] = useState<number | null>(null);
   const { data: configs, isLoading, mutate } = useSWR(
     `/configs?type=${tab}`,
     () => configsApi.list(tab),
@@ -19,6 +22,17 @@ export default function ConfigsPage() {
     if (!confirm(`Delete config "${name}"?`)) return;
     await configsApi.delete(id);
     mutate();
+  };
+
+  const handleClone = async (id: number) => {
+    setCloningId(id);
+    try {
+      const cloned = await configsApi.clone(id);
+      await mutate();
+      router.push(`/configs/${cloned.id}`);
+    } finally {
+      setCloningId(null);
+    }
   };
 
   return (
@@ -95,6 +109,18 @@ export default function ConfigsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => void handleClone(config.id)}
+                        disabled={cloningId === config.id}
+                        title="Duplicate"
+                        className="p-1.5 rounded hover:bg-white/10 text-[var(--muted)] hover:text-white disabled:opacity-50"
+                      >
+                        {cloningId === config.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <Copy size={14} />
+                        )}
+                      </button>
                       <button
                         onClick={() => void handleDelete(config.id, config.name)}
                         title="Delete"

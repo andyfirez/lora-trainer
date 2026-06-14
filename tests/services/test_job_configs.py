@@ -107,3 +107,41 @@ async def test_delete_config_removes_entity(config_service: JobConfigService) ->
 
     with pytest.raises(JobConfigNotFoundError):
         await config_service.get_config(created.id)
+
+
+@pytest.mark.asyncio
+async def test_clone_config_creates_copy(config_service: JobConfigService) -> None:
+    created = await config_service.create_config(
+        name="original",
+        config_type=ConfigType.TRAINING,
+        config_yaml="base_model_name: x",
+        description="demo",
+    )
+
+    cloned = await config_service.clone_config(created.id)
+
+    assert cloned.id != created.id
+    assert cloned.name == "original (copy)"
+    assert cloned.config_type == ConfigType.TRAINING
+    assert cloned.config_yaml == created.config_yaml
+    assert cloned.description == "demo"
+
+
+@pytest.mark.asyncio
+async def test_clone_config_custom_name(config_service: JobConfigService) -> None:
+    created = await config_service.create_config(
+        name="original",
+        config_type=ConfigType.SAMPLING,
+        config_yaml="sample_prompts:\n  - prompt\n",
+    )
+
+    cloned = await config_service.clone_config(created.id, name="custom name")
+
+    assert cloned.name == "custom name"
+    assert cloned.config_yaml == created.config_yaml
+
+
+@pytest.mark.asyncio
+async def test_clone_config_raises_when_missing(config_service: JobConfigService) -> None:
+    with pytest.raises(JobConfigNotFoundError):
+        await config_service.clone_config(999)
