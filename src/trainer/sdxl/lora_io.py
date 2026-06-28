@@ -7,6 +7,7 @@ import torch
 from safetensors.torch import load_file
 
 from src.trainer.config import TrainConfig
+from src.trainer.sdxl.lora_export import apply_kohya_state_dict, detect_lora_format
 
 
 def load_lora_file(lora_path: Path) -> dict[str, Any]:
@@ -43,6 +44,16 @@ def apply_lora_state_dict(
     text_encoder_2: torch.nn.Module,
     config: TrainConfig,
 ) -> None:
+    if detect_lora_format(state_dict) == "kohya":
+        apply_kohya_state_dict(
+            state_dict,
+            unet=unet,
+            text_encoder_1=text_encoder_1,
+            text_encoder_2=text_encoder_2,
+            config=config,
+        )
+        return
+
     apply_lora_state_to_module(unet, state_dict, prefix="lora_unet_")
     if config.text_encoder_1.train:
         apply_lora_state_to_module(text_encoder_1, state_dict, prefix="lora_te1_")

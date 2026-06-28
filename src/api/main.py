@@ -13,6 +13,10 @@ from src.api.exception_handlers import (
     dataset_image_not_found_handler,
     dataset_name_conflict_handler,
     dataset_not_found_handler,
+    dataset_not_prepared_handler,
+    dataset_preprocess_handler,
+    dataset_resolution_mismatch_handler,
+    dataset_target_resolution_not_set_handler,
     invalid_dataset_filename_handler,
     job_already_queued_handler,
     job_checkpoint_not_found_handler,
@@ -36,6 +40,10 @@ from src.services.datasets.exceptions import (
     DatasetImageNotFoundError,
     DatasetNameConflictError,
     DatasetNotFoundError,
+    DatasetNotPreparedError,
+    DatasetPreprocessError,
+    DatasetResolutionMismatchError,
+    DatasetTargetResolutionNotSetError,
     InvalidDatasetFilenameError,
 )
 from src.services.jobs.exceptions import (
@@ -97,6 +105,10 @@ app.add_exception_handler(DatasetNameConflictError, dataset_name_conflict_handle
 app.add_exception_handler(DatasetDirectoryNotFoundError, dataset_dir_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(DatasetImageNotFoundError, dataset_image_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(InvalidDatasetFilenameError, invalid_dataset_filename_handler)  # type: ignore[arg-type]
+app.add_exception_handler(DatasetNotPreparedError, dataset_not_prepared_handler)  # type: ignore[arg-type]
+app.add_exception_handler(DatasetResolutionMismatchError, dataset_resolution_mismatch_handler)  # type: ignore[arg-type]
+app.add_exception_handler(DatasetTargetResolutionNotSetError, dataset_target_resolution_not_set_handler)  # type: ignore[arg-type]
+app.add_exception_handler(DatasetPreprocessError, dataset_preprocess_handler)  # type: ignore[arg-type]
 
 app.include_router(configs.router)
 app.include_router(jobs.router)

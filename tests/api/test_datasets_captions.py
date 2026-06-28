@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.dependencies import _get_datasets_service, _get_jobs_service
 from src.api.main import app
+from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
@@ -29,7 +30,7 @@ async def test_dataset_caption_api(tmp_path) -> None:
     Image.new("RGB", (32, 32), color="red").save(image_dir / "cat.png")
 
     async with factory() as db_session:
-        datasets_service = DatasetsService(DatasetRepository(db_session))
+        datasets_service = DatasetsService(DatasetRepository(db_session), DatasetImageCropRepository(db_session))
         dataset = await datasets_service.create_dataset(name="cats", image_dir=str(image_dir))
         await db_session.commit()
 

@@ -89,6 +89,22 @@ function DatasetCard({ dataset, onDelete }: { dataset: Dataset; onDelete: () => 
         <div>
           <div className="font-semibold text-white">{dataset.name}</div>
           <div className="text-xs text-[var(--muted)] mt-0.5 break-all">{dataset.image_dir}</div>
+          <div className="flex flex-wrap gap-2 mt-2 text-[10px]">
+            {dataset.target_resolution != null && (
+              <span className="px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--muted)]">
+                {dataset.target_resolution}px
+              </span>
+            )}
+            <span
+              className={`px-1.5 py-0.5 rounded border ${
+                dataset.preprocess_ready
+                  ? "border-green-500/30 text-green-300"
+                  : "border-amber-500/30 text-amber-300"
+              }`}
+            >
+              {dataset.preprocess_ready ? "Ready" : "Not prepared"}
+            </span>
+          </div>
         </div>
         <button
           type="button"

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import torch
-from diffusers import DDPMScheduler, StableDiffusionXLPipeline
+from diffusers import DDPMScheduler
 from peft import LoraConfig, get_peft_model
 from torch import Tensor
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
@@ -25,12 +25,15 @@ from src.trainer.sdxl.dataset import (
     count_latent_cache_items,
     count_te_cache_items,
 )
+from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
 from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
 from src.trainer.sdxl.latent_cache import build_latent_cache
+from src.trainer.sdxl.lora_export import export_kohya_state_dict
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, apply_lora_state_to_module
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.sampling import (
     PromptEmbedCache,
+    build_embed_only_sdxl_pipeline,
     build_inference_scheduler,
     precompute_all_sample_embeds,
     prepare_vae_for_decode,
@@ -260,6 +263,12 @@ class SDXLLoRATrainer:
                 config.cache_latents_to_disk,
                 on_progress=_on_cache_progress if cache_steps > 0 else None,
                 log=log,
+            )
+
+        if config.cache_text_encoder_outputs_to_disk:
+            log.warning(
+                "Text encoder disk cache is enabled. Delete *_te.npz files next to images "
+                "after changing trigger_words or captions."
             )
 
         if config.cache_text_encoder_outputs:
@@ -673,7 +682,11 @@ class SDXLLoRATrainer:
 
         sample_dir = self._work_dir(config) / "samples"
         sample_dir.mkdir(parents=True, exist_ok=True)
-        n_prompts = len(config.sample_prompts)
+        sample_prompts = apply_trigger_words_to_sample_prompts(
+            config.sample_prompts,
+            collect_trigger_words(config.concepts),
+        )
+        n_prompts = len(sample_prompts)
         log.info("Sampling %d image(s) for epoch %d...", n_prompts, epoch)
 
         if sampling_status_callback is not None:
@@ -725,26 +738,16 @@ class SDXLLoRATrainer:
             autocast_dtype = _DTYPE_MAP[config.mixed_precision]
 
             inference_scheduler = build_inference_scheduler(config.sample_scheduler, noise_scheduler)
-            pipe = StableDiffusionXLPipeline(
-                vae=vae,
-                text_encoder=inference_te1,
-                text_encoder_2=inference_te2,
-                tokenizer=tokenizer_1,
-                tokenizer_2=tokenizer_2,
-                unet=inference_unet,
-                scheduler=inference_scheduler,
-            )
-            pipe.set_progress_bar_config(disable=True)
             inference_unet.eval()
             inference_te1.eval()
             inference_te2.eval()
-            log.info("[sampling e%d] move/build pipeline: %.2fs", epoch, time.perf_counter() - build_started_at)
+            log.info("[sampling e%d] move inference models: %.2fs", epoch, time.perf_counter() - build_started_at)
 
             embed_started_at = time.perf_counter()
             negative_prompt = config.sample_negative_prompt or ""
             prompt_embed_cache = PromptEmbedCache()
             all_embeds = precompute_all_sample_embeds(
-                sample_prompts=config.sample_prompts,
+                sample_prompts=sample_prompts,
                 negative_prompt=negative_prompt,
                 tokenizer_1=tokenizer_1,
                 tokenizer_2=tokenizer_2,
@@ -760,6 +763,14 @@ class SDXLLoRATrainer:
             inference_te2.to("cpu")
             torch.cuda.empty_cache()
             prepare_vae_for_decode(vae)
+            pipe = build_embed_only_sdxl_pipeline(
+                vae=vae,
+                unet=inference_unet,
+                tokenizer_1=tokenizer_1,
+                tokenizer_2=tokenizer_2,
+                scheduler=inference_scheduler,
+            )
+            pipe.set_progress_bar_config(disable=True)
             log.info("[sampling e%d] precompute embeds + TE offload: %.2fs", epoch, time.perf_counter() - embed_started_at)
 
             with torch.no_grad():
@@ -847,21 +858,7 @@ class SDXLLoRATrainer:
         path.parent.mkdir(parents=True, exist_ok=True)
         from safetensors.torch import save_file  # noqa: PLC0415
 
-        state_dict: dict[str, Tensor] = {}
-        for name, param in unet.named_parameters():
-            if "lora_" in name and param.requires_grad:
-                state_dict[f"lora_unet_{name.replace('.', '_')}"] = param.data.cpu()
-
-        if config.text_encoder_1.train:
-            for name, param in text_encoder_1.named_parameters():
-                if "lora_" in name and param.requires_grad:
-                    state_dict[f"lora_te1_{name.replace('.', '_')}"] = param.data.cpu()
-
-        if config.text_encoder_2.train:
-            for name, param in text_encoder_2.named_parameters():
-                if "lora_" in name and param.requires_grad:
-                    state_dict[f"lora_te2_{name.replace('.', '_')}"] = param.data.cpu()
-
+        state_dict = export_kohya_state_dict(unet, text_encoder_1, text_encoder_2, config)
         if config.output_format.value == "safetensors":
             save_file(state_dict, str(path))
         else:
@@ -874,19 +871,7 @@ class SDXLLoRATrainer:
         text_encoder_2: torch.nn.Module,
         config: TrainConfig,
     ) -> dict[str, Tensor]:
-        state_dict: dict[str, Tensor] = {}
-        for name, param in unet.named_parameters():
-            if "lora_" in name and param.requires_grad:
-                state_dict[f"lora_unet_{name.replace('.', '_')}"] = param.detach().cpu()
-        if config.text_encoder_1.train:
-            for name, param in text_encoder_1.named_parameters():
-                if "lora_" in name and param.requires_grad:
-                    state_dict[f"lora_te1_{name.replace('.', '_')}"] = param.detach().cpu()
-        if config.text_encoder_2.train:
-            for name, param in text_encoder_2.named_parameters():
-                if "lora_" in name and param.requires_grad:
-                    state_dict[f"lora_te2_{name.replace('.', '_')}"] = param.detach().cpu()
-        return state_dict
+        return export_kohya_state_dict(unet, text_encoder_1, text_encoder_2, config)
 
     def _load_lora_state_dict(
         self,

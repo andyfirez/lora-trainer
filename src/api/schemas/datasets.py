@@ -18,6 +18,7 @@ class DatasetUpdate(BaseModel):
     image_dir: Optional[str] = None
     caption_dir: Optional[str] = None
     description: Optional[str] = None
+    target_resolution: Optional[int] = Field(default=None, ge=64, le=2048)
 
 
 class DatasetResponse(BaseModel):
@@ -26,10 +27,46 @@ class DatasetResponse(BaseModel):
     image_dir: str
     caption_dir: Optional[str]
     description: Optional[str]
+    target_resolution: Optional[int]
+    preprocess_ready: bool
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PreprocessStatusResponse(BaseModel):
+    target_resolution: Optional[int]
+    preprocess_ready: bool
+    total: int
+    no_crop: int
+    stale: int
+    cropped: int
+    ready: int
+
+
+class CropMetaResponse(BaseModel):
+    crop_center_x: float
+    crop_center_y: float
+    fitted_width: int
+    fitted_height: int
+    source_width: int
+    source_height: int
+    state: str
+
+
+class CropUpdateRequest(BaseModel):
+    crop_center_x: float = Field(ge=0.0, le=1.0)
+    crop_center_y: float = Field(ge=0.0, le=1.0)
+
+
+class BakeRequest(BaseModel):
+    filenames: list[str] | None = None
+
+
+class BakeResponse(BaseModel):
+    baked_count: int
+    preprocess_ready: bool
 
 
 class DatasetImagesResponse(BaseModel):
@@ -42,6 +79,7 @@ class DatasetItemResponse(BaseModel):
     filename: str
     tags: list[str]
     has_caption: bool
+    preprocess_state: Optional[str] = None
 
 
 class DatasetItemsResponse(BaseModel):

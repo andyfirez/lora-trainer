@@ -13,11 +13,13 @@ from peft import LoraConfig, get_peft_model
 
 from src.trainer.attention import configure_unet_attention
 from src.trainer.config import TrainConfig, WeightDtype
+from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.sampling import (
     PromptEmbedCache,
     SamplePromptEmbeds,
+    build_embed_only_sdxl_pipeline,
     build_inference_scheduler,
     precompute_all_sample_embeds,
     prepare_vae_for_decode,
@@ -54,6 +56,7 @@ class SDXLLoRASampler:
         *,
         lora_paths: list[Path],
         output_dir: Path,
+        trigger_words: list[str] | None = None,
         progress_status_callback: ProgressStatusCallback | None = None,
         progress_callback: ProgressCallback | None = None,
         log: logging.Logger | None = None,
@@ -61,6 +64,7 @@ class SDXLLoRASampler:
         self._config = config
         self._lora_paths = lora_paths
         self._output_dir = output_dir
+        self._trigger_words = trigger_words or []
         self._progress_status_callback = progress_status_callback
         self._progress_callback = progress_callback
         self._log = log or logger
@@ -68,7 +72,7 @@ class SDXLLoRASampler:
 
     def run(self) -> None:
         config = self._config
-        if not config.sample_prompts:
+        if not self._effective_sample_prompts():
             raise ValueError("No sample prompts configured")
         if not torch.cuda.is_available():
             raise RuntimeError(f"CUDA is not available (torch {torch.__version__})")
@@ -106,7 +110,7 @@ class SDXLLoRASampler:
                     stack=stack,
                     merge_unet_adapter=True,
                 )
-                completed_images += len(config.sample_prompts)
+                completed_images += len(self._effective_sample_prompts())
         else:
             status_prefix = "Sampling base model"
             self._set_status(status_prefix)
@@ -201,6 +205,7 @@ class SDXLLoRASampler:
         merge_unet_adapter: bool,
     ) -> None:
         config = self._config
+        sample_prompts = self._effective_sample_prompts()
         device = stack.device
         started_at = time.perf_counter()
         unet = stack.unet
@@ -241,7 +246,7 @@ class SDXLLoRASampler:
 
             negative_prompt = config.sample_negative_prompt or ""
             all_embeds = precompute_all_sample_embeds(
-                sample_prompts=config.sample_prompts,
+                sample_prompts=sample_prompts,
                 negative_prompt=negative_prompt,
                 tokenizer_1=stack.tokenizer_1,
                 tokenizer_2=stack.tokenizer_2,
@@ -258,12 +263,10 @@ class SDXLLoRASampler:
             torch.cuda.empty_cache()
             prepare_vae_for_decode(stack.vae)
 
-            pipe = StableDiffusionXLPipeline(
+            pipe = build_embed_only_sdxl_pipeline(
                 vae=stack.vae,
-                text_encoder=inference_te1,
-                text_encoder_2=inference_te2,
                 unet=inference_unet,
-                tokenizer=stack.tokenizer_1,
+                tokenizer_1=stack.tokenizer_1,
                 tokenizer_2=stack.tokenizer_2,
                 scheduler=build_inference_scheduler(config.sample_scheduler, stack.noise_scheduler),
             )
@@ -271,7 +274,7 @@ class SDXLLoRASampler:
 
             with torch.no_grad():
                 for prompt_index, embeds in enumerate(all_embeds):
-                    self._set_status(f"{status_prefix} — image {prompt_index + 1}/{len(config.sample_prompts)}")
+                    self._set_status(f"{status_prefix} — image {prompt_index + 1}/{len(sample_prompts)}")
                     self._report_diffusion_progress(completed_images, prompt_index, 0)
                     generator = torch.Generator(device=device)
                     if config.seed is not None:
@@ -333,9 +336,14 @@ class SDXLLoRASampler:
                 callback_on_step_end_tensor_inputs=[],
             ).images[0]
 
+    def _effective_sample_prompts(self) -> list[str]:
+        if not self._lora_paths:
+            return self._config.sample_prompts
+        return apply_trigger_words_to_sample_prompts(self._config.sample_prompts, self._trigger_words)
+
     def _total_diffusion_steps(self) -> int:
         lora_count = len(self._lora_paths) if self._lora_paths else 1
-        return lora_count * len(self._config.sample_prompts) * self._config.sample_steps
+        return lora_count * len(self._effective_sample_prompts()) * self._config.sample_steps
 
     def _report_diffusion_progress(
         self,
@@ -365,7 +373,7 @@ class SDXLLoRASampler:
             self._log.info(
                 "[sample %d/%d] step %d/%d",
                 prompt_index + 1,
-                len(self._config.sample_prompts),
+                len(self._effective_sample_prompts()),
                 completed,
                 total,
             )

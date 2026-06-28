@@ -24,10 +24,8 @@ def _disk_cache_valid(image_path: Path, npz: Path) -> bool:
     return npz.is_file() and npz.stat().st_mtime >= image_path.stat().st_mtime
 
 
-def _make_transform(resolution: int) -> transforms.Compose:
+def _make_transform() -> transforms.Compose:
     return transforms.Compose([
-        transforms.Resize(resolution, interpolation=transforms.InterpolationMode.LANCZOS),
-        transforms.CenterCrop(resolution),
         transforms.ToTensor(),
         transforms.Normalize([0.5], [0.5]),
     ])
@@ -42,14 +40,8 @@ def build_latent_cache(
     on_progress: Optional[CacheProgressCallback] = None,
     log: logging.Logger | None = None,
 ) -> dict[str, Tensor]:
-    """Encode all images through VAE once and cache the resulting latents.
-
-    Returns a mapping of str(image_path) → latent tensor (float32, on CPU).
-    If to_disk=True, latents are saved as .npz files beside each image and
-    reused on subsequent runs (invalidated if the image is newer than the cache).
-    Moves VAE to CPU and clears the CUDA cache after encoding.
-    """
-    transform = _make_transform(resolution)
+    """Encode all prepared images through VAE once and cache the resulting latents."""
+    transform = _make_transform()
     cache: dict[str, Tensor] = {}
     active_log = log or logger
 
@@ -75,6 +67,11 @@ def build_latent_cache(
             continue
 
         image = Image.open(image_path).convert("RGB")
+        if image.size != (resolution, resolution):
+            raise ValueError(
+                f"Prepared image {image_path.name} has size {image.size}, "
+                f"expected ({resolution}, {resolution})"
+            )
         pixel_values = transform(image).unsqueeze(0).to(device, dtype=torch.float32)
 
         with torch.no_grad():

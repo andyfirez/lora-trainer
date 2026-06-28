@@ -5,6 +5,7 @@ from typing import Annotated, AsyncGenerator
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
@@ -75,8 +76,15 @@ def _get_queues_service(
     return QueuesService(queue_repo, job_repo)
 
 
-def _get_datasets_service(dataset_repo: DatasetRepoDep) -> DatasetsService:
-    return DatasetsService(dataset_repo)
+def _get_datasets_service(
+    dataset_repo: DatasetRepoDep,
+    crop_repo: Annotated[DatasetImageCropRepository, Depends(_get_crop_repo)],
+) -> DatasetsService:
+    return DatasetsService(dataset_repo, crop_repo)
+
+
+def _get_crop_repo(session: SessionDep) -> DatasetImageCropRepository:
+    return DatasetImageCropRepository(session)
 
 
 def _get_files_service() -> FilesService:

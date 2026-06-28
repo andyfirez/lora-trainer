@@ -9,16 +9,21 @@ from src.api.dependencies import DatasetsServiceDep, JobsServiceDep
 from src.api.schemas.datasets import (
     AutotagRequest,
     AutotagResponse,
+    BakeRequest,
+    BakeResponse,
     BulkTagRequest,
     BulkTagResponse,
     CaptionResponse,
     CaptionUpdateRequest,
+    CropMetaResponse,
+    CropUpdateRequest,
     DatasetCreate,
     DatasetImagesResponse,
     DatasetItemResponse,
     DatasetItemsResponse,
     DatasetResponse,
     DatasetUpdate,
+    PreprocessStatusResponse,
     TagStatResponse,
     TagStatsResponse,
 )
@@ -48,12 +53,15 @@ async def get_dataset(dataset_id: int, service: DatasetsServiceDep) -> DatasetRe
 
 @router.patch("/{dataset_id}", response_model=DatasetResponse)
 async def update_dataset(dataset_id: int, body: DatasetUpdate, service: DatasetsServiceDep) -> DatasetResponse:
+    fields_set = body.model_fields_set
     return await service.update_dataset(  # type: ignore[return-value]
         dataset_id,
         name=body.name,
         image_dir=body.image_dir,
         caption_dir=body.caption_dir,
         description=body.description,
+        target_resolution=body.target_resolution,
+        update_target_resolution="target_resolution" in fields_set,
     )
 
 
@@ -80,12 +88,17 @@ async def list_items(
     caption_extension: str = Query(default=".txt"),
 ) -> DatasetItemsResponse:
     dataset = await service.get_dataset(dataset_id)
-    items = service.list_items(dataset, caption_extension)
+    rows = await service.list_items_with_states(dataset, caption_extension)
     return DatasetItemsResponse(
         dataset_id=dataset_id,
         items=[
-            DatasetItemResponse(filename=item.filename, tags=item.tags, has_caption=item.has_caption)
-            for item in items
+            DatasetItemResponse(
+                filename=item.filename,
+                tags=item.tags,
+                has_caption=item.has_caption,
+                preprocess_state=state.value,
+            )
+            for item, state in rows
         ],
     )
 
@@ -99,6 +112,18 @@ async def get_image(
 ) -> Response:
     dataset = await service.get_dataset(dataset_id)
     data, media_type = service.get_image_bytes(dataset, filename, max_width=w)
+    return Response(content=data, media_type=media_type)
+
+
+@router.get("/{dataset_id}/images/{filename}/prepared")
+async def get_prepared_image(
+    dataset_id: int,
+    filename: str,
+    service: DatasetsServiceDep,
+    w: int | None = Query(default=None, ge=32, le=2048),
+) -> Response:
+    dataset = await service.get_dataset(dataset_id)
+    data, media_type = service.get_prepared_image_bytes(dataset, filename, max_width=w)
     return Response(content=data, media_type=media_type)
 
 
@@ -192,3 +217,100 @@ async def autotag_dataset(
     if body.enqueue and job.id is not None:
         await jobs_service.enqueue_job(job.id)
     return AutotagResponse(job_id=job.id)  # type: ignore[arg-type]
+
+
+@router.get("/{dataset_id}/preprocess/status", response_model=PreprocessStatusResponse)
+async def get_preprocess_status(dataset_id: int, service: DatasetsServiceDep) -> PreprocessStatusResponse:
+    dataset = await service.get_dataset(dataset_id)
+    status = await service.get_preprocess_status(dataset)
+    return PreprocessStatusResponse(
+        target_resolution=status.target_resolution,
+        preprocess_ready=status.preprocess_ready,
+        total=status.total,
+        no_crop=status.no_crop,
+        stale=status.stale,
+        cropped=status.cropped,
+        ready=status.ready,
+    )
+
+
+@router.get("/{dataset_id}/images/{filename}/crop-meta", response_model=CropMetaResponse)
+async def get_crop_meta(
+    dataset_id: int,
+    filename: str,
+    service: DatasetsServiceDep,
+) -> CropMetaResponse:
+    dataset = await service.get_dataset(dataset_id)
+    meta = await service.get_crop_meta(dataset, filename)
+    return CropMetaResponse(
+        crop_center_x=meta.crop_center_x,
+        crop_center_y=meta.crop_center_y,
+        fitted_width=meta.fitted_width,
+        fitted_height=meta.fitted_height,
+        source_width=meta.source_width,
+        source_height=meta.source_height,
+        state=meta.state.value,
+    )
+
+
+@router.get("/{dataset_id}/images/{filename}/crop-preview")
+async def get_crop_preview(
+    dataset_id: int,
+    filename: str,
+    service: DatasetsServiceDep,
+) -> Response:
+    dataset = await service.get_dataset(dataset_id)
+    data = service.get_crop_preview_bytes(dataset, filename)
+    return Response(content=data, media_type="image/jpeg")
+
+
+@router.put("/{dataset_id}/images/{filename}/crop", response_model=CropMetaResponse)
+async def save_crop(
+    dataset_id: int,
+    filename: str,
+    body: CropUpdateRequest,
+    service: DatasetsServiceDep,
+) -> CropMetaResponse:
+    dataset = await service.get_dataset(dataset_id)
+    meta = await service.save_crop(dataset, filename, body.crop_center_x, body.crop_center_y)
+    return CropMetaResponse(
+        crop_center_x=meta.crop_center_x,
+        crop_center_y=meta.crop_center_y,
+        fitted_width=meta.fitted_width,
+        fitted_height=meta.fitted_height,
+        source_width=meta.source_width,
+        source_height=meta.source_height,
+        state=meta.state.value,
+    )
+
+
+@router.post("/{dataset_id}/preprocess/bake", response_model=BakeResponse)
+async def bake_preprocess(
+    dataset_id: int,
+    body: BakeRequest,
+    service: DatasetsServiceDep,
+) -> BakeResponse:
+    dataset = await service.get_dataset(dataset_id)
+    baked_count = await service.bake_all(dataset, body.filenames)
+    dataset = await service.get_dataset(dataset_id)
+    return BakeResponse(baked_count=baked_count, preprocess_ready=dataset.preprocess_ready)
+
+
+@router.post("/{dataset_id}/images/{filename}/bake", response_model=CropMetaResponse)
+async def bake_single_image(
+    dataset_id: int,
+    filename: str,
+    service: DatasetsServiceDep,
+) -> CropMetaResponse:
+    dataset = await service.get_dataset(dataset_id)
+    await service.bake_image(dataset, filename)
+    meta = await service.get_crop_meta(dataset, filename)
+    return CropMetaResponse(
+        crop_center_x=meta.crop_center_x,
+        crop_center_y=meta.crop_center_y,
+        fitted_width=meta.fitted_width,
+        fitted_height=meta.fitted_height,
+        source_width=meta.source_width,
+        source_height=meta.source_height,
+        state=meta.state.value,
+    )

@@ -23,7 +23,8 @@ from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
 from src.settings.app_settings import settings
-from src.trainer.concept_resolution import resolve_dataset_ids
+from src.services.datasets.training_validation import validate_dataset_for_training
+from src.trainer.concept_resolution import resolve_concept_paths
 from src.trainer.config import TrainConfig
 from src.trainer.sampling_resolution import resolve_sampling_config
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
@@ -228,8 +229,18 @@ async def _run(job_id: int) -> None:
         dataset_repo = DatasetRepository(session)
         config_repo = JobConfigRepository(session)
         dataset_ids = [concept.dataset_id for concept in config.concepts]
-        image_dirs = await resolve_dataset_ids(dataset_ids, dataset_repo)
-        config = config.resolve_concepts(image_dirs)
+        concept_paths = await resolve_concept_paths(dataset_ids, dataset_repo)
+        for concept in config.concepts:
+            dataset = await dataset_repo.get_by_id(concept.dataset_id)
+            if dataset is None:
+                logger.error("Dataset id=%d not found", concept.dataset_id)
+                sys.exit(1)
+            try:
+                validate_dataset_for_training(dataset, config.resolution)
+            except Exception as exc:
+                logger.error("Dataset validation failed: %s", exc)
+                sys.exit(1)
+        config = config.resolve_concepts(concept_paths)
         sampling = await resolve_sampling_config(config.sampling_config_id, config_repo)
         if sampling is not None:
             config = config.resolve_sampling(sampling)

@@ -7,17 +7,27 @@ from src.services.datasets.exceptions import DatasetNotFoundError
 from src.trainer.concept_resolution import resolve_dataset_ids
 from src.trainer.config import ConceptConfig, TrainConfig
 
+from tests.conftest import _prepare_dataset
+
 
 def test_resolve_concepts_sets_image_dir() -> None:
+    from src.trainer.concept_resolution import ResolvedConceptPaths
+
     config = TrainConfig(
         concepts=[
             ConceptConfig(dataset_id=1),
             ConceptConfig(dataset_id=2, repeats=3),
         ],
     )
-    resolved = config.resolve_concepts({1: "/data/a", 2: "/data/b"})
+    resolved = config.resolve_concepts(
+        {
+            1: ResolvedConceptPaths(image_dir="/data/a", prepared_dir="/data/a/.prepared/1024"),
+            2: ResolvedConceptPaths(image_dir="/data/b", prepared_dir="/data/b/.prepared/1024"),
+        }
+    )
 
     assert resolved.concepts[0].image_dir == "/data/a"
+    assert resolved.concepts[0].prepared_dir == "/data/a/.prepared/1024"
     assert resolved.concepts[1].image_dir == "/data/b"
     assert resolved.concepts[1].repeats == 3
 
@@ -43,7 +53,7 @@ def test_to_yaml_excludes_resolved_image_dir() -> None:
 async def test_resolve_dataset_ids(session, datasets_service, tmp_path) -> None:
     image_dir = tmp_path / "images"
     image_dir.mkdir()
-    dataset = await datasets_service.create_dataset(name="demo", image_dir=str(image_dir))
+    dataset = await _prepare_dataset(datasets_service, image_dir, name="demo")
     repo = DatasetRepository(session)
 
     result = await resolve_dataset_ids([dataset.id], repo)

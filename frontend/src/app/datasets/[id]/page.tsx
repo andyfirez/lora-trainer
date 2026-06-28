@@ -4,13 +4,16 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Pencil, Sparkles } from "lucide-react";
 import AutoTagModal from "@/components/dataset/AutoTagModal";
+import EditDatasetModal from "@/components/dataset/EditDatasetModal";
 import DatasetImageCard from "@/components/dataset/DatasetImageCard";
+import ImageCropModal from "@/components/dataset/ImageCropModal";
+import PreprocessPanel from "@/components/dataset/PreprocessPanel";
 import TagFrequencyPanel from "@/components/dataset/TagFrequencyPanel";
 import { datasetsApi } from "@/lib/api/datasets";
 import { jobsApi } from "@/lib/api/jobs";
-import type { DatasetItem, Job, TaggingMode } from "@/types";
+import type { DatasetItem, ImagePreprocessState, Job, TaggingMode } from "@/types";
 
 const PAGE_SIZE = 24;
 const CAPTION_EXTENSION = ".txt";
@@ -20,12 +23,18 @@ export default function DatasetDetailPage() {
   const datasetId = Number(params.id);
   const [page, setPage] = useState(1);
   const [showAutoTag, setShowAutoTag] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [taggingJobId, setTaggingJobId] = useState<number | null>(null);
   const [localItems, setLocalItems] = useState<DatasetItem[]>([]);
+  const [cropFilename, setCropFilename] = useState<string | null>(null);
+  const [filterIncomplete, setFilterIncomplete] = useState(false);
 
-  const { data: dataset, error: datasetError } = useSWR(
-    Number.isFinite(datasetId) ? `/datasets/${datasetId}` : null,
-    () => datasetsApi.get(datasetId)
+  const {
+    data: dataset,
+    error: datasetError,
+    mutate: mutateDataset,
+  } = useSWR(Number.isFinite(datasetId) ? `/datasets/${datasetId}` : null, () =>
+    datasetsApi.get(datasetId)
   );
 
   const {
@@ -39,6 +48,11 @@ export default function DatasetDetailPage() {
   const { data: tagStats, mutate: mutateStats } = useSWR(
     Number.isFinite(datasetId) ? `/datasets/${datasetId}/tags/stats` : null,
     () => datasetsApi.getTagStats(datasetId, CAPTION_EXTENSION)
+  );
+
+  const { data: preprocessStatus, mutate: mutatePreprocessStatus } = useSWR(
+    Number.isFinite(datasetId) ? `/datasets/${datasetId}/preprocess/status` : null,
+    () => datasetsApi.getPreprocessStatus(datasetId)
   );
 
   const { data: taggingJob } = useSWR<Job | null>(
@@ -67,15 +81,9 @@ export default function DatasetDetailPage() {
     }
   }, [taggingJob, mutateItems, mutateStats]);
 
-  const totalPages = Math.max(1, Math.ceil(localItems.length / PAGE_SIZE));
-  const pageItems = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return localItems.slice(start, start + PAGE_SIZE);
-  }, [localItems, page]);
-
   const refreshAll = useCallback(async () => {
-    await Promise.all([mutateItems(), mutateStats()]);
-  }, [mutateItems, mutateStats]);
+    await Promise.all([mutateItems(), mutateStats(), mutatePreprocessStatus(), mutateDataset()]);
+  }, [mutateItems, mutateStats, mutatePreprocessStatus, mutateDataset]);
 
   const handleSaveTags = useCallback(
     async (filename: string, tags: string[]) => {
@@ -124,6 +132,22 @@ export default function DatasetDetailPage() {
     [datasetId]
   );
 
+  const handleDatasetSaved = useCallback(async () => {
+    setPage(1);
+    await refreshAll();
+  }, [refreshAll]);
+
+  const filteredItems = useMemo(() => {
+    if (!filterIncomplete) return localItems;
+    return localItems.filter((item) => item.preprocess_state !== "ready");
+  }, [localItems, filterIncomplete]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const pageItems = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, page]);
+
   const taggingActive =
     taggingJob != null && ["pending", "queued", "running"].includes(taggingJob.status);
 
@@ -163,15 +187,25 @@ export default function DatasetDetailPage() {
             <p className="text-xs text-[var(--muted)] truncate">{dataset.image_dir}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAutoTag(true)}
-          disabled={taggingActive}
-          className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-        >
-          <Sparkles size={15} />
-          Auto-tag
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowEdit(true)}
+            className="flex items-center gap-2 border border-[var(--border)] hover:bg-white/5 text-white rounded-lg px-4 py-2 text-sm font-medium"
+          >
+            <Pencil size={15} />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAutoTag(true)}
+            disabled={taggingActive}
+            className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+          >
+            <Sparkles size={15} />
+            Auto-tag
+          </button>
+        </div>
       </div>
 
       {taggingJobId && taggingBannerMessage && (
@@ -194,6 +228,8 @@ export default function DatasetDetailPage() {
         </div>
       )}
 
+      <PreprocessPanel dataset={dataset} status={preprocessStatus} onUpdated={handleDatasetSaved} />
+
       <TagFrequencyPanel
         tags={tagStats?.tags ?? []}
         onBulkAdd={handleBulkAdd}
@@ -202,8 +238,19 @@ export default function DatasetDetailPage() {
       />
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between text-sm text-[var(--muted)]">
-          <span>{localItems.length} images</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--muted)]">
+          <span>{filteredItems.length} images{filterIncomplete ? " (filtered)" : ""}</span>
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filterIncomplete}
+              onChange={(e) => {
+                setFilterIncomplete(e.target.checked);
+                setPage(1);
+              }}
+            />
+            Show only incomplete
+          </label>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
               <button
@@ -231,9 +278,9 @@ export default function DatasetDetailPage() {
 
         {itemsLoading ? (
           <div className="text-[var(--muted)]">Loading images…</div>
-        ) : localItems.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="text-center py-16 text-[var(--muted)] border border-dashed border-[var(--border)] rounded-xl">
-            No images found in this directory.
+            {filterIncomplete ? "All images are ready." : "No images found in this directory."}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -243,6 +290,10 @@ export default function DatasetDetailPage() {
                 datasetId={datasetId}
                 filename={item.filename}
                 initialTags={item.tags}
+                preprocessState={item.preprocess_state as ImagePreprocessState | undefined}
+                canCrop={dataset.target_resolution != null}
+                cacheKey={dataset.updated_at}
+                onCropClick={() => setCropFilename(item.filename)}
                 onSave={handleSaveTags}
                 onTagsSaved={handleTagsSaved}
               />
@@ -250,6 +301,23 @@ export default function DatasetDetailPage() {
           </div>
         )}
       </div>
+
+      {cropFilename && dataset.target_resolution != null && (
+        <ImageCropModal
+          datasetId={datasetId}
+          filename={cropFilename}
+          targetResolution={dataset.target_resolution}
+          onClose={() => setCropFilename(null)}
+          onSaved={handleDatasetSaved}
+        />
+      )}
+
+      <EditDatasetModal
+        open={showEdit}
+        dataset={dataset}
+        onClose={() => setShowEdit(false)}
+        onSaved={handleDatasetSaved}
+      />
 
       <AutoTagModal
         open={showAutoTag}

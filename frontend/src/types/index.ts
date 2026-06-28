@@ -92,6 +92,8 @@ export interface Dataset {
   image_dir: string;
   caption_dir: string | null;
   description: string | null;
+  target_resolution: number | null;
+  preprocess_ready: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -106,6 +108,29 @@ export interface DatasetItem {
   filename: string;
   tags: string[];
   has_caption: boolean;
+  preprocess_state?: string | null;
+}
+
+export type ImagePreprocessState = "no_crop" | "stale" | "cropped" | "ready";
+
+export interface PreprocessStatus {
+  target_resolution: number | null;
+  preprocess_ready: boolean;
+  total: number;
+  no_crop: number;
+  stale: number;
+  cropped: number;
+  ready: number;
+}
+
+export interface CropMeta {
+  crop_center_x: number;
+  crop_center_y: number;
+  fitted_width: number;
+  fitted_height: number;
+  source_width: number;
+  source_height: number;
+  state: ImagePreprocessState;
 }
 
 export interface DatasetItems {

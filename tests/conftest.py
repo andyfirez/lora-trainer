@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
@@ -18,6 +19,29 @@ from src.db.tables.job import Job
 from src.db.tables.job_config import ConfigType
 from src.services.configs.service import JobConfigService
 from src.services.datasets.service import DatasetsService
+
+
+def _write_square_image(path, size: int = 1024) -> None:
+    from PIL import Image
+
+    Image.new("RGB", (size, size), (100, 100, 100)).save(path)
+
+
+async def _prepare_dataset(datasets_service: DatasetsService, image_dir, name: str = "test-dataset") -> Dataset:
+    _write_square_image(image_dir / "test.png")
+    dataset = await datasets_service.create_dataset(name=name, image_dir=str(image_dir))
+    dataset = await datasets_service.update_dataset(
+        dataset.id,
+        name=None,
+        image_dir=None,
+        caption_dir=None,
+        description=None,
+        target_resolution=1024,
+        update_target_resolution=True,
+    )
+    await datasets_service.save_crop(dataset, "test.png", 0.5, 0.5)
+    await datasets_service.bake_image(dataset, "test.png")
+    return await datasets_service.get_dataset(dataset.id)  # type: ignore[arg-type]
 from src.services.jobs.service import JobsService
 
 
@@ -50,14 +74,14 @@ async def config_service(session: AsyncSession) -> JobConfigService:
 
 @pytest_asyncio.fixture
 async def datasets_service(session: AsyncSession) -> DatasetsService:
-    return DatasetsService(DatasetRepository(session))
+    return DatasetsService(DatasetRepository(session), DatasetImageCropRepository(session))
 
 
 @pytest_asyncio.fixture
 async def training_dataset(datasets_service: DatasetsService, tmp_path) -> Dataset:
     image_dir = tmp_path / "images"
     image_dir.mkdir()
-    return await datasets_service.create_dataset(name="test-dataset", image_dir=str(image_dir))
+    return await _prepare_dataset(datasets_service, image_dir)
 
 
 @pytest_asyncio.fixture

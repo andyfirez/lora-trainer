@@ -62,14 +62,15 @@ FORBIDDEN_INLINE_SAMPLING_KEYS: frozenset[str] = frozenset(
 
 FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({"sample_after_training"})
 
-FORBIDDEN_DEPRECATED_CONCEPT_KEYS: frozenset[str] = frozenset({"image_dir"})
+FORBIDDEN_DEPRECATED_CONCEPT_KEYS: frozenset[str] = frozenset({"image_dir", "prepared_dir"})
 
 
 class ConceptConfig(BaseModel):
     dataset_id: int
     image_dir: str | None = None
+    prepared_dir: str | None = None
     caption_extension: str = ".txt"
-    caption_prefix: str = ""
+    trigger_words: list[str] = Field(default_factory=list)
     caption_suffix: str = ""
     repeats: int = Field(default=1, ge=1)
 
@@ -167,13 +168,24 @@ class TrainConfig(BaseModel):
         data = yaml.safe_load(yaml_str)
         return cls.model_validate(data)
 
-    def resolve_concepts(self, image_dirs: dict[int, str]) -> "TrainConfig":
+    def resolve_concepts(self, paths: dict[int, "ResolvedConceptPaths"]) -> "TrainConfig":
+        from src.trainer.concept_resolution import ResolvedConceptPaths
+
         resolved: list[ConceptConfig] = []
         for concept in self.concepts:
-            image_dir = image_dirs.get(concept.dataset_id)
-            if image_dir is None:
+            entry = paths.get(concept.dataset_id)
+            if entry is None:
                 raise ValueError(f"Dataset with id={concept.dataset_id} not found")
-            resolved.append(concept.model_copy(update={"image_dir": image_dir}))
+            if not isinstance(entry, ResolvedConceptPaths):
+                raise TypeError("paths values must be ResolvedConceptPaths")
+            resolved.append(
+                concept.model_copy(
+                    update={
+                        "image_dir": entry.image_dir,
+                        "prepared_dir": entry.prepared_dir,
+                    }
+                )
+            )
         return self.model_copy(update={"concepts": resolved})
 
     def resolve_sampling(self, sampling: "SamplingConfig") -> "TrainConfig":
@@ -187,6 +199,7 @@ class TrainConfig(BaseModel):
         data = self.model_dump(mode="json", exclude_none=True)
         for concept in data.get("concepts", []):
             concept.pop("image_dir", None)
+            concept.pop("prepared_dir", None)
         for field in RUNTIME_SAMPLING_FIELDS:
             data.pop(field, None)
         return yaml.dump(data, allow_unicode=True, sort_keys=False)

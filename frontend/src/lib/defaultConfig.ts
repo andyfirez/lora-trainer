@@ -47,6 +47,7 @@ optimizer:
 resolution: 1024
 concepts:
   - dataset_id: 1
+    trigger_words: []
     caption_extension: .txt
     repeats: 1
 

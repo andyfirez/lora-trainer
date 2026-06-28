@@ -10,6 +10,7 @@ from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.tables.job_config import ConfigType, JobConfig
 from src.sampler.config import SamplingConfig
 from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
+from src.services.datasets.training_validation import validate_dataset_for_training
 from src.trainer.config import (
     FORBIDDEN_DEPRECATED_CONCEPT_KEYS,
     FORBIDDEN_DEPRECATED_TRAIN_KEYS,
@@ -171,3 +172,7 @@ class JobConfigService:
                 raise JobConfigValidationError(
                     f"Dataset with id={concept.dataset_id} not found"
                 )
+            try:
+                validate_dataset_for_training(dataset, config.resolution)
+            except Exception as exc:
+                raise JobConfigValidationError(str(exc)) from exc

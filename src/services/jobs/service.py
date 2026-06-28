@@ -16,8 +16,9 @@ from src.db.tables.job_config import ConfigType
 from src.db.tables.queue_entry import QueueEntry
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
-from src.services.configs.exceptions import JobConfigNotFoundError
+from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
 from src.services.configs.service import JobConfigService
+from src.services.datasets.training_validation import validate_dataset_for_training
 from src.services.jobs.exceptions import (
     JobAlreadyQueuedError,
     JobCheckpointNotFoundError,
@@ -50,6 +51,7 @@ class JobsService:
     ) -> None:
         self._job_repo = job_repo
         self._queue_repo = queue_repo
+        self._dataset_repo = dataset_repo
         self._config_service = JobConfigService(config_repo, dataset_repo)
 
     async def list_jobs(self, *, job_type: JobType | None = None) -> Sequence[Job]:
@@ -77,6 +79,17 @@ class JobsService:
         config = await self._config_service.get_config(config_id)
         job_name = name or config.name
         if config.config_type == ConfigType.TRAINING:
+            train_config = TrainConfig.from_yaml(config.config_yaml)
+            for concept in train_config.concepts:
+                dataset = await self._dataset_repo.get_by_id(concept.dataset_id)
+                if dataset is None:
+                    raise JobConfigValidationError(
+                        f"Dataset with id={concept.dataset_id} not found"
+                    )
+                try:
+                    validate_dataset_for_training(dataset, train_config.resolution)
+                except Exception as exc:
+                    raise JobConfigValidationError(str(exc)) from exc
             job = Job(
                 job_type=JobType.TRAINING,
                 name=job_name,

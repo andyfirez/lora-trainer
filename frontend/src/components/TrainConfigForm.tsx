@@ -111,13 +111,13 @@ function SelectInput({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; disabled?: boolean }[];
 }) {
   return (
     <Field label={label}>
       <select className={selectClass} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <option key={o.value} value={o.value} disabled={o.disabled}>
             {o.label}
           </option>
         ))}
@@ -285,9 +285,29 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
   const isAdafactor = optimizerType === "adafactor";
   const isProdigy = optimizerType === "prodigy";
 
+  const trainResolution = Number(config.resolution ?? 1024);
+
+  function isDatasetCompatible(dataset: Dataset): boolean {
+    return dataset.preprocess_ready && dataset.target_resolution === trainResolution;
+  }
+
+  function datasetOptionLabel(dataset: Dataset): string {
+    if (dataset.target_resolution == null) {
+      return `${dataset.name} (no target resolution)`;
+    }
+    if (dataset.target_resolution !== trainResolution) {
+      return `${dataset.name} (${dataset.target_resolution}px ≠ ${trainResolution}px)`;
+    }
+    if (!dataset.preprocess_ready) {
+      return `${dataset.name} (not prepared)`;
+    }
+    return dataset.name;
+  }
+
   const datasetOptions = (datasets ?? []).map((d: Dataset) => ({
     value: String(d.id),
-    label: d.name,
+    label: datasetOptionLabel(d),
+    disabled: !isDatasetCompatible(d),
   }));
 
   const samplingConfigOptions = (samplingConfigs ?? []).map((c: JobConfig) => ({
@@ -311,11 +331,12 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
   }
 
   function addConcept() {
-    const defaultDatasetId = datasets?.[0]?.id;
+    const compatible = datasets?.find((d) => isDatasetCompatible(d));
+    const defaultDatasetId = compatible?.id ?? datasets?.[0]?.id;
     if (defaultDatasetId == null) return;
     set("concepts", [
       ...concepts,
-      { dataset_id: defaultDatasetId, caption_extension: ".txt", repeats: 1 },
+      { dataset_id: defaultDatasetId, trigger_words: [], caption_extension: ".txt", repeats: 1 },
     ]);
   }
 
@@ -646,6 +667,12 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                         {selectedDataset && (
                           <p className="text-xs text-[var(--muted)] mt-1 break-all">{selectedDataset.image_dir}</p>
                         )}
+                        {selectedDataset && !isDatasetCompatible(selectedDataset) && (
+                          <p className="text-xs text-amber-400 mt-1">
+                            Dataset must be prepared at {trainResolution}px. Open the dataset page to crop and bake
+                            images.
+                          </p>
+                        )}
                         {concept.dataset_id == null && (
                           <p className="text-xs text-red-400 mt-1">Select a dataset</p>
                         )}
@@ -653,6 +680,24 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                           <p className="text-xs text-red-400 mt-1">Dataset not found</p>
                         )}
                       </div>
+                      <Field label="Trigger Words">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={(concept.trigger_words ?? []).join(", ")}
+                          onChange={(e) =>
+                            updateConcept(
+                              i,
+                              "trigger_words",
+                              e.target.value
+                                .split(",")
+                                .map((word) => word.trim())
+                                .filter(Boolean)
+                            )
+                          }
+                          placeholder="ohwx, person"
+                        />
+                      </Field>
                       <Field label="Caption Extension">
                         <input
                           type="text"

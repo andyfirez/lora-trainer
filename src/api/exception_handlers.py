@@ -8,6 +8,10 @@ from src.services.datasets.exceptions import (
     DatasetImageNotFoundError,
     DatasetNameConflictError,
     DatasetNotFoundError,
+    DatasetNotPreparedError,
+    DatasetPreprocessError,
+    DatasetResolutionMismatchError,
+    DatasetTargetResolutionNotSetError,
     InvalidDatasetFilenameError,
 )
 from src.services.jobs.exceptions import (
@@ -102,3 +106,25 @@ async def dataset_image_not_found_handler(request: Request, exc: DatasetImageNot
 
 async def invalid_dataset_filename_handler(request: Request, exc: InvalidDatasetFilenameError) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+async def dataset_not_prepared_handler(request: Request, exc: DatasetNotPreparedError) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+async def dataset_resolution_mismatch_handler(
+    request: Request,
+    exc: DatasetResolutionMismatchError,
+) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+async def dataset_target_resolution_not_set_handler(
+    request: Request,
+    exc: DatasetTargetResolutionNotSetError,
+) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+async def dataset_preprocess_handler(request: Request, exc: DatasetPreprocessError) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(exc)})

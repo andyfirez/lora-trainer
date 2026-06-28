@@ -14,6 +14,7 @@ from src.settings.app_settings import settings
 def register_all_tables() -> None:
     """Import every table model so SQLAlchemy metadata resolves foreign keys."""
     import src.db.tables.dataset  # noqa: F401
+    import src.db.tables.dataset_image_crop  # noqa: F401
     import src.db.tables.job  # noqa: F401
     import src.db.tables.job_config  # noqa: F401
     import src.db.tables.queue_entry  # noqa: F401
