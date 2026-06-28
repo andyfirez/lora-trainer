@@ -6,6 +6,8 @@ from typing import Literal, Optional
 import yaml
 from pydantic import BaseModel, Field
 
+from src.trainer.optimizer_config import Optimizer, OptimizerConfig
+
 
 class OutputFormat(StrEnum):
     SAFETENSORS = "safetensors"
@@ -19,13 +21,6 @@ class LRScheduler(StrEnum):
     COSINE = "cosine"
     COSINE_WITH_RESTARTS = "cosine_with_restarts"
     POLYNOMIAL = "polynomial"
-
-
-class Optimizer(StrEnum):
-    ADAMW = "adamw"
-    ADAMW_8BIT = "adamw_8bit"
-    ADAFACTOR = "adafactor"
-    PRODIGY = "prodigy"
 
 
 class WeightDtype(StrEnum):
@@ -91,9 +86,9 @@ class TrainConfig(BaseModel):
     batch_size: int = Field(default=1, ge=1)
     gradient_accumulation_steps: int = Field(default=1, ge=1)
     learning_rate: float = Field(default=1e-4, gt=0.0)
-    lr_scheduler: LRScheduler = LRScheduler.CONSTANT
-    lr_warmup_steps: int = Field(default=0, ge=0)
-    optimizer: Optimizer = Optimizer.ADAMW
+    lr_scheduler: LRScheduler = LRScheduler.COSINE
+    lr_warmup_steps: int = Field(default=10, ge=0)
+    optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig.defaults)
 
     # Data
     resolution: int = Field(default=1024, ge=64, le=2048)

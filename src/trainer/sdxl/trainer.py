@@ -16,7 +16,8 @@ from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
 from src.trainer.attention import configure_unet_attention
-from src.trainer.config import Optimizer, TrainConfig, WeightDtype
+from src.trainer.config import TrainConfig, WeightDtype
+from src.trainer.optimizer_config import Optimizer, build_optimizer
 from src.trainer.progress import TrainProgress
 from src.trainer.sdxl.dataset import (
     ConceptDataset,
@@ -194,7 +195,7 @@ class SDXLLoRATrainer:
             log.info("Compiling UNet with torch.compile (inductor)...")
             unet = torch.compile(unet, backend="inductor")
 
-        optimizer = self._build_optimizer(trainable_params, config)
+        optimizer = build_optimizer(trainable_params, config)
         self._optimizer = optimizer
         self._device = device
         cache_mode = config.cache_latents or config.cache_text_encoder_outputs
@@ -543,21 +544,6 @@ class SDXLLoRATrainer:
         add_time_ids = list(original_size + crops_coords_top_left + target_size)
         return torch.tensor([add_time_ids] * batch_size, dtype=dtype, device=device)
 
-    def _build_optimizer(self, params: list, config: TrainConfig):
-        lr = config.learning_rate
-        if config.optimizer == Optimizer.ADAMW:
-            return torch.optim.AdamW(params, lr=lr, betas=(0.9, 0.999), weight_decay=1e-2)
-        if config.optimizer == Optimizer.ADAMW_8BIT:
-            from bitsandbytes.optim import AdamW8bit
-            return AdamW8bit(params, lr=lr, betas=(0.9, 0.999), weight_decay=1e-2)
-        if config.optimizer == Optimizer.ADAFACTOR:
-            from transformers.optimization import Adafactor
-            return Adafactor(params, lr=lr, relative_step=False, scale_parameter=False)
-        if config.optimizer == Optimizer.PRODIGY:
-            from prodigyopt import Prodigy
-            return Prodigy(params, lr=1.0, weight_decay=1e-2)
-        return torch.optim.AdamW(params, lr=lr, betas=(0.9, 0.999), weight_decay=1e-2)
-
     def _build_dataset(self, config: TrainConfig, cache_mode: bool = False) -> Dataset:
         datasets = [ConceptDataset(c, config.resolution, cache_mode=cache_mode) for c in config.concepts]
         if len(datasets) == 1:
@@ -630,7 +616,7 @@ class SDXLLoRATrainer:
         if not config.cache_text_encoder_outputs:
             text_encoder_1.to("cpu")
             text_encoder_2.to("cpu")
-        if config.optimizer != Optimizer.ADAMW_8BIT and self._optimizer is not None:
+        if config.optimizer.type != Optimizer.ADAMW_8BIT and self._optimizer is not None:
             for state in self._optimizer.state.values():
                 for k, v in state.items():
                     if isinstance(v, torch.Tensor):
@@ -653,7 +639,7 @@ class SDXLLoRATrainer:
         if not config.cache_text_encoder_outputs:
             text_encoder_1.to(self._device)
             text_encoder_2.to(self._device)
-        if config.optimizer != Optimizer.ADAMW_8BIT and self._optimizer is not None:
+        if config.optimizer.type != Optimizer.ADAMW_8BIT and self._optimizer is not None:
             for state in self._optimizer.state.values():
                 for k, v in state.items():
                     if isinstance(v, torch.Tensor):

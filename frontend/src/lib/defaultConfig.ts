@@ -26,9 +26,22 @@ epochs: 10
 batch_size: 1
 gradient_accumulation_steps: 1
 learning_rate: 0.0001
-lr_scheduler: constant
-lr_warmup_steps: 0
-optimizer: adamw
+lr_scheduler: cosine
+lr_warmup_steps: 10
+
+optimizer:
+  type: adamw_8bit
+  weight_decay: 0.01
+  beta1: 0.9
+  beta2: 0.999
+  relative_step: false
+  scale_parameter: false
+  warmup_init: false
+  decouple: true
+  use_bias_correction: true
+  safeguard_warmup: true
+  d0: 0.00001
+  d_coef: 1.0
 
 # Data
 resolution: 1024

@@ -1,0 +1,78 @@
+{
+  "adamw": {
+    "optimizer": {
+      "type": "adamw",
+      "weight_decay": 0.01,
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "relative_step": false,
+      "scale_parameter": false,
+      "warmup_init": false,
+      "decouple": true,
+      "use_bias_correction": true,
+      "safeguard_warmup": true,
+      "d0": 0.00001,
+      "d_coef": 1.0
+    },
+    "learning_rate": 0.0001,
+    "lr_scheduler": "cosine",
+    "lr_warmup_steps": 10
+  },
+  "adamw_8bit": {
+    "optimizer": {
+      "type": "adamw_8bit",
+      "weight_decay": 0.01,
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "relative_step": false,
+      "scale_parameter": false,
+      "warmup_init": false,
+      "decouple": true,
+      "use_bias_correction": true,
+      "safeguard_warmup": true,
+      "d0": 0.00001,
+      "d_coef": 1.0
+    },
+    "learning_rate": 0.0001,
+    "lr_scheduler": "cosine",
+    "lr_warmup_steps": 10
+  },
+  "adafactor": {
+    "optimizer": {
+      "type": "adafactor",
+      "weight_decay": 0.01,
+      "beta1": 0.9,
+      "beta2": 0.999,
+      "relative_step": false,
+      "scale_parameter": false,
+      "warmup_init": false,
+      "decouple": true,
+      "use_bias_correction": true,
+      "safeguard_warmup": true,
+      "d0": 0.00001,
+      "d_coef": 1.0
+    },
+    "learning_rate": 0.0001,
+    "lr_scheduler": "constant_with_warmup",
+    "lr_warmup_steps": 10
+  },
+  "prodigy": {
+    "optimizer": {
+      "type": "prodigy",
+      "weight_decay": 0.01,
+      "beta1": 0.9,
+      "beta2": 0.99,
+      "relative_step": false,
+      "scale_parameter": false,
+      "warmup_init": false,
+      "decouple": true,
+      "use_bias_correction": true,
+      "safeguard_warmup": true,
+      "d0": 0.00001,
+      "d_coef": 1.0
+    },
+    "learning_rate": 1.0,
+    "lr_scheduler": "constant",
+    "lr_warmup_steps": 0
+  }
+}

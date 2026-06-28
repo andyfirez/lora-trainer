@@ -3,6 +3,11 @@
 import { Plus, X } from "lucide-react";
 import PathInput from "@/components/PathInput";
 import SampleSamplerFields from "@/components/SampleSamplerFields";
+import {
+  applyOptimizerPreset,
+  optimizerOptions,
+  type OptimizerType,
+} from "@/lib/optimizerPresets";
 
 type Config = Record<string, any>;
 
@@ -149,13 +154,6 @@ const lrSchedulerOptions = [
   { value: "polynomial", label: "Polynomial" },
 ];
 
-const optimizerOptions = [
-  { value: "adamw", label: "AdamW" },
-  { value: "adamw_8bit", label: "AdamW 8-bit" },
-  { value: "adafactor", label: "Adafactor" },
-  { value: "prodigy", label: "Prodigy" },
-];
-
 export default function TrainConfigForm({ config, onChange }: TrainConfigFormProps) {
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
@@ -167,6 +165,15 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
       [parent]: { ...(config[parent] ?? {}), [key]: value },
     });
   }
+
+  function setOptimizerType(type: OptimizerType) {
+    onChange(applyOptimizerPreset(config, type));
+  }
+
+  const optimizerType: OptimizerType = config.optimizer?.type ?? "adamw_8bit";
+  const isAdamFamily = optimizerType === "adamw" || optimizerType === "adamw_8bit";
+  const isAdafactor = optimizerType === "adafactor";
+  const isProdigy = optimizerType === "prodigy";
 
   const concepts: Config[] = config.concepts ?? [];
   const samplePrompts: string[] = config.sample_prompts ?? [];
@@ -345,14 +352,105 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             value={config.lr_warmup_steps}
             onChange={(v) => set("lr_warmup_steps", v)}
             min={0}
-            placeholder="0"
+            placeholder="10"
           />
+        </div>
+      </section>
+
+      {/* Optimizer */}
+      <section className={sectionClass}>
+        <div className={sectionTitleClass}>Optimizer</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SelectInput
-            label="Optimizer"
-            value={config.optimizer ?? "adamw"}
-            onChange={(v) => set("optimizer", v)}
-            options={optimizerOptions}
+            label="Type"
+            value={optimizerType}
+            onChange={(v) => setOptimizerType(v as OptimizerType)}
+            options={[...optimizerOptions]}
           />
+          {(isAdamFamily || isProdigy) && (
+            <>
+              <NumberInput
+                label="Weight Decay"
+                value={config.optimizer?.weight_decay}
+                onChange={(v) => setNested("optimizer", "weight_decay", v)}
+                min={0}
+                step={0.01}
+                placeholder="0.01"
+              />
+              <NumberInput
+                label="Beta 1"
+                value={config.optimizer?.beta1}
+                onChange={(v) => setNested("optimizer", "beta1", v)}
+                min={0}
+                max={0.999}
+                step={0.01}
+                placeholder="0.9"
+              />
+              <NumberInput
+                label="Beta 2"
+                value={config.optimizer?.beta2}
+                onChange={(v) => setNested("optimizer", "beta2", v)}
+                min={0}
+                max={0.999}
+                step={0.001}
+                placeholder="0.999"
+              />
+            </>
+          )}
+          {isAdafactor && (
+            <>
+              <CheckboxInput
+                label="Relative Step"
+                checked={config.optimizer?.relative_step ?? false}
+                onChange={(v) => setNested("optimizer", "relative_step", v)}
+              />
+              <CheckboxInput
+                label="Scale Parameter"
+                checked={config.optimizer?.scale_parameter ?? false}
+                onChange={(v) => setNested("optimizer", "scale_parameter", v)}
+              />
+              <CheckboxInput
+                label="Warmup Init"
+                checked={config.optimizer?.warmup_init ?? false}
+                onChange={(v) => setNested("optimizer", "warmup_init", v)}
+              />
+            </>
+          )}
+          {isProdigy && (
+            <>
+              <CheckboxInput
+                label="Decouple"
+                checked={config.optimizer?.decouple ?? true}
+                onChange={(v) => setNested("optimizer", "decouple", v)}
+              />
+              <CheckboxInput
+                label="Use Bias Correction"
+                checked={config.optimizer?.use_bias_correction ?? true}
+                onChange={(v) => setNested("optimizer", "use_bias_correction", v)}
+              />
+              <CheckboxInput
+                label="Safeguard Warmup"
+                checked={config.optimizer?.safeguard_warmup ?? true}
+                onChange={(v) => setNested("optimizer", "safeguard_warmup", v)}
+              />
+              <NumberInput
+                label="d0"
+                value={config.optimizer?.d0}
+                onChange={(v) => setNested("optimizer", "d0", v)}
+                min={0}
+                step={0.00001}
+                placeholder="0.00001"
+              />
+              <NumberInput
+                label="d Coef"
+                value={config.optimizer?.d_coef}
+                onChange={(v) => setNested("optimizer", "d_coef", v)}
+                min={0}
+                step={0.1}
+                placeholder="1.0"
+              />
+            </>
+          )}
         </div>
       </section>
 
