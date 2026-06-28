@@ -21,6 +21,9 @@ class SamplingConfig(BaseModel):
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_scheduler: SampleScheduler = SampleScheduler.EULER
+    sample_vae_tiling: bool = True
+    sample_vae_fp32: bool = False
+    sample_offload_unet_before_decode: bool = True
     attention_mechanism: Literal["default", "sdpa", "xformers"] = "sdpa"
     mixed_precision: WeightDtype = WeightDtype.FLOAT_16
     vae_dtype: VaeDtype = VaeDtype.AUTO
@@ -54,6 +57,9 @@ class SamplingConfig(BaseModel):
             "sample_width": self.sample_width,
             "sample_height": self.sample_height,
             "sample_scheduler": self.sample_scheduler,
+            "sample_vae_tiling": self.sample_vae_tiling,
+            "sample_vae_fp32": self.sample_vae_fp32,
+            "sample_offload_unet_before_decode": self.sample_offload_unet_before_decode,
         }
 
     def to_train_config(self) -> "TrainConfig":

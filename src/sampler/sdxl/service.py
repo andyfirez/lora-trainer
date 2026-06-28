@@ -5,24 +5,21 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 import torch
-from diffusers import StableDiffusionXLPipeline
 from peft import LoraConfig, get_peft_model
 
 from src.trainer.attention import configure_unet_attention
 from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts
+from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.sampling import (
     PromptEmbedCache,
-    SamplePromptEmbeds,
-    build_embed_only_sdxl_pipeline,
     build_inference_scheduler,
     precompute_all_sample_embeds,
-    prepare_vae_for_decode,
 )
 
 logger = logging.getLogger(__name__)
@@ -256,46 +253,40 @@ class SDXLLoRASampler:
                 dtype=autocast_dtype,
                 cache=self._prompt_embed_cache,
             )
-            shared_negative_embeds = all_embeds[0].negative_prompt_embeds
-            shared_negative_pooled = all_embeds[0].negative_pooled_prompt_embeds
             inference_te1.to("cpu")
             inference_te2.to("cpu")
             torch.cuda.empty_cache()
-            prepare_vae_for_decode(stack.vae)
 
-            pipe = build_embed_only_sdxl_pipeline(
-                vae=stack.vae,
+            session = SDXLSamplingSession.create(
                 unet=inference_unet,
-                tokenizer_1=stack.tokenizer_1,
-                tokenizer_2=stack.tokenizer_2,
+                vae=stack.vae,
                 scheduler=build_inference_scheduler(config.sample_scheduler, stack.noise_scheduler),
+                device=device,
+                width=width,
+                height=height,
+                sample_steps=config.sample_steps,
+                autocast_dtype=autocast_dtype,
+                config=config,
             )
-            pipe.set_progress_bar_config(disable=True)
 
-            with torch.no_grad():
-                for prompt_index, embeds in enumerate(all_embeds):
-                    self._set_status(f"{status_prefix} — image {prompt_index + 1}/{len(sample_prompts)}")
-                    self._report_diffusion_progress(completed_images, prompt_index, 0)
-                    generator = torch.Generator(device=device)
-                    if config.seed is not None:
-                        generator.manual_seed(config.seed + prompt_index)
-                    image = self._generate_image(
-                        pipe=pipe,
-                        embeds=embeds,
-                        shared_negative_embeds=shared_negative_embeds,
-                        shared_negative_pooled=shared_negative_pooled,
-                        prompt_index=prompt_index,
-                        completed_images=completed_images,
-                        generator=generator,
-                        width=width,
-                        height=height,
-                        autocast_dtype=autocast_dtype,
-                        device=device,
-                    )
-                    filename = f"{output_stem}_{prompt_index:02d}.png"
-                    image.save(self._output_dir / filename)
-                    self._report_diffusion_progress(completed_images, prompt_index, config.sample_steps)
-                    self._log.info("Sample saved: %s", filename)
+            run_sdxl_sampling_pass(
+                session=session,
+                embeds_list=all_embeds,
+                config=config,
+                output_dir=self._output_dir,
+                output_stem=output_stem,
+                log=self._log,
+                on_status=lambda prompt_index, n: self._set_status(
+                    f"{status_prefix} — image {prompt_index + 1}/{n}",
+                ),
+                on_step=lambda prompt_index, completed, total: self._on_sampling_step(
+                    prompt_index,
+                    completed,
+                    total,
+                    completed_images,
+                ),
+                log_step_context="[sample {prompt_index}/{n_prompts}]",
+            )
         finally:
             if unet_merged:
                 unet.unmerge_adapter()
@@ -305,36 +296,15 @@ class SDXLLoRASampler:
                 text_encoder_2.unmerge_adapter()
             self._log.info("Sampling %s completed in %.2fs", output_stem, time.perf_counter() - started_at)
 
-    def _generate_image(
+    def _on_sampling_step(
         self,
-        *,
-        pipe: StableDiffusionXLPipeline,
-        embeds: SamplePromptEmbeds,
-        shared_negative_embeds: torch.Tensor,
-        shared_negative_pooled: torch.Tensor,
         prompt_index: int,
+        completed: int,
+        total: int,
         completed_images: int,
-        generator: torch.Generator,
-        width: int,
-        height: int,
-        autocast_dtype: torch.dtype,
-        device: torch.device,
-    ) -> Any:
-        config = self._config
-        with torch.autocast(device_type=device.type, dtype=autocast_dtype):
-            return pipe(
-                prompt_embeds=embeds.prompt_embeds,
-                negative_prompt_embeds=shared_negative_embeds,
-                pooled_prompt_embeds=embeds.pooled_prompt_embeds,
-                negative_pooled_prompt_embeds=shared_negative_pooled,
-                width=width,
-                height=height,
-                num_inference_steps=config.sample_steps,
-                guidance_scale=config.sample_cfg_scale,
-                generator=generator,
-                callback_on_step_end=self._make_diffusers_progress_callback(prompt_index, completed_images),
-                callback_on_step_end_tensor_inputs=[],
-            ).images[0]
+    ) -> None:
+        self._report_diffusion_progress(completed_images, prompt_index, completed)
+        self._log_sample_step(prompt_index, completed, total)
 
     def _effective_sample_prompts(self) -> list[str]:
         if not self._lora_paths:
@@ -353,19 +323,6 @@ class SDXLLoRASampler:
     ) -> None:
         image_offset = (completed_images + prompt_index) * self._config.sample_steps
         self._set_progress(image_offset + diffusion_step, self._total_diffusion_steps())
-
-    def _make_diffusers_progress_callback(
-        self,
-        prompt_index: int,
-        completed_images: int,
-    ) -> Callable[..., dict[str, Any]]:
-        def _on_step_end(_pipeline: Any, step_index: int, _timestep: Any, callback_kwargs: dict[str, Any]) -> dict[str, Any]:
-            completed = step_index + 1
-            self._report_diffusion_progress(completed_images, prompt_index, completed)
-            self._log_sample_step(prompt_index, completed, self._config.sample_steps)
-            return callback_kwargs
-
-        return _on_step_end
 
     def _log_sample_step(self, prompt_index: int, completed: int, total: int) -> None:
         log_interval = max(1, total // 5)

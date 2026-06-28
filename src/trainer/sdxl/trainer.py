@@ -31,12 +31,11 @@ from src.trainer.sdxl.latent_cache import build_latent_cache
 from src.trainer.sdxl.lora_export import export_kohya_state_dict
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, apply_lora_state_to_module
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
+from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
 from src.trainer.sdxl.sampling import (
     PromptEmbedCache,
-    build_embed_only_sdxl_pipeline,
     build_inference_scheduler,
     precompute_all_sample_embeds,
-    prepare_vae_for_decode,
 )
 from src.trainer.sdxl.te_cache import build_te_cache
 from src.trainer.training_log import JobTrainingLogger
@@ -757,69 +756,44 @@ class SDXLLoRATrainer:
                 dtype=autocast_dtype,
                 cache=prompt_embed_cache,
             )
-            shared_negative_embeds = all_embeds[0].negative_prompt_embeds
-            shared_negative_pooled = all_embeds[0].negative_pooled_prompt_embeds
             inference_te1.to("cpu")
             inference_te2.to("cpu")
             torch.cuda.empty_cache()
-            prepare_vae_for_decode(vae)
-            pipe = build_embed_only_sdxl_pipeline(
-                vae=vae,
-                unet=inference_unet,
-                tokenizer_1=tokenizer_1,
-                tokenizer_2=tokenizer_2,
-                scheduler=inference_scheduler,
-            )
-            pipe.set_progress_bar_config(disable=True)
             log.info("[sampling e%d] precompute embeds + TE offload: %.2fs", epoch, time.perf_counter() - embed_started_at)
 
-            with torch.no_grad():
-                for i, embeds in enumerate(all_embeds):
-                    if sampling_status_callback is not None:
-                        sampling_status_callback(f"Sampling epoch {epoch} — image {i + 1}/{n_prompts}")
-                    if sampling_progress_callback is not None:
-                        sampling_progress_callback(0, config.sample_steps)
+            session = SDXLSamplingSession.create(
+                unet=inference_unet,
+                vae=vae,
+                scheduler=inference_scheduler,
+                device=device,
+                width=width,
+                height=height,
+                sample_steps=config.sample_steps,
+                autocast_dtype=autocast_dtype,
+                config=config,
+            )
 
-                    generator = torch.Generator(device=device)
-                    if config.seed is not None:
-                        generator.manual_seed(config.seed + i)
-
-                    log_interval = max(1, config.sample_steps // 5)
-
-                    def _on_step_end(pipeline, step_index: int, timestep, callback_kwargs: dict) -> dict:
-                        completed = step_index + 1
-                        if sampling_progress_callback is not None:
-                            sampling_progress_callback(completed, config.sample_steps)
-                        if completed % log_interval == 0 or completed == config.sample_steps:
-                            log.info(
-                                "[sample %d/%d e%d] step %d/%d",
-                                i + 1, n_prompts, epoch, completed, config.sample_steps,
-                            )
-                        return callback_kwargs
-
-                    image_started_at = time.perf_counter()
-                    with torch.autocast(device_type=device.type, dtype=autocast_dtype):
-                        image = pipe(
-                            prompt_embeds=embeds.prompt_embeds,
-                            negative_prompt_embeds=shared_negative_embeds,
-                            pooled_prompt_embeds=embeds.pooled_prompt_embeds,
-                            negative_pooled_prompt_embeds=shared_negative_pooled,
-                            width=width,
-                            height=height,
-                            num_inference_steps=config.sample_steps,
-                            guidance_scale=config.sample_cfg_scale,
-                            generator=generator,
-                            callback_on_step_end=_on_step_end,
-                            callback_on_step_end_tensor_inputs=[],
-                        ).images[0]
-
-                    filename = f"{config.lora_name}_epoch{epoch}_{i:02d}.png"
-                    image.save(sample_dir / filename)
-                    log.info(
-                        "Sample saved: %s (denoise %.2fs)",
-                        filename,
-                        time.perf_counter() - image_started_at,
+            def _on_status(prompt_index: int, total_prompts: int) -> None:
+                if sampling_status_callback is not None:
+                    sampling_status_callback(
+                        f"Sampling epoch {epoch} — image {prompt_index + 1}/{total_prompts}",
                     )
+
+            def _on_step(_prompt_index: int, completed: int, total: int) -> None:
+                if sampling_progress_callback is not None:
+                    sampling_progress_callback(completed, total)
+
+            run_sdxl_sampling_pass(
+                session=session,
+                embeds_list=all_embeds,
+                config=config,
+                output_dir=sample_dir,
+                output_stem=f"{config.lora_name}_epoch{epoch}",
+                log=log,
+                on_status=_on_status,
+                on_step=_on_step,
+                log_step_context=f"[sample {{prompt_index}}/{{n_prompts}} e{epoch}]",
+            )
         finally:
             restore_started_at = time.perf_counter()
             if inference_unet is not None:

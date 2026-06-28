@@ -10,7 +10,6 @@ from diffusers import (
     DPMSolverMultistepScheduler,
     EulerAncestralDiscreteScheduler,
     EulerDiscreteScheduler,
-    StableDiffusionXLPipeline,
 )
 from torch import Tensor
 
@@ -29,30 +28,6 @@ def build_inference_scheduler(
     noise_scheduler: DDPMScheduler,
 ) -> object:
     return _SCHEDULER_MAP[sample_scheduler].from_config(noise_scheduler.config)
-
-
-def build_embed_only_sdxl_pipeline(
-    *,
-    vae: torch.nn.Module,
-    unet: torch.nn.Module,
-    tokenizer_1: Any,
-    tokenizer_2: Any,
-    scheduler: object,
-) -> StableDiffusionXLPipeline:
-    """Build an SDXL pipeline for precomputed prompt embeds.
-
-    Omit text encoders so diffusers resolves _execution_device from UNet/VAE on GPU
-    instead of CPU-offloaded text encoders.
-    """
-    return StableDiffusionXLPipeline(
-        vae=vae,
-        text_encoder=None,
-        text_encoder_2=None,
-        tokenizer=tokenizer_1,
-        tokenizer_2=tokenizer_2,
-        unet=unet,
-        scheduler=scheduler,
-    )
 
 
 def encode_sdxl_prompt(
@@ -202,10 +177,11 @@ def precompute_all_sample_embeds(
     return results
 
 
-def prepare_vae_for_decode(vae: torch.nn.Module) -> bool:
+def prepare_vae_for_decode(vae: torch.nn.Module, *, use_fp32: bool = True) -> bool:
     """Keep VAE in float32 during sampling to avoid per-image upcast in diffusers."""
     needs_fp32 = (
-        vae.dtype == torch.float16
+        use_fp32
+        and vae.dtype == torch.float16
         and getattr(vae.config, "force_upcast", False)
     )
     if needs_fp32:

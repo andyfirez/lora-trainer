@@ -51,6 +51,9 @@ RUNTIME_SAMPLING_FIELDS: tuple[str, ...] = (
     "sample_width",
     "sample_height",
     "sample_scheduler",
+    "sample_vae_tiling",
+    "sample_vae_fp32",
+    "sample_offload_unet_before_decode",
 )
 
 FORBIDDEN_INLINE_SAMPLING_KEYS: frozenset[str] = frozenset(
@@ -160,6 +163,9 @@ class TrainConfig(BaseModel):
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_scheduler: SampleScheduler = SampleScheduler.EULER
+    sample_vae_tiling: bool = True
+    sample_vae_fp32: bool = False
+    sample_offload_unet_before_decode: bool = True
 
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 

@@ -2,34 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import torch
 
-from src.trainer.sdxl.sampling import build_embed_only_sdxl_pipeline, precompute_all_sample_embeds
-
-
-@patch("src.trainer.sdxl.sampling.StableDiffusionXLPipeline")
-def test_build_embed_only_sdxl_pipeline_omits_text_encoders(mock_pipe_cls: MagicMock) -> None:
-    vae = MagicMock()
-    unet = MagicMock()
-    tokenizer_1 = MagicMock()
-    tokenizer_2 = MagicMock()
-    scheduler = MagicMock()
-
-    build_embed_only_sdxl_pipeline(
-        vae=vae,
-        unet=unet,
-        tokenizer_1=tokenizer_1,
-        tokenizer_2=tokenizer_2,
-        scheduler=scheduler,
-    )
-
-    mock_pipe_cls.assert_called_once_with(
-        vae=vae,
-        text_encoder=None,
-        text_encoder_2=None,
-        tokenizer=tokenizer_1,
-        tokenizer_2=tokenizer_2,
-        unet=unet,
-        scheduler=scheduler,
-    )
+from src.trainer.sdxl.sampling import precompute_all_sample_embeds
 
 
 @patch("src.trainer.sdxl.sampling.encode_sdxl_prompt")
