@@ -17,10 +17,12 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
+from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
 from src.settings.app_settings import settings
+from src.trainer.concept_resolution import resolve_dataset_ids
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 from src.trainer.sdxl.trainer import SDXLLoRATrainer, TrainingCancelledAfterSave
@@ -220,6 +222,11 @@ async def _run(job_id: int) -> None:
         resume_checkpoint_path = job.resume_checkpoint_path
 
     config = TrainConfig.from_yaml(config_yaml)
+    async with session_factory() as session:
+        dataset_repo = DatasetRepository(session)
+        dataset_ids = [concept.dataset_id for concept in config.concepts]
+        image_dirs = await resolve_dataset_ids(dataset_ids, dataset_repo)
+        config = config.resolve_concepts(image_dirs)
     if resume_checkpoint_path:
         config.resume_from_checkpoint = resume_checkpoint_path
     is_resume_run = bool(config.resume_from_checkpoint)

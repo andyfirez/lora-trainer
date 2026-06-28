@@ -106,6 +106,7 @@ async def test_create_from_config_rejects_missing_lora_path(
 async def test_auto_sampling_enqueues_intermediate_checkpoints(
     jobs_service: JobsService,
     config_service: JobConfigService,
+    training_dataset,
     session,
     tmp_path,
 ) -> None:
@@ -135,6 +136,8 @@ lora_name: demo
 output_format: safetensors
 sample_after_training: true
 post_training_sampling_config_id: {sampling_config.id}
+concepts:
+  - dataset_id: {training_dataset.id}
 """
     training_config = await config_service.create_config(
         name="training",

@@ -7,11 +7,14 @@ from src.services.configs.service import JobConfigService
 
 
 @pytest.mark.asyncio
-async def test_list_configs_returns_all(config_service: JobConfigService) -> None:
+async def test_list_configs_returns_all(
+    config_service: JobConfigService,
+    minimal_training_yaml: str,
+) -> None:
     await config_service.create_config(
         name="train",
         config_type=ConfigType.TRAINING,
-        config_yaml="base_model_name: x",
+        config_yaml=minimal_training_yaml,
     )
     await config_service.create_config(
         name="sample",
@@ -26,11 +29,14 @@ async def test_list_configs_returns_all(config_service: JobConfigService) -> Non
 
 
 @pytest.mark.asyncio
-async def test_list_configs_filters_by_type(config_service: JobConfigService) -> None:
+async def test_list_configs_filters_by_type(
+    config_service: JobConfigService,
+    minimal_training_yaml: str,
+) -> None:
     await config_service.create_config(
         name="train",
         config_type=ConfigType.TRAINING,
-        config_yaml="base_model_name: x",
+        config_yaml=minimal_training_yaml,
     )
     await config_service.create_config(
         name="sample",
@@ -45,11 +51,14 @@ async def test_list_configs_filters_by_type(config_service: JobConfigService) ->
 
 
 @pytest.mark.asyncio
-async def test_get_config_returns_entity(config_service: JobConfigService) -> None:
+async def test_get_config_returns_entity(
+    config_service: JobConfigService,
+    minimal_training_yaml: str,
+) -> None:
     created = await config_service.create_config(
         name="train",
         config_type=ConfigType.TRAINING,
-        config_yaml="base_model_name: x",
+        config_yaml=minimal_training_yaml,
         description="demo",
     )
 
@@ -74,6 +83,49 @@ async def test_create_config_validates_yaml(config_service: JobConfigService) ->
             config_type=ConfigType.TRAINING,
             config_yaml="not_a_valid_config: [[[",
         )
+
+
+@pytest.mark.asyncio
+async def test_create_training_config_rejects_missing_dataset(
+    config_service: JobConfigService,
+) -> None:
+    with pytest.raises(JobConfigValidationError, match="Dataset with id=999 not found"):
+        await config_service.create_config(
+            name="bad dataset",
+            config_type=ConfigType.TRAINING,
+            config_yaml="""base_model_name: x
+concepts:
+  - dataset_id: 999
+""",
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_training_config_rejects_empty_concepts(
+    config_service: JobConfigService,
+) -> None:
+    with pytest.raises(JobConfigValidationError, match="At least one training concept is required"):
+        await config_service.create_config(
+            name="no concepts",
+            config_type=ConfigType.TRAINING,
+            config_yaml="base_model_name: x\nconcepts: []\n",
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_training_config_with_valid_dataset(
+    config_service: JobConfigService,
+    minimal_training_yaml: str,
+    training_dataset,
+) -> None:
+    created = await config_service.create_config(
+        name="train",
+        config_type=ConfigType.TRAINING,
+        config_yaml=minimal_training_yaml,
+    )
+
+    assert created.name == "train"
+    assert f"dataset_id: {training_dataset.id}" in created.config_yaml
 
 
 @pytest.mark.asyncio
@@ -103,17 +155,25 @@ async def test_create_sampling_config_rejects_unsupported_gpu_settings(
 
 
 @pytest.mark.asyncio
-async def test_update_config_changes_fields(config_service: JobConfigService) -> None:
+async def test_update_config_changes_fields(
+    config_service: JobConfigService,
+    minimal_training_yaml: str,
+    training_dataset,
+) -> None:
     created = await config_service.create_config(
         name="train",
         config_type=ConfigType.TRAINING,
-        config_yaml="base_model_name: x",
+        config_yaml=minimal_training_yaml,
     )
 
+    updated_yaml = f"""base_model_name: y
+concepts:
+  - dataset_id: {training_dataset.id}
+"""
     updated = await config_service.update_config(
         created.id,
         name="renamed",
-        config_yaml="base_model_name: y",
+        config_yaml=updated_yaml,
         description="updated",
     )
 
@@ -123,11 +183,14 @@ async def test_update_config_changes_fields(config_service: JobConfigService) ->
 
 
 @pytest.mark.asyncio
-async def test_delete_config_removes_entity(config_service: JobConfigService) -> None:
+async def test_delete_config_removes_entity(
+    config_service: JobConfigService,
+    minimal_training_yaml: str,
+) -> None:
     created = await config_service.create_config(
         name="train",
         config_type=ConfigType.TRAINING,
-        config_yaml="base_model_name: x",
+        config_yaml=minimal_training_yaml,
     )
 
     await config_service.delete_config(created.id)
@@ -137,11 +200,14 @@ async def test_delete_config_removes_entity(config_service: JobConfigService) ->
 
 
 @pytest.mark.asyncio
-async def test_clone_config_creates_copy(config_service: JobConfigService) -> None:
+async def test_clone_config_creates_copy(
+    config_service: JobConfigService,
+    minimal_training_yaml: str,
+) -> None:
     created = await config_service.create_config(
         name="original",
         config_type=ConfigType.TRAINING,
-        config_yaml="base_model_name: x",
+        config_yaml=minimal_training_yaml,
         description="demo",
     )
 

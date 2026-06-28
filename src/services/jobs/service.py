@@ -7,6 +7,7 @@ from typing import Optional, Sequence
 import yaml
 
 from src.api.schemas.job_loss import JobLossResponse
+from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
@@ -44,10 +45,11 @@ class JobsService:
         job_repo: JobRepository,
         queue_repo: QueueRepository,
         config_repo: JobConfigRepository,
+        dataset_repo: DatasetRepository,
     ) -> None:
         self._job_repo = job_repo
         self._queue_repo = queue_repo
-        self._config_service = JobConfigService(config_repo)
+        self._config_service = JobConfigService(config_repo, dataset_repo)
 
     async def list_jobs(self, *, job_type: JobType | None = None) -> Sequence[Job]:
         if job_type is not None:

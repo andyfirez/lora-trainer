@@ -12,6 +12,12 @@ from src.trainer.config import ConceptConfig, TrainConfig
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 
+def _concept_image_dir(concept: ConceptConfig) -> Path:
+    if not concept.image_dir:
+        raise ValueError(f"Concept with dataset_id={concept.dataset_id} has no resolved image_dir")
+    return Path(concept.image_dir)
+
+
 def _load_caption(image_path: Path, concept: ConceptConfig) -> str:
     caption_path = image_path.with_suffix(concept.caption_extension)
     caption = ""
@@ -28,7 +34,7 @@ def collect_all_image_paths_and_captions(
     all_pairs: list[tuple[Path, str]] = []
 
     for concept in config.concepts:
-        image_dir = Path(concept.image_dir)
+        image_dir = _concept_image_dir(concept)
         image_paths = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in _IMAGE_EXTENSIONS)
         for p in image_paths:
             caption = _load_caption(p, concept)
@@ -65,7 +71,7 @@ class ConceptDataset(Dataset):
 
     def __init__(self, concept: ConceptConfig, resolution: int, cache_mode: bool = False) -> None:
         self._concept = concept
-        image_dir = Path(concept.image_dir)
+        image_dir = _concept_image_dir(concept)
         self._image_paths = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in _IMAGE_EXTENSIONS)
         self._cache_mode = cache_mode
         if not cache_mode:

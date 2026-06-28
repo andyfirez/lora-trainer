@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from typing import Optional, Sequence
 
+from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.tables.job_config import ConfigType, JobConfig
 from src.sampler.config import SamplingConfig
@@ -11,8 +12,13 @@ from src.trainer.config import TrainConfig
 
 
 class JobConfigService:
-    def __init__(self, config_repo: JobConfigRepository) -> None:
+    def __init__(
+        self,
+        config_repo: JobConfigRepository,
+        dataset_repo: DatasetRepository,
+    ) -> None:
         self._config_repo = config_repo
+        self._dataset_repo = dataset_repo
 
     async def list_configs(self, *, config_type: ConfigType | None = None) -> Sequence[JobConfig]:
         if config_type is not None:
@@ -33,7 +39,7 @@ class JobConfigService:
         config_yaml: str,
         description: str | None = None,
     ) -> JobConfig:
-        self._validate_config_yaml(config_type, config_yaml)
+        await self._validate_config_yaml(config_type, config_yaml)
         job_config = JobConfig(
             name=name,
             config_type=config_type,
@@ -54,7 +60,7 @@ class JobConfigService:
         if name is not None:
             config.name = name
         if config_yaml is not None:
-            self._validate_config_yaml(config.config_type, config_yaml)
+            await self._validate_config_yaml(config.config_type, config_yaml)
             config.config_yaml = config_yaml
         if description is not None:
             config.description = description
@@ -83,13 +89,26 @@ class JobConfigService:
             description=description if description is not None else source.description,
         )
 
-    def _validate_config_yaml(self, config_type: ConfigType, config_yaml: str) -> None:
+    async def _validate_config_yaml(self, config_type: ConfigType, config_yaml: str) -> None:
         try:
             if config_type == ConfigType.TRAINING:
                 config = TrainConfig.from_yaml(config_yaml)
                 config.validate_gpu()
+                await self._validate_training_concepts(config)
             else:
                 config = SamplingConfig.from_yaml(config_yaml)
                 config.validate_gpu()
+        except JobConfigValidationError:
+            raise
         except Exception as exc:
             raise JobConfigValidationError(str(exc)) from exc
+
+    async def _validate_training_concepts(self, config: TrainConfig) -> None:
+        if not config.concepts:
+            raise JobConfigValidationError("At least one training concept is required")
+        for concept in config.concepts:
+            dataset = await self._dataset_repo.get_by_id(concept.dataset_id)
+            if dataset is None:
+                raise JobConfigValidationError(
+                    f"Dataset with id={concept.dataset_id} not found"
+                )

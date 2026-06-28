@@ -44,7 +44,8 @@ class SampleScheduler(StrEnum):
 
 
 class ConceptConfig(BaseModel):
-    image_dir: str
+    dataset_id: int
+    image_dir: str | None = None
     caption_extension: str = ".txt"
     caption_prefix: str = ""
     caption_suffix: str = ""
@@ -141,8 +142,20 @@ class TrainConfig(BaseModel):
         data = yaml.safe_load(yaml_str)
         return cls.model_validate(data)
 
+    def resolve_concepts(self, image_dirs: dict[int, str]) -> "TrainConfig":
+        resolved: list[ConceptConfig] = []
+        for concept in self.concepts:
+            image_dir = image_dirs.get(concept.dataset_id)
+            if image_dir is None:
+                raise ValueError(f"Dataset with id={concept.dataset_id} not found")
+            resolved.append(concept.model_copy(update={"image_dir": image_dir}))
+        return self.model_copy(update={"concepts": resolved})
+
     def to_yaml(self) -> str:
-        return yaml.dump(self.model_dump(mode="json"), allow_unicode=True, sort_keys=False)
+        data = self.model_dump(mode="json", exclude_none=True)
+        for concept in data.get("concepts", []):
+            concept.pop("image_dir", None)
+        return yaml.dump(data, allow_unicode=True, sort_keys=False)
 
     @classmethod
     def default_yaml(cls) -> str:

@@ -56,12 +56,16 @@ def _get_jobs_service(
     job_repo: JobRepoDep,
     queue_repo: QueueRepoDep,
     config_repo: ConfigRepoDep,
+    dataset_repo: DatasetRepoDep,
 ) -> JobsService:
-    return JobsService(job_repo, queue_repo, config_repo)
+    return JobsService(job_repo, queue_repo, config_repo, dataset_repo)
 
 
-def _get_config_service(config_repo: ConfigRepoDep) -> JobConfigService:
-    return JobConfigService(config_repo)
+def _get_config_service(
+    config_repo: ConfigRepoDep,
+    dataset_repo: DatasetRepoDep,
+) -> JobConfigService:
+    return JobConfigService(config_repo, dataset_repo)
 
 
 def _get_queues_service(

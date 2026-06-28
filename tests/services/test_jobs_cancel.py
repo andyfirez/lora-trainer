@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.dependencies import _get_jobs_service
 from src.api.main import app
+from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
@@ -104,6 +105,7 @@ async def test_enqueue_clears_stale_runtime_state(
 async def test_resume_job_queues_with_resume_state(
     jobs_service: JobsService,
     create_training_job,
+    training_dataset,
     tmp_path,
 ) -> None:
     output_dir = tmp_path / "output"
@@ -125,7 +127,7 @@ output_dir: {output_dir.as_posix()}
 lora_name: test_lora
 base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 concepts:
-  - image_dir: /tmp/images
+  - dataset_id: {training_dataset.id}
 """
     job = await create_training_job(config_yaml=config_yaml)
     await jobs_service._job_repo.update_status(job, JobStatus.FAILED, error_message="boom")
@@ -157,6 +159,7 @@ async def test_cancel_running_job_with_save_sets_request_flag(
 async def test_enqueue_clears_loss_log(
     jobs_service: JobsService,
     create_training_job,
+    training_dataset,
     tmp_path,
 ) -> None:
     output_dir = tmp_path / "output"
@@ -165,7 +168,7 @@ output_dir: {output_dir.as_posix()}
 lora_name: test_lora
 base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 concepts:
-  - image_dir: /tmp/images
+  - dataset_id: {training_dataset.id}
 """
     job = await create_training_job(config_yaml=config_yaml)
     loss_log = output_dir / "test_lora" / "loss_log.db"
@@ -237,6 +240,7 @@ async def test_job_logs_api_endpoint(tmp_path) -> None:
                 JobRepository(db_session),
                 QueueRepository(db_session),
                 JobConfigRepository(db_session),
+                DatasetRepository(db_session),
             )
 
         app.dependency_overrides[_get_jobs_service] = _override_jobs_service

@@ -46,7 +46,7 @@ optimizer:
 # Data
 resolution: 1024
 concepts:
-  - image_dir: /path/to/images
+  - dataset_id: 1
     caption_extension: .txt
     repeats: 1
 

@@ -10,11 +10,12 @@ from src.services.jobs.service import JobsService
 async def test_create_training_job_from_config(
     jobs_service: JobsService,
     config_service: JobConfigService,
+    minimal_training_yaml: str,
 ) -> None:
     config = await config_service.create_config(
         name="training template",
         config_type=ConfigType.TRAINING,
-        config_yaml="base_model_name: stabilityai/stable-diffusion-xl-base-1.0",
+        config_yaml=minimal_training_yaml,
     )
 
     job = await jobs_service.create_from_config(config.id, name="my training run")

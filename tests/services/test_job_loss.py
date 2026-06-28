@@ -6,6 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.api.dependencies import _get_jobs_service
 from src.api.main import app
+from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
@@ -20,7 +21,7 @@ output_dir: output
 lora_name: test_lora
 base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 concepts:
-  - image_dir: /tmp/images
+  - dataset_id: 1
 """
 
 
@@ -57,6 +58,7 @@ async def test_get_job_loss_api_endpoint(tmp_path) -> None:
                 JobRepository(db_session),
                 QueueRepository(db_session),
                 JobConfigRepository(db_session),
+                DatasetRepository(db_session),
             )
 
         app.dependency_overrides[_get_jobs_service] = _override_jobs_service
@@ -104,6 +106,7 @@ async def test_get_job_loss_empty_when_no_file() -> None:
                 JobRepository(db_session),
                 QueueRepository(db_session),
                 JobConfigRepository(db_session),
+                DatasetRepository(db_session),
             )
 
         app.dependency_overrides[_get_jobs_service] = _override_jobs_service

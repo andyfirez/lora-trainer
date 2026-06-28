@@ -1,13 +1,17 @@
 "use client";
 
+import useSWR from "swr";
+import Link from "next/link";
 import { Plus, X } from "lucide-react";
 import PathInput from "@/components/PathInput";
 import SampleSamplerFields from "@/components/SampleSamplerFields";
+import { datasetsApi } from "@/lib/api/datasets";
 import {
   applyOptimizerPreset,
   optimizerOptions,
   type OptimizerType,
 } from "@/lib/optimizerPresets";
+import type { Dataset } from "@/types";
 
 type Config = Record<string, any>;
 
@@ -177,6 +181,17 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
 
   const concepts: Config[] = config.concepts ?? [];
   const samplePrompts: string[] = config.sample_prompts ?? [];
+  const { data: datasets, isLoading: datasetsLoading } = useSWR("/datasets", () => datasetsApi.list());
+
+  const datasetOptions = (datasets ?? []).map((d: Dataset) => ({
+    value: String(d.id),
+    label: d.name,
+  }));
+
+  function datasetById(id: number | undefined): Dataset | undefined {
+    if (id == null) return undefined;
+    return datasets?.find((d) => d.id === id);
+  }
 
   function updateConcept(i: number, key: string, value: unknown) {
     const next = concepts.map((c, idx) => (idx === i ? { ...c, [key]: value } : c));
@@ -184,7 +199,12 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
   }
 
   function addConcept() {
-    set("concepts", [...concepts, { image_dir: "", caption_extension: ".txt", repeats: 1 }]);
+    const defaultDatasetId = datasets?.[0]?.id;
+    if (defaultDatasetId == null) return;
+    set("concepts", [
+      ...concepts,
+      { dataset_id: defaultDatasetId, caption_extension: ".txt", repeats: 1 },
+    ]);
   }
 
   function removeConcept(i: number) {
@@ -468,55 +488,80 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
         />
         <div className="space-y-3 mt-2">
           <div className="text-xs font-medium text-[var(--muted)]">Concepts</div>
-          {concepts.map((concept, i) => (
-            <div key={i} className="relative rounded-lg border border-[var(--border)] p-4 bg-[var(--bg)]">
+          {datasetsLoading ? (
+            <div className="text-sm text-[var(--muted)]">Loading datasets…</div>
+          ) : !datasets?.length ? (
+            <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center space-y-3">
+              <p className="text-sm text-[var(--muted)]">
+                No datasets yet. Create a dataset to specify training data.
+              </p>
+              <Link
+                href="/datasets"
+                className="inline-flex items-center gap-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium"
+              >
+                Create Dataset
+              </Link>
+            </div>
+          ) : (
+            <>
+              {concepts.map((concept, i) => {
+                const selectedDataset = datasetById(concept.dataset_id);
+                return (
+                  <div key={i} className="relative rounded-lg border border-[var(--border)] p-4 bg-[var(--bg)]">
+                    <button
+                      type="button"
+                      onClick={() => removeConcept(i)}
+                      className="absolute top-2 right-2 p-1 rounded hover:bg-white/10 text-[var(--muted)] hover:text-red-400"
+                    >
+                      <X size={13} />
+                    </button>
+                    <div className="text-xs text-[var(--muted)] mb-3">Concept {i + 1}</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="md:col-span-1">
+                        <SelectInput
+                          label="Dataset"
+                          value={concept.dataset_id != null ? String(concept.dataset_id) : ""}
+                          onChange={(v) => updateConcept(i, "dataset_id", Number(v))}
+                          options={datasetOptions}
+                        />
+                        {selectedDataset && (
+                          <p className="text-xs text-[var(--muted)] mt-1 break-all">{selectedDataset.image_dir}</p>
+                        )}
+                        {concept.dataset_id != null && !selectedDataset && (
+                          <p className="text-xs text-red-400 mt-1">Dataset not found</p>
+                        )}
+                      </div>
+                      <Field label="Caption Extension">
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={concept.caption_extension ?? ".txt"}
+                          onChange={(e) => updateConcept(i, "caption_extension", e.target.value)}
+                          placeholder=".txt"
+                        />
+                      </Field>
+                      <Field label="Repeats">
+                        <input
+                          type="number"
+                          className={inputClass}
+                          value={concept.repeats ?? 1}
+                          min={1}
+                          onChange={(e) => updateConcept(i, "repeats", Number(e.target.value))}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                );
+              })}
               <button
                 type="button"
-                onClick={() => removeConcept(i)}
-                className="absolute top-2 right-2 p-1 rounded hover:bg-white/10 text-[var(--muted)] hover:text-red-400"
+                onClick={addConcept}
+                className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-white border border-dashed border-[var(--border)] hover:border-white/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
               >
-                <X size={13} />
+                <Plus size={13} /> Add Concept
               </button>
-              <div className="text-xs text-[var(--muted)] mb-3">Concept {i + 1}</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-1">
-                  <PathInput
-                    label="Image Dir"
-                    value={concept.image_dir ?? ""}
-                    onChange={(v) => updateConcept(i, "image_dir", v)}
-                    placeholder="/path/to/images"
-                    pickerTitle="Select Dataset Folder"
-                    kind="directory"
-                  />
-                </div>
-                <Field label="Caption Extension">
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={concept.caption_extension ?? ".txt"}
-                    onChange={(e) => updateConcept(i, "caption_extension", e.target.value)}
-                    placeholder=".txt"
-                  />
-                </Field>
-                <Field label="Repeats">
-                  <input
-                    type="number"
-                    className={inputClass}
-                    value={concept.repeats ?? 1}
-                    min={1}
-                    onChange={(e) => updateConcept(i, "repeats", Number(e.target.value))}
-                  />
-                </Field>
-              </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={addConcept}
-            className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-white border border-dashed border-[var(--border)] hover:border-white/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
-          >
-            <Plus size={13} /> Add Concept
-          </button>
+            </>
+          )}
         </div>
       </section>
 

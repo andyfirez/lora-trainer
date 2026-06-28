@@ -41,6 +41,7 @@ async def test_dataset_caption_api(tmp_path) -> None:
                 JobRepository(db_session),
                 QueueRepository(db_session),
                 JobConfigRepository(db_session),
+                DatasetRepository(db_session),
             )
 
         app.dependency_overrides[_get_datasets_service] = _override_datasets_service

@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 import psutil
 
+from src.db.repositories.dataset_repo import DatasetRepository
+from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import session_factory
@@ -156,8 +158,6 @@ class QueueWorker:
         async with session_factory() as session:
             job_repo = JobRepository(session)
             queue_repo = QueueRepository(session)
-            from src.db.repositories.job_config_repo import JobConfigRepository
-
             job = await job_repo.get_by_id(job_id)
             if job is None:
                 return
@@ -173,7 +173,12 @@ class QueueWorker:
                 await session.commit()
                 logger.info("Job id=%d finished with status=%s (exit code %d)", job_id, status, return_code)
                 if return_code == 0 and status == JobStatus.COMPLETED and job.job_type == JobType.TRAINING:
-                    jobs_service = JobsService(job_repo, queue_repo, JobConfigRepository(session))
+                    jobs_service = JobsService(
+                        job_repo,
+                        queue_repo,
+                        JobConfigRepository(session),
+                        DatasetRepository(session),
+                    )
                     try:
                         sampling_job = await jobs_service.create_auto_sampling_for_training_job(job)
                     except SamplingCheckpointsNotFoundError:
