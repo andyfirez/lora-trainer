@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,8 +13,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import register_all_tables
+from src.db.tables.dataset import Dataset
 from src.db.tables.job import Job, JobStatus, JobType
+from src.db.tables.job_config import ConfigType
 from src.db.tables.queue_entry import QueueEntry
+from src.services.configs.service import JobConfigService
+from src.services.jobs.service import JobsService
 from src.services.worker.service import QueueWorker
 
 
@@ -315,4 +320,85 @@ async def test_finalize_job_preserves_error_message(
 
     await session.refresh(sampling_job)
     assert sampling_job.status == JobStatus.FAILED
-    assert sampling_job.error_message == "Process exited with code 1"
+    assert sampling_job.error_message == "CUDA is not available"
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_includes_subprocess_output_on_failure(
+    worker_db: tuple[AsyncSession, async_sessionmaker[AsyncSession]],
+) -> None:
+    session, test_session_factory = worker_db
+    job = Job(
+        job_type=JobType.TRAINING,
+        name="test",
+        config_yaml="base_model_name: x",
+        status=JobStatus.RUNNING,
+    )
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+
+    worker = QueueWorker()
+    with patch("src.services.worker.service.session_factory", test_session_factory):
+        await worker._finalize_job(
+            job.id,
+            1,
+            ["Traceback (most recent call last):", "NameError: something broke"],
+        )
+
+    await session.refresh(job)
+    assert job.status == JobStatus.FAILED
+    assert "Process exited with code 1" in job.error_message
+    assert "NameError: something broke" in job.error_message
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_queues_sampling_when_runner_already_completed(
+    session: AsyncSession,
+    jobs_service: JobsService,
+    config_service: JobConfigService,
+    training_dataset: Dataset,
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "output"
+    work_dir = output_dir / "demo"
+    work_dir.mkdir(parents=True)
+    (work_dir / "demo_epoch1.safetensors").write_bytes(b"epoch")
+
+    sampling_config = await config_service.create_config(
+        name="post-train sampling",
+        config_type=ConfigType.SAMPLING,
+        config_yaml="sample_prompts:\n  - test prompt\n",
+    )
+    training_config = await config_service.create_config(
+        name="training",
+        config_type=ConfigType.TRAINING,
+        config_yaml=f"""
+output_dir: {output_dir.as_posix()}
+lora_name: demo
+output_format: safetensors
+checkpointing_enabled: true
+sampling_enabled: true
+sampling_config_id: {sampling_config.id}
+concepts:
+  - dataset_id: {training_dataset.id}
+""",
+    )
+    training_job = await jobs_service.create_from_config(training_config.id)
+    await jobs_service._job_repo.update_status(training_job, JobStatus.COMPLETED)
+    await session.commit()
+
+    @asynccontextmanager
+    async def test_session_factory():
+        yield session
+
+    worker = QueueWorker()
+    with patch("src.services.worker.service.session_factory", test_session_factory):
+        await worker._finalize_job(training_job.id, 0)
+
+    sampling_jobs = await jobs_service.list_jobs_by_source(training_job.id)
+    assert len(sampling_jobs) == 1
+    assert sampling_jobs[0].job_type == JobType.SAMPLING
+    assert sampling_jobs[0].status == JobStatus.QUEUED
+    queue_entry = await jobs_service._queue_repo.get_by_job_id(sampling_jobs[0].id)
+    assert queue_entry is not None

@@ -12,7 +12,9 @@ from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus, JobType
 from src.sampler.config import SamplingConfig
+from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import SDXLLoRASampler
+from src.trainer.config import TrainConfig
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
 
 logger = logging.getLogger(__name__)
@@ -139,17 +141,22 @@ async def run_sampling_job(job_id: int) -> int:
             config_yaml = job.config_yaml
             lora_paths_yaml = job.lora_paths_yaml
             output_path = job.output_path
+            source_job_id = job.source_job_id
 
         sampling_config = SamplingConfig.from_yaml(config_yaml)
         train_config = sampling_config.to_train_config()
         train_config.validate_gpu()
         lora_paths = [Path(path) for path in (yaml.safe_load(lora_paths_yaml or "[]") or [])]
         if output_path is None:
+            source_train_config: TrainConfig | None = None
+            if source_job_id is not None:
+                async with session_factory() as session:
+                    repo = JobRepository(session)
+                    source_job = await repo.get_by_id(source_job_id)
+                    if source_job is not None and source_job.job_type == JobType.TRAINING:
+                        source_train_config = TrainConfig.from_yaml(source_job.config_yaml)
             output_path = str(
-                Path(sampling_config.output_dir)
-                / sampling_config.lora_name
-                / "samples"
-                / f"job_{job_id}"
+                resolve_sampling_output_path(sampling_config, job_id, source_train_config)
             )
             await _set_output_path(job_id, output_path)
 

@@ -116,7 +116,6 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
   }
 
   const samplePrompts: string[] = (config.sample_prompts as string[]) ?? [];
-  const loraPaths: string[] = (config.lora_paths as string[]) ?? [];
 
   function updatePrompt(i: number, value: string) {
     const next = samplePrompts.map((p, idx) => (idx === i ? value : p));
@@ -129,19 +128,6 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
 
   function removePrompt(i: number) {
     set("sample_prompts", samplePrompts.filter((_, idx) => idx !== i));
-  }
-
-  function updateLoraPath(i: number, value: string) {
-    const next = loraPaths.map((p, idx) => (idx === i ? value : p));
-    set("lora_paths", next);
-  }
-
-  function addLoraPath() {
-    set("lora_paths", [...loraPaths, ""]);
-  }
-
-  function removeLoraPath(i: number) {
-    set("lora_paths", loraPaths.length === 1 ? [""] : loraPaths.filter((_, idx) => idx !== i));
   }
 
   return (
@@ -165,61 +151,6 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
             pickerTitle="Select Output Folder"
             kind="directory"
           />
-        </div>
-        <Field label="LoRA Name">
-          <input
-            type="text"
-            className={inputClass}
-            value={(config.lora_name as string) ?? ""}
-            onChange={(e) => set("lora_name", e.target.value)}
-            placeholder="my_lora"
-          />
-        </Field>
-      </section>
-
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>LoRA Files</div>
-        <div className="space-y-3">
-          {loraPaths.length === 0 ? (
-            <PathInput
-              label="LoRA 1"
-              value=""
-              onChange={(v) => set("lora_paths", [v])}
-              placeholder="D:\loras\model.safetensors"
-              pickerTitle="Select LoRA file"
-              kind="model"
-            />
-          ) : (
-            loraPaths.map((path, i) => (
-              <div key={i} className="flex gap-2 items-end">
-                <div className="flex-1">
-                  <PathInput
-                    label={`LoRA ${i + 1}`}
-                    value={path}
-                    onChange={(v) => updateLoraPath(i, v)}
-                    placeholder="D:\loras\model.safetensors"
-                    pickerTitle="Select LoRA file"
-                    kind="model"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeLoraPath(i)}
-                  className="mb-0.5 p-2 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-white/5 hover:text-white"
-                  title="Remove LoRA"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ))
-          )}
-          <button
-            type="button"
-            onClick={addLoraPath}
-            className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-white border border-dashed border-[var(--border)] hover:border-white/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
-          >
-            <Plus size={13} /> Add LoRA
-          </button>
         </div>
       </section>
 

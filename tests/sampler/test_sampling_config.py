@@ -27,3 +27,4 @@ def test_sampling_config_to_train_config_propagates_performance_fields() -> None
     assert train_config.mixed_precision == WeightDtype.FLOAT_16
     assert train_config.vae_dtype == VaeDtype.FLOAT_16
     assert train_config.tf32 is False
+    assert train_config.sample_prompts == config.sample_prompts

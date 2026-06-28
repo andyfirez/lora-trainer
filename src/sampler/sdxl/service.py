@@ -82,32 +82,44 @@ class SDXLLoRASampler:
             torch.backends.cudnn.allow_tf32 = True
 
         self._log.info("Loading SDXL pipeline from %s", config.base_model_name)
-        stack = self._load_stack(config)
+        stack = self._load_stack(config, enable_lora=bool(self._lora_paths))
 
         total_diffusion_steps = self._total_diffusion_steps()
         self._set_progress(0, total_diffusion_steps)
         completed_images = 0
-        for lora_index, lora_path in enumerate(self._lora_paths):
-            status_prefix = f"Sampling {lora_path.name} ({lora_index + 1}/{len(self._lora_paths)})"
-            self._set_status(f"{status_prefix} — loading LoRA")
-            state_dict = load_lora_file(lora_path)
-            apply_lora_state_dict(
-                state_dict,
-                unet=stack.unet,
-                text_encoder_1=stack.text_encoder_1,
-                text_encoder_2=stack.text_encoder_2,
-                config=config,
-            )
-            self._sample_lora(
-                lora_path=lora_path,
+        if self._lora_paths:
+            for lora_index, lora_path in enumerate(self._lora_paths):
+                status_prefix = f"Sampling {lora_path.name} ({lora_index + 1}/{len(self._lora_paths)})"
+                self._set_status(f"{status_prefix} — loading LoRA")
+                state_dict = load_lora_file(lora_path)
+                apply_lora_state_dict(
+                    state_dict,
+                    unet=stack.unet,
+                    text_encoder_1=stack.text_encoder_1,
+                    text_encoder_2=stack.text_encoder_2,
+                    config=config,
+                )
+                self._sample_pass(
+                    output_stem=self._safe_stem(lora_path),
+                    status_prefix=status_prefix,
+                    completed_images=completed_images,
+                    stack=stack,
+                    merge_unet_adapter=True,
+                )
+                completed_images += len(config.sample_prompts)
+        else:
+            status_prefix = "Sampling base model"
+            self._set_status(status_prefix)
+            self._sample_pass(
+                output_stem="base",
                 status_prefix=status_prefix,
-                completed_images=completed_images,
+                completed_images=0,
                 stack=stack,
+                merge_unet_adapter=False,
             )
-            completed_images += len(config.sample_prompts)
         self._set_status(None)
 
-    def _load_stack(self, config: TrainConfig) -> _SamplingStack:
+    def _load_stack(self, config: TrainConfig, *, enable_lora: bool) -> _SamplingStack:
         device = torch.device("cuda")
         vae_dtype = resolve_vae_dtype(config.vae_dtype)
         components = load_sdxl_components(
@@ -128,17 +140,18 @@ class SDXLLoRASampler:
         text_encoder_2.requires_grad_(False)
         unet.requires_grad_(False)
 
-        unet = get_peft_model(
-            unet,
-            LoraConfig(
-                r=config.lora_rank,
-                lora_alpha=config.lora_alpha,
-                lora_dropout=config.lora_dropout,
-                init_lora_weights="gaussian",
-                target_modules=["to_k", "to_q", "to_v", "to_out.0"],
-            ),
-        )
-        if config.text_encoder_1.train:
+        if enable_lora:
+            unet = get_peft_model(
+                unet,
+                LoraConfig(
+                    r=config.lora_rank,
+                    lora_alpha=config.lora_alpha,
+                    lora_dropout=config.lora_dropout,
+                    init_lora_weights="gaussian",
+                    target_modules=["to_k", "to_q", "to_v", "to_out.0"],
+                ),
+            )
+        if enable_lora and config.text_encoder_1.train:
             text_encoder_1 = get_peft_model(
                 text_encoder_1,
                 LoraConfig(
@@ -149,7 +162,7 @@ class SDXLLoRASampler:
                     target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
                 ),
             )
-        if config.text_encoder_2.train:
+        if enable_lora and config.text_encoder_2.train:
             text_encoder_2 = get_peft_model(
                 text_encoder_2,
                 LoraConfig(
@@ -178,13 +191,14 @@ class SDXLLoRASampler:
             unet=unet,
         )
 
-    def _sample_lora(
+    def _sample_pass(
         self,
         *,
-        lora_path: Path,
+        output_stem: str,
         status_prefix: str,
         completed_images: int,
         stack: _SamplingStack,
+        merge_unet_adapter: bool,
     ) -> None:
         config = self._config
         device = stack.device
@@ -196,9 +210,12 @@ class SDXLLoRASampler:
         te1_merged = False
         te2_merged = False
         try:
-            unet.merge_adapter()
-            unet_merged = True
-            inference_unet = unet.base_model.model
+            if merge_unet_adapter:
+                unet.merge_adapter()
+                unet_merged = True
+                inference_unet = unet.base_model.model
+            else:
+                inference_unet = unet
             if config.text_encoder_1.train:
                 text_encoder_1.merge_adapter()
                 te1_merged = True
@@ -272,7 +289,7 @@ class SDXLLoRASampler:
                         autocast_dtype=autocast_dtype,
                         device=device,
                     )
-                    filename = f"{self._safe_stem(lora_path)}_{prompt_index:02d}.png"
+                    filename = f"{output_stem}_{prompt_index:02d}.png"
                     image.save(self._output_dir / filename)
                     self._report_diffusion_progress(completed_images, prompt_index, config.sample_steps)
                     self._log.info("Sample saved: %s", filename)
@@ -283,7 +300,7 @@ class SDXLLoRASampler:
                 text_encoder_1.unmerge_adapter()
             if te2_merged:
                 text_encoder_2.unmerge_adapter()
-            self._log.info("Sampling %s completed in %.2fs", lora_path.name, time.perf_counter() - started_at)
+            self._log.info("Sampling %s completed in %.2fs", output_stem, time.perf_counter() - started_at)
 
     def _generate_image(
         self,
@@ -317,7 +334,8 @@ class SDXLLoRASampler:
             ).images[0]
 
     def _total_diffusion_steps(self) -> int:
-        return len(self._lora_paths) * len(self._config.sample_prompts) * self._config.sample_steps
+        lora_count = len(self._lora_paths) if self._lora_paths else 1
+        return lora_count * len(self._config.sample_prompts) * self._config.sample_steps
 
     def _report_diffusion_progress(
         self,

@@ -3,12 +3,19 @@
 from datetime import datetime, timezone
 from typing import Optional, Sequence
 
+import yaml
+
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.tables.job_config import ConfigType, JobConfig
 from src.sampler.config import SamplingConfig
 from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
-from src.trainer.config import TrainConfig
+from src.trainer.config import (
+    FORBIDDEN_DEPRECATED_CONCEPT_KEYS,
+    FORBIDDEN_DEPRECATED_TRAIN_KEYS,
+    FORBIDDEN_INLINE_SAMPLING_KEYS,
+    TrainConfig,
+)
 
 
 class JobConfigService:
@@ -91,10 +98,19 @@ class JobConfigService:
 
     async def _validate_config_yaml(self, config_type: ConfigType, config_yaml: str) -> None:
         try:
+            raw = yaml.safe_load(config_yaml) or {}
             if config_type == ConfigType.TRAINING:
+                forbidden = (FORBIDDEN_INLINE_SAMPLING_KEYS | FORBIDDEN_DEPRECATED_TRAIN_KEYS) & raw.keys()
+                if forbidden:
+                    raise JobConfigValidationError(
+                        "Deprecated or inline sampling parameters are not allowed; "
+                        "use sampling_enabled and sampling_config_id: "
+                        + ", ".join(sorted(forbidden))
+                    )
+                self._validate_raw_concepts(raw.get("concepts"))
                 config = TrainConfig.from_yaml(config_yaml)
                 config.validate_gpu()
-                await self._validate_training_concepts(config)
+                await self._validate_training_config(config)
             else:
                 config = SamplingConfig.from_yaml(config_yaml)
                 config.validate_gpu()
@@ -102,6 +118,49 @@ class JobConfigService:
             raise
         except Exception as exc:
             raise JobConfigValidationError(str(exc)) from exc
+
+    async def _validate_training_config(self, config: TrainConfig) -> None:
+        await self._validate_training_concepts(config)
+        sampling_active = (
+            config.sampling_enabled
+            or config.sample_before_training
+            or config.sample_every_n_epochs is not None
+        )
+        if config.sampling_enabled and not config.checkpointing_enabled:
+            raise JobConfigValidationError("Sampling requires checkpointing to be enabled")
+        if sampling_active and config.sampling_config_id is None:
+            raise JobConfigValidationError(
+                "sampling_config_id is required when sampling is enabled"
+            )
+        if config.sampling_config_id is not None:
+            sampling_entity = await self._config_repo.get_by_id(config.sampling_config_id)
+            if sampling_entity is None:
+                raise JobConfigValidationError(
+                    f"Sampling config with id={config.sampling_config_id} not found"
+                )
+            if sampling_entity.config_type != ConfigType.SAMPLING:
+                raise JobConfigValidationError(
+                    f"Job config id={config.sampling_config_id} is not a sampling config"
+                )
+            if sampling_active:
+                sampling = SamplingConfig.from_yaml(sampling_entity.config_yaml)
+                if not sampling.sample_prompts:
+                    raise JobConfigValidationError(
+                        "Referenced sampling config has no sample_prompts"
+                    )
+
+    def _validate_raw_concepts(self, concepts: object) -> None:
+        if not isinstance(concepts, list):
+            return
+        for index, concept in enumerate(concepts):
+            if not isinstance(concept, dict):
+                continue
+            deprecated = FORBIDDEN_DEPRECATED_CONCEPT_KEYS & concept.keys()
+            if deprecated:
+                raise JobConfigValidationError(
+                    f"Concept {index + 1}: use dataset_id instead of "
+                    + ", ".join(sorted(deprecated))
+                )
 
     async def _validate_training_concepts(self, config: TrainConfig) -> None:
         if not config.concepts:

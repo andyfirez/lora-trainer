@@ -14,7 +14,6 @@ class SamplingConfig(BaseModel):
 
     base_model_name: str = "stabilityai/stable-diffusion-xl-base-1.0"
     output_dir: str = "output"
-    lora_name: str = "lora"
     sample_prompts: list[str] = Field(default_factory=list)
     sample_negative_prompt: str = ""
     sample_steps: int = Field(default=30, ge=1)
@@ -22,7 +21,6 @@ class SamplingConfig(BaseModel):
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_scheduler: SampleScheduler = SampleScheduler.EULER
-    lora_paths: list[str] = Field(default_factory=list)
     attention_mechanism: Literal["default", "sdpa", "xformers"] = "sdpa"
     mixed_precision: WeightDtype = WeightDtype.FLOAT_16
     vae_dtype: VaeDtype = VaeDtype.AUTO
@@ -47,20 +45,23 @@ class SamplingConfig(BaseModel):
             vae_dtype=self.vae_dtype,
         )
 
+    def build_sampling_field_updates(self) -> dict[str, object]:
+        return {
+            "sample_prompts": self.sample_prompts,
+            "sample_negative_prompt": self.sample_negative_prompt,
+            "sample_steps": self.sample_steps,
+            "sample_cfg_scale": self.sample_cfg_scale,
+            "sample_width": self.sample_width,
+            "sample_height": self.sample_height,
+            "sample_scheduler": self.sample_scheduler,
+        }
+
     def to_train_config(self) -> "TrainConfig":
         from src.trainer.config import ModelPartConfig, TrainConfig
 
-        return TrainConfig(
+        base = TrainConfig(
             base_model_name=self.base_model_name,
             output_dir=self.output_dir,
-            lora_name=self.lora_name,
-            sample_prompts=self.sample_prompts,
-            sample_negative_prompt=self.sample_negative_prompt,
-            sample_steps=self.sample_steps,
-            sample_cfg_scale=self.sample_cfg_scale,
-            sample_width=self.sample_width,
-            sample_height=self.sample_height,
-            sample_scheduler=self.sample_scheduler,
             attention_mechanism=self.attention_mechanism,
             mixed_precision=self.mixed_precision,
             vae_dtype=self.vae_dtype,
@@ -69,3 +70,4 @@ class SamplingConfig(BaseModel):
             text_encoder_1=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),
             text_encoder_2=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),
         )
+        return base.resolve_sampling(self)

@@ -43,6 +43,28 @@ class SampleScheduler(StrEnum):
     DPM_PP = "dpm++"
 
 
+RUNTIME_SAMPLING_FIELDS: tuple[str, ...] = (
+    "sample_prompts",
+    "sample_negative_prompt",
+    "sample_steps",
+    "sample_cfg_scale",
+    "sample_width",
+    "sample_height",
+    "sample_scheduler",
+)
+
+FORBIDDEN_INLINE_SAMPLING_KEYS: frozenset[str] = frozenset(
+    {
+        *RUNTIME_SAMPLING_FIELDS,
+        "post_training_sampling_config_id",
+    }
+)
+
+FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({"sample_after_training"})
+
+FORBIDDEN_DEPRECATED_CONCEPT_KEYS: frozenset[str] = frozenset({"image_dir"})
+
+
 class ConceptConfig(BaseModel):
     dataset_id: int
     image_dir: str | None = None
@@ -120,12 +142,16 @@ class TrainConfig(BaseModel):
     # Compile
     torch_compile: bool = False
 
-    # Checkpointing / sampling
+    # Checkpointing
+    checkpointing_enabled: bool = True
     save_every_n_epochs: int = Field(default=1, ge=1)
     resume_from_checkpoint: Optional[str] = None
+
+    # Sampling
+    sampling_enabled: bool = False
+    sampling_config_id: Optional[int] = None
     sample_every_n_epochs: Optional[int] = None
     sample_before_training: bool = False
-    sample_after_training: bool = False
     sample_prompts: list[str] = Field(default_factory=list)
     sample_negative_prompt: str = ""
     sample_steps: int = Field(default=30, ge=1)
@@ -133,7 +159,6 @@ class TrainConfig(BaseModel):
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_scheduler: SampleScheduler = SampleScheduler.EULER
-    post_training_sampling_config_id: Optional[int] = None
 
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
@@ -151,10 +176,19 @@ class TrainConfig(BaseModel):
             resolved.append(concept.model_copy(update={"image_dir": image_dir}))
         return self.model_copy(update={"concepts": resolved})
 
+    def resolve_sampling(self, sampling: "SamplingConfig") -> "TrainConfig":
+        from src.sampler.config import SamplingConfig
+
+        if not isinstance(sampling, SamplingConfig):
+            raise TypeError("sampling must be a SamplingConfig instance")
+        return self.model_copy(update=sampling.build_sampling_field_updates())
+
     def to_yaml(self) -> str:
         data = self.model_dump(mode="json", exclude_none=True)
         for concept in data.get("concepts", []):
             concept.pop("image_dir", None)
+        for field in RUNTIME_SAMPLING_FIELDS:
+            data.pop(field, None)
         return yaml.dump(data, allow_unicode=True, sort_keys=False)
 
     @classmethod

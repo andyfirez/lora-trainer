@@ -54,16 +54,13 @@ concepts:
 gradient_checkpointing: true
 mixed_precision: float16
 
-# Checkpointing & Sampling
+# Checkpointing
+checkpointing_enabled: true
 save_every_n_epochs: 1
-sample_every_n_epochs: null
-sample_before_training: false
-sample_after_training: false
-sample_prompts: []
-sample_negative_prompt: ''
-sample_steps: 30
-sample_cfg_scale: 7.5
-sample_scheduler: euler
+
+# Sampling
+sampling_enabled: false
+# sampling_config_id: 1
 
 # Logging (loss graph + optional TensorBoard)
 logging:
@@ -77,7 +74,6 @@ export const SamplingConfig = {
   DEFAULT_YAML: `# SDXL LoRA Sampling Configuration
 base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 output_dir: output
-lora_name: lora
 sample_prompts: []
 sample_negative_prompt: ''
 sample_steps: 30
@@ -89,6 +85,5 @@ attention_mechanism: sdpa
 mixed_precision: float16
 vae_dtype: auto
 tf32: true
-lora_paths: []
 `,
 };

@@ -86,15 +86,19 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
 
       <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4 space-y-3">
         <div className="text-xs text-[var(--muted)]">
-          LoRA files ({sampling?.lora_paths.length ?? 0})
+          {(sampling?.lora_paths.length ?? 0) > 0
+            ? `LoRA files (${sampling?.lora_paths.length})`
+            : "Base model only"}
         </div>
-        <ul className="space-y-1">
-          {sampling?.lora_paths.map((path) => (
-            <li key={path}>
-              <code className="text-green-400 text-sm break-all">{path}</code>
-            </li>
-          ))}
-        </ul>
+        {(sampling?.lora_paths.length ?? 0) > 0 && (
+          <ul className="space-y-1">
+            {sampling?.lora_paths.map((path) => (
+              <li key={path}>
+                <code className="text-green-400 text-sm break-all">{path}</code>
+              </li>
+            ))}
+          </ul>
+        )}
         {sampling?.source_job_id != null && (
           <div>
             <div className="text-xs text-[var(--muted)] mb-1">Source Job</div>

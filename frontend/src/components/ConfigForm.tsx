@@ -60,6 +60,19 @@ export default function ConfigForm({
       setError("Name is required");
       return;
     }
+    if (configType === "training") {
+      const parsed = config as Record<string, unknown>;
+      const concepts = parsed.concepts;
+      if (Array.isArray(concepts)) {
+        for (let i = 0; i < concepts.length; i++) {
+          const concept = concepts[i];
+          if (!concept || typeof concept !== "object" || (concept as Record<string, unknown>).dataset_id == null) {
+            setError(`Concept ${i + 1}: select a dataset`);
+            return;
+          }
+        }
+      }
+    }
     setSaving(true);
     setError(null);
     try {

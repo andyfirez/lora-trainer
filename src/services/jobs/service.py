@@ -15,6 +15,7 @@ from src.db.tables.job import Job, JobStatus, JobType
 from src.db.tables.job_config import ConfigType
 from src.db.tables.queue_entry import QueueEntry
 from src.sampler.config import SamplingConfig
+from src.sampler.output_paths import resolve_sampling_output_path
 from src.services.configs.exceptions import JobConfigNotFoundError
 from src.services.configs.service import JobConfigService
 from src.services.jobs.exceptions import (
@@ -84,8 +85,13 @@ class JobsService:
             )
         else:
             sampling_config = SamplingConfig.from_yaml(config.config_yaml)
-            paths = lora_paths if lora_paths is not None else sampling_config.lora_paths
-            self._validate_lora_paths(paths)
+            paths = (
+                lora_paths
+                if lora_paths is not None
+                else await self._resolve_sampling_lora_paths(source_job_id)
+            )
+            if paths:
+                self._validate_lora_paths(paths)
             self._validate_sample_prompts(sampling_config)
             job = Job(
                 job_type=JobType.SAMPLING,
@@ -99,7 +105,7 @@ class JobsService:
             sampling_config = SamplingConfig.from_yaml(job.config_yaml)
             await self._job_repo.update_output_path(
                 job,
-                str(self._default_sampling_output_dir(sampling_config, job.id)),
+                str(await self._resolve_sampling_output_dir(sampling_config, job.id, source_job_id)),
             )
             return job
         return await self._job_repo.add(job)
@@ -141,25 +147,25 @@ class JobsService:
         if training_job.id is None or training_job.job_type != JobType.TRAINING:
             return None
         train_config = TrainConfig.from_yaml(training_job.config_yaml)
-        if not train_config.sample_after_training:
+        if not train_config.sampling_enabled:
             return None
-        if train_config.post_training_sampling_config_id is None:
+        if not train_config.checkpointing_enabled:
+            return None
+        if train_config.sampling_config_id is None:
             return None
         try:
             sampling_config_entity = await self._config_service.get_config(
-                train_config.post_training_sampling_config_id
+                train_config.sampling_config_id
             )
         except JobConfigNotFoundError:
             return None
         if sampling_config_entity.config_type != ConfigType.SAMPLING:
             return None
-        checkpoint_paths = self._find_intermediate_checkpoints(train_config)
-        if not checkpoint_paths:
+        if not self._find_intermediate_checkpoints(train_config):
             raise SamplingCheckpointsNotFoundError(training_job.id)
         job = await self.create_from_config(
             sampling_config_entity.id,
             name=f"{training_job.name} post-train sampling",
-            lora_paths=[str(path) for path in checkpoint_paths],
             source_job_id=training_job.id,
         )
         await self.enqueue_job(job.id)
@@ -294,6 +300,15 @@ class JobsService:
             if not path.is_file():
                 raise SamplingLoRAPathNotFoundError(lora_path)
 
+    async def _resolve_sampling_lora_paths(self, source_job_id: int | None) -> list[str]:
+        if source_job_id is None:
+            return []
+        source_job = await self._job_repo.get_by_id(source_job_id)
+        if source_job is None or source_job.job_type != JobType.TRAINING:
+            return []
+        train_config = TrainConfig.from_yaml(source_job.config_yaml)
+        return [str(path) for path in self._find_intermediate_checkpoints(train_config)]
+
     def _find_intermediate_checkpoints(self, config: TrainConfig) -> list[Path]:
         work_dir = Path(config.output_dir) / config.lora_name
         ext = config.output_format.value
@@ -301,6 +316,15 @@ class JobsService:
         step_paths = list(work_dir.glob(f"{config.lora_name}_step*.{ext}"))
         return sorted(epoch_paths + step_paths, key=lambda path: (path.stat().st_mtime, path.name))
 
-    def _default_sampling_output_dir(self, config: SamplingConfig, job_id: int | None) -> Path:
-        run_id = job_id if job_id is not None else "new"
-        return Path(config.output_dir) / config.lora_name / "samples" / f"job_{run_id}"
+    async def _resolve_sampling_output_dir(
+        self,
+        sampling_config: SamplingConfig,
+        job_id: int,
+        source_job_id: int | None,
+    ) -> Path:
+        source_train_config: TrainConfig | None = None
+        if source_job_id is not None:
+            source_job = await self._job_repo.get_by_id(source_job_id)
+            if source_job is not None and source_job.job_type == JobType.TRAINING:
+                source_train_config = TrainConfig.from_yaml(source_job.config_yaml)
+        return resolve_sampling_output_path(sampling_config, job_id, source_train_config)

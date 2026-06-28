@@ -33,14 +33,11 @@ async def test_create_sampling_job_from_config(
     config_service: JobConfigService,
     tmp_path,
 ) -> None:
-    lora_path = tmp_path / "model.safetensors"
-    lora_path.write_bytes(b"lora")
     config = await config_service.create_config(
         name="sampling template",
         config_type=ConfigType.SAMPLING,
         config_yaml=f"""
 output_dir: {tmp_path.as_posix()}
-lora_name: demo
 sample_prompts:
   - test prompt
 """,
@@ -49,12 +46,11 @@ sample_prompts:
     job = await jobs_service.create_from_config(
         config.id,
         name="my sampling run",
-        lora_paths=[str(lora_path)],
     )
 
     assert job.job_type == JobType.SAMPLING
     assert job.name == "my sampling run"
     assert job.config_id == config.id
-    assert jobs_service.get_lora_paths(job) == [str(lora_path)]
+    assert jobs_service.get_lora_paths(job) == []
     assert job.output_path is not None
     assert f"job_{job.id}" in job.output_path

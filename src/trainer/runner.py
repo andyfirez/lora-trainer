@@ -18,12 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from src.db.repositories.dataset_repo import DatasetRepository
+from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
 from src.settings.app_settings import settings
 from src.trainer.concept_resolution import resolve_dataset_ids
 from src.trainer.config import TrainConfig
+from src.trainer.sampling_resolution import resolve_sampling_config
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 from src.trainer.sdxl.trainer import SDXLLoRATrainer, TrainingCancelledAfterSave
 from src.trainer.training_log import JobTrainingLogger, setup_tensorboard_writer
@@ -61,7 +63,7 @@ async def _update_progress(
     epoch_total: int,
 ) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await _get_active_job(repo, job_id)
         if job is not None:
             await repo.update_progress(
@@ -78,7 +80,7 @@ async def _update_progress(
 
 async def _update_sampling_status(job_id: int, status: str | None) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await _get_active_job(repo, job_id)
         if job is not None:
             await repo.update_sampling_status(job, status)
@@ -87,7 +89,7 @@ async def _update_sampling_status(job_id: int, status: str | None) -> None:
 
 async def _update_sampling_progress(job_id: int, step: int, total: int) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await _get_active_job(repo, job_id)
         if job is not None:
             await repo.update_sampling_progress(job, step, total)
@@ -96,7 +98,7 @@ async def _update_sampling_progress(job_id: int, step: int, total: int) -> None:
 
 async def _update_status(job_id: int, status: JobStatus, error: str | None = None) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await repo.get_by_id(job_id)
         if job is not None:
             if job.status == JobStatus.CANCELLED and status != JobStatus.CANCELLED:
@@ -107,7 +109,7 @@ async def _update_status(job_id: int, status: JobStatus, error: str | None = Non
 
 async def _set_log_path(job_id: int, log_path: str) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await repo.get_by_id(job_id)
         if job is not None:
             await repo.update_log_path(job, log_path)
@@ -116,7 +118,7 @@ async def _set_log_path(job_id: int, log_path: str) -> None:
 
 async def _set_output_path(job_id: int, output_path: str) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await repo.get_by_id(job_id)
         if job is not None:
             await repo.update_output_path(job, output_path)
@@ -125,7 +127,7 @@ async def _set_output_path(job_id: int, output_path: str) -> None:
 
 async def _update_checkpoint_info(job_id: int, checkpoint_path: str, epoch: int, step: int) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await repo.get_by_id(job_id)
         if job is not None:
             await repo.update_last_checkpoint(
@@ -139,7 +141,7 @@ async def _update_checkpoint_info(job_id: int, checkpoint_path: str, epoch: int,
 
 async def _clear_resume_state(job_id: int) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await repo.get_by_id(job_id)
         if job is not None:
             await repo.clear_resume_state(job)
@@ -148,7 +150,7 @@ async def _clear_resume_state(job_id: int) -> None:
 
 async def _consume_save_checkpoint_request(job_id: int) -> bool:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await repo.get_by_id(job_id)
         if job is None or not job.save_checkpoint_requested:
             return False
@@ -213,7 +215,7 @@ def _build_log_path(job_id: int) -> Path:
 
 async def _run(job_id: int) -> None:
     async with session_factory() as session:
-        repo = TrainingJobRepository(session)
+        repo = JobRepository(session)
         job = await repo.get_by_id(job_id)
         if job is None:
             logger.error("Job id=%d not found in DB", job_id)
@@ -224,9 +226,13 @@ async def _run(job_id: int) -> None:
     config = TrainConfig.from_yaml(config_yaml)
     async with session_factory() as session:
         dataset_repo = DatasetRepository(session)
+        config_repo = JobConfigRepository(session)
         dataset_ids = [concept.dataset_id for concept in config.concepts]
         image_dirs = await resolve_dataset_ids(dataset_ids, dataset_repo)
         config = config.resolve_concepts(image_dirs)
+        sampling = await resolve_sampling_config(config.sampling_config_id, config_repo)
+        if sampling is not None:
+            config = config.resolve_sampling(sampling)
     if resume_checkpoint_path:
         config.resume_from_checkpoint = resume_checkpoint_path
     is_resume_run = bool(config.resume_from_checkpoint)
@@ -304,7 +310,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run a LoRA training job")
     parser.add_argument("--job-id", type=int, required=True, help="TrainingJob ID in the database")
     args = parser.parse_args()
-    asyncio.run(_run(args.job_id))
+    try:
+        asyncio.run(_run(args.job_id))
+    except Exception as exc:
+        logger.exception("Unhandled error in training runner for job id=%d", args.job_id)
+        try:
+            asyncio.run(_update_status(args.job_id, JobStatus.FAILED, error=str(exc)))
+        except Exception:
+            logger.exception("Failed to persist error status for job id=%d", args.job_id)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

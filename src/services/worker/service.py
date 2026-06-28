@@ -42,18 +42,31 @@ class _ManagedProcess:
         return await asyncio.to_thread(self.proc.wait)
 
 
-def _drain_subprocess_output(proc: subprocess.Popen[bytes]) -> None:
+def _drain_subprocess_output(proc: subprocess.Popen[bytes]) -> list[str]:
     if proc.stdout is None:
-        return
-    for _line in proc.stdout:
-        pass
-
-
-def _log_subprocess_output(proc: subprocess.Popen[bytes], label: str) -> None:
-    if proc.stdout is None:
-        return
+        return []
+    lines: list[str] = []
     for line in proc.stdout:
-        logger.info("[%s] %s", label, line.decode(errors="replace").rstrip())
+        lines.append(line.decode(errors="replace").rstrip())
+    return lines
+
+
+def _log_subprocess_output(proc: subprocess.Popen[bytes], label: str) -> list[str]:
+    if proc.stdout is None:
+        return []
+    lines: list[str] = []
+    for line in proc.stdout:
+        text = line.decode(errors="replace").rstrip()
+        lines.append(text)
+        logger.info("[%s] %s", label, text)
+    return lines
+
+
+def _summarize_subprocess_failure(lines: list[str], return_code: int, *, max_lines: int = 20) -> str:
+    tail = [line for line in lines if line.strip()][-max_lines:]
+    if tail:
+        return f"Process exited with code {return_code}:\n" + "\n".join(tail)
+    return f"Process exited with code {return_code}"
 
 
 class QueueWorker:
@@ -154,7 +167,7 @@ class QueueWorker:
             job = await repo.get_by_id(job_id)
             return job is not None and job.status == JobStatus.CANCELLED
 
-    async def _finalize_job(self, job_id: int, return_code: int) -> None:
+    async def _finalize_job(self, job_id: int, return_code: int, output_lines: list[str] | None = None) -> None:
         async with session_factory() as session:
             job_repo = JobRepository(session)
             queue_repo = QueueRepository(session)
@@ -166,34 +179,50 @@ class QueueWorker:
                 await job_repo.clear_process_state(job)
                 await session.commit()
                 return
+            final_status = job.status
             if job.status == JobStatus.RUNNING:
-                status = JobStatus.COMPLETED if return_code == 0 else JobStatus.FAILED
-                error_message = None if return_code == 0 else f"Process exited with code {return_code}"
-                await job_repo.update_status(job, status, error_message=error_message)
+                final_status = JobStatus.COMPLETED if return_code == 0 else JobStatus.FAILED
+                if return_code == 0:
+                    error_message = None
+                elif job.error_message:
+                    error_message = job.error_message
+                else:
+                    error_message = _summarize_subprocess_failure(output_lines or [], return_code)
+                await job_repo.update_status(job, final_status, error_message=error_message)
                 await session.commit()
-                logger.info("Job id=%d finished with status=%s (exit code %d)", job_id, status, return_code)
-                if return_code == 0 and status == JobStatus.COMPLETED and job.job_type == JobType.TRAINING:
-                    jobs_service = JobsService(
-                        job_repo,
-                        queue_repo,
-                        JobConfigRepository(session),
-                        DatasetRepository(session),
+                logger.info(
+                    "Job id=%d finished with status=%s (exit code %d)",
+                    job_id,
+                    final_status,
+                    return_code,
+                )
+
+            if (
+                return_code == 0
+                and final_status == JobStatus.COMPLETED
+                and job.job_type == JobType.TRAINING
+            ):
+                jobs_service = JobsService(
+                    job_repo,
+                    queue_repo,
+                    JobConfigRepository(session),
+                    DatasetRepository(session),
+                )
+                try:
+                    sampling_job = await jobs_service.create_auto_sampling_for_training_job(job)
+                except SamplingCheckpointsNotFoundError:
+                    logger.warning(
+                        "Post-training sampling requested for job id=%d, but no checkpoints were found",
+                        job_id,
                     )
-                    try:
-                        sampling_job = await jobs_service.create_auto_sampling_for_training_job(job)
-                    except SamplingCheckpointsNotFoundError:
-                        logger.warning(
-                            "Post-training sampling requested for job id=%d, but no checkpoints were found",
-                            job_id,
-                        )
-                        sampling_job = None
-                    if sampling_job is not None:
-                        await session.commit()
-                        logger.info(
-                            "Queued post-training sampling job id=%d for training job id=%d",
-                            sampling_job.id,
-                            job_id,
-                        )
+                    sampling_job = None
+                if sampling_job is not None:
+                    await session.commit()
+                    logger.info(
+                        "Queued post-training sampling job id=%d for training job id=%d",
+                        sampling_job.id,
+                        job_id,
+                    )
 
     async def _watch_cancellations(self) -> None:
         interval = settings.training.cancel_poll_interval_seconds
@@ -227,6 +256,7 @@ class QueueWorker:
 
         await self._dequeue_entry(entry.id)
         managed: _ManagedProcess | None = None
+        output_lines: list[str] = []
         try:
             logger.info("Spawning %s subprocess for job id=%d", job_type, job_id)
             proc = subprocess.Popen(
@@ -240,12 +270,10 @@ class QueueWorker:
                 await self._mark_job_running(job_id, managed.pid)
 
             if self._echo_subprocess_output:
-                await asyncio.gather(
-                    asyncio.to_thread(_log_subprocess_output, proc, f"{job_type} {job_id}"),
-                    managed.wait(),
-                )
+                output_lines = await asyncio.to_thread(_log_subprocess_output, proc, f"{job_type} {job_id}")
+                await managed.wait()
             else:
-                await asyncio.gather(
+                output_lines, _ = await asyncio.gather(
                     asyncio.to_thread(_drain_subprocess_output, proc),
                     managed.wait(),
                 )
@@ -255,7 +283,7 @@ class QueueWorker:
         finally:
             self._active_jobs.pop(job_id, None)
             if managed is not None:
-                await self._finalize_job(job_id, managed.returncode or 0)
+                await self._finalize_job(job_id, managed.returncode or 0, output_lines)
 
     async def _poll_loop(self) -> None:
         interval = settings.training.worker_poll_interval_seconds

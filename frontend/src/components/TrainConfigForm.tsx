@@ -1,17 +1,19 @@
 "use client";
 
+import { useEffect } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { Plus, X } from "lucide-react";
+import { parse as yamlParse } from "yaml";
 import PathInput from "@/components/PathInput";
-import SampleSamplerFields from "@/components/SampleSamplerFields";
+import { configsApi } from "@/lib/api/configs";
 import { datasetsApi } from "@/lib/api/datasets";
 import {
   applyOptimizerPreset,
   optimizerOptions,
   type OptimizerType,
 } from "@/lib/optimizerPresets";
-import type { Dataset } from "@/types";
+import type { Dataset, JobConfig } from "@/types";
 
 type Config = Record<string, any>;
 
@@ -69,6 +71,7 @@ function NumberInput({
   max,
   step,
   placeholder,
+  disabled,
 }: {
   label: string;
   value: number | null | undefined;
@@ -77,6 +80,7 @@ function NumberInput({
   max?: number;
   step?: number;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <Field label={label}>
@@ -88,6 +92,7 @@ function NumberInput({
         max={max}
         step={step}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(e) => {
           const raw = e.target.value;
           onChange(raw === "" ? null : Number(raw));
@@ -125,17 +130,20 @@ function CheckboxInput({
   label,
   checked,
   onChange,
+  disabled,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer">
+    <label className={`flex items-center gap-2 ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
       <input
         type="checkbox"
         className="w-4 h-4 rounded accent-[var(--accent)]"
         checked={!!checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
       />
       <span className="text-sm text-white">{label}</span>
@@ -158,20 +166,118 @@ const lrSchedulerOptions = [
   { value: "polynomial", label: "Polynomial" },
 ];
 
+const INLINE_SAMPLING_KEYS = [
+  "sample_prompts",
+  "sample_negative_prompt",
+  "sample_steps",
+  "sample_cfg_scale",
+  "sample_width",
+  "sample_height",
+  "sample_scheduler",
+  "post_training_sampling_config_id",
+  "sample_after_training",
+] as const;
+
+const LEGACY_CONCEPT_KEYS = ["image_dir"] as const;
+
+function normalizeConcept(concept: unknown, datasets?: Dataset[]): Config {
+  if (!concept || typeof concept !== "object") return concept as Config;
+  const raw = concept as Config;
+  let datasetId = raw.dataset_id as number | null | undefined;
+  const legacyDir = raw.image_dir as string | undefined;
+
+  if (datasetId == null && legacyDir && datasets?.length) {
+    datasetId = datasets.find((d) => d.image_dir === legacyDir)?.id;
+  }
+  if (datasetId == null && datasets?.length) {
+    datasetId = datasets[0].id;
+  }
+
+  const item = { ...raw };
+  if (datasetId != null) {
+    item.dataset_id = datasetId;
+  }
+  if (item.dataset_id != null) {
+    for (const key of LEGACY_CONCEPT_KEYS) {
+      delete item[key];
+    }
+  }
+  return item;
+}
+
+function sanitizeTrainConfig(next: Config, datasets?: Dataset[]): Config {
+  let cleaned = stripInlineSamplingFields(next);
+  const concepts = cleaned.concepts;
+  if (Array.isArray(concepts)) {
+    cleaned = {
+      ...cleaned,
+      concepts: concepts.map((concept) => normalizeConcept(concept, datasets)),
+    };
+  }
+  return cleaned;
+}
+
+function stripInlineSamplingFields(next: Config): Config {
+  const cleaned = { ...next };
+  for (const key of INLINE_SAMPLING_KEYS) {
+    delete cleaned[key];
+  }
+  return cleaned;
+}
+
+function samplingPreview(configYaml: string): {
+  promptCount: number;
+  steps: number;
+  scheduler: string;
+} | null {
+  try {
+    const parsed = yamlParse(configYaml) as Record<string, unknown>;
+    const prompts = Array.isArray(parsed.sample_prompts) ? parsed.sample_prompts : [];
+    return {
+      promptCount: prompts.length,
+      steps: typeof parsed.sample_steps === "number" ? parsed.sample_steps : 30,
+      scheduler: typeof parsed.sample_scheduler === "string" ? parsed.sample_scheduler : "euler",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function TrainConfigForm({ config, onChange }: TrainConfigFormProps) {
+  const concepts: Config[] = config.concepts ?? [];
+  const { data: datasets, isLoading: datasetsLoading } = useSWR("/datasets", () => datasetsApi.list());
+  const { data: samplingConfigs, isLoading: samplingConfigsLoading } = useSWR(
+    "/configs/sampling",
+    () => configsApi.list("sampling"),
+  );
+
+  function emit(next: Config) {
+    onChange(sanitizeTrainConfig(next, datasets));
+  }
+
   function set(key: string, value: unknown) {
-    onChange({ ...config, [key]: value });
+    let next: Config = { ...config, [key]: value };
+    if (key === "checkpointing_enabled" && value === false) {
+      next = { ...next, sampling_enabled: false };
+    }
+    if (key === "cache_latents" && value === false) {
+      next = { ...next, cache_latents_to_disk: false };
+    }
+    if (key === "cache_text_encoder_outputs" && value === false) {
+      next = { ...next, cache_text_encoder_outputs_to_disk: false };
+    }
+    emit(next);
   }
 
   function setNested(parent: string, key: string, value: unknown) {
-    onChange({
+    emit({
       ...config,
       [parent]: { ...(config[parent] ?? {}), [key]: value },
     });
   }
 
   function setOptimizerType(type: OptimizerType) {
-    onChange(applyOptimizerPreset(config, type));
+    emit(applyOptimizerPreset(config, type));
   }
 
   const optimizerType: OptimizerType = config.optimizer?.type ?? "adamw_8bit";
@@ -179,18 +285,24 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
   const isAdafactor = optimizerType === "adafactor";
   const isProdigy = optimizerType === "prodigy";
 
-  const concepts: Config[] = config.concepts ?? [];
-  const samplePrompts: string[] = config.sample_prompts ?? [];
-  const { data: datasets, isLoading: datasetsLoading } = useSWR("/datasets", () => datasetsApi.list());
-
   const datasetOptions = (datasets ?? []).map((d: Dataset) => ({
     value: String(d.id),
     label: d.name,
   }));
 
+  const samplingConfigOptions = (samplingConfigs ?? []).map((c: JobConfig) => ({
+    value: String(c.id),
+    label: c.name,
+  }));
+
   function datasetById(id: number | undefined): Dataset | undefined {
     if (id == null) return undefined;
     return datasets?.find((d) => d.id === id);
+  }
+
+  function samplingConfigById(id: number | undefined): JobConfig | undefined {
+    if (id == null) return undefined;
+    return samplingConfigs?.find((c) => c.id === id);
   }
 
   function updateConcept(i: number, key: string, value: unknown) {
@@ -211,18 +323,25 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
     set("concepts", concepts.filter((_, idx) => idx !== i));
   }
 
-  function updatePrompt(i: number, value: string) {
-    const next = samplePrompts.map((p, idx) => (idx === i ? value : p));
-    set("sample_prompts", next);
-  }
+  const selectedSamplingConfig = samplingConfigById(config.sampling_config_id);
+  const selectedSamplingPreview = selectedSamplingConfig
+    ? samplingPreview(selectedSamplingConfig.config_yaml)
+    : null;
+  const checkpointingEnabled = config.checkpointing_enabled ?? true;
+  const cacheLatentsEnabled = config.cache_latents ?? true;
+  const cacheTextEncoderEnabled = config.cache_text_encoder_outputs ?? true;
+  const samplingEnabled = config.sampling_enabled ?? false;
+  const samplingConfigRequired = samplingEnabled;
 
-  function addPrompt() {
-    set("sample_prompts", [...samplePrompts, ""]);
-  }
-
-  function removePrompt(i: number) {
-    set("sample_prompts", samplePrompts.filter((_, idx) => idx !== i));
-  }
+  useEffect(() => {
+    if (datasetsLoading || !datasets?.length) return;
+    const normalized = sanitizeTrainConfig(config, datasets);
+    const before = JSON.stringify(config.concepts ?? []);
+    const after = JSON.stringify(normalized.concepts ?? []);
+    if (before !== after) {
+      onChange(normalized);
+    }
+  }, [config, datasets, datasetsLoading, onChange]);
 
   return (
     <div className="space-y-5">
@@ -522,10 +641,13 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                           label="Dataset"
                           value={concept.dataset_id != null ? String(concept.dataset_id) : ""}
                           onChange={(v) => updateConcept(i, "dataset_id", Number(v))}
-                          options={datasetOptions}
+                          options={[{ value: "", label: "Select dataset…" }, ...datasetOptions]}
                         />
                         {selectedDataset && (
                           <p className="text-xs text-[var(--muted)] mt-1 break-all">{selectedDataset.image_dir}</p>
+                        )}
+                        {concept.dataset_id == null && (
+                          <p className="text-xs text-red-400 mt-1">Select a dataset</p>
                         )}
                         {concept.dataset_id != null && !selectedDataset && (
                           <p className="text-xs text-red-400 mt-1">Dataset not found</p>
@@ -602,26 +724,38 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
             <CheckboxInput
               label="Cache Latents (RAM)"
-              checked={config.cache_latents ?? true}
+              checked={cacheLatentsEnabled}
               onChange={(v) => set("cache_latents", v)}
             />
             <CheckboxInput
-              label="Cache Latents to Disk (.npz)"
-              checked={config.cache_latents_to_disk ?? false}
-              onChange={(v) => set("cache_latents_to_disk", v)}
-            />
-            <CheckboxInput
               label="Cache Text Encoder Outputs (RAM)"
-              checked={config.cache_text_encoder_outputs ?? true}
+              checked={cacheTextEncoderEnabled}
               onChange={(v) => set("cache_text_encoder_outputs", v)}
             />
-            <CheckboxInput
-              label="Cache Text Encoder Outputs to Disk"
-              checked={config.cache_text_encoder_outputs_to_disk ?? false}
-              onChange={(v) => set("cache_text_encoder_outputs_to_disk", v)}
-            />
+            <div className="space-y-1">
+              <CheckboxInput
+                label="Cache Latents to Disk (.npz)"
+                checked={config.cache_latents_to_disk ?? false}
+                onChange={(v) => set("cache_latents_to_disk", v)}
+                disabled={!cacheLatentsEnabled}
+              />
+              {!cacheLatentsEnabled && (
+                <p className="text-xs text-[var(--muted)]">Requires RAM caching to be enabled.</p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <CheckboxInput
+                label="Cache Text Encoder Outputs to Disk"
+                checked={config.cache_text_encoder_outputs_to_disk ?? false}
+                onChange={(v) => set("cache_text_encoder_outputs_to_disk", v)}
+                disabled={!cacheTextEncoderEnabled}
+              />
+              {!cacheTextEncoderEnabled && (
+                <p className="text-xs text-[var(--muted)]">Requires RAM caching to be enabled.</p>
+              )}
+            </div>
           </div>
-          {(config.cache_text_encoder_outputs ?? true) && (config.unet?.train === false) && (config.text_encoder_1?.train || config.text_encoder_2?.train) && (
+          {cacheTextEncoderEnabled && (config.unet?.train === false) && (config.text_encoder_1?.train || config.text_encoder_2?.train) && (
             <p className="text-xs text-red-400 mt-1">
               Cache Text Encoder Outputs is incompatible with training text encoders. Disable one of them.
             </p>
@@ -673,97 +807,80 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
         </div>
       </section>
 
-      {/* Checkpointing & Sampling */}
+      {/* Checkpointing */}
       <section className={sectionClass}>
-        <div className={sectionTitleClass}>Checkpointing & Sampling</div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className={sectionTitleClass}>Checkpointing</div>
+        <div className="space-y-4">
+          <CheckboxInput
+            label="Enable intermediate checkpoints"
+            checked={checkpointingEnabled}
+            onChange={(v) => set("checkpointing_enabled", v)}
+          />
           <NumberInput
             label="Save Every N Epochs"
             value={config.save_every_n_epochs}
             onChange={(v) => set("save_every_n_epochs", v)}
             min={1}
             placeholder="1"
-          />
-          <div className="flex items-center pb-1">
-            <CheckboxInput
-              label="Run sampling after training for intermediate checkpoints"
-              checked={config.sample_after_training ?? false}
-              onChange={(v) => set("sample_after_training", v)}
-            />
-          </div>
-          <NumberInput
-            label="Sample Steps"
-            value={config.sample_steps ?? 30}
-            onChange={(v) => set("sample_steps", v)}
-            min={1}
-            placeholder="30"
-          />
-          <NumberInput
-            label="Sample CFG Scale"
-            value={config.sample_cfg_scale ?? 7.5}
-            onChange={(v) => set("sample_cfg_scale", v)}
-            min={0}
-            step={0.5}
-            placeholder="7.5"
-          />
-          <NumberInput
-            label="Sample Width (optional)"
-            value={config.sample_width ?? null}
-            onChange={(v) => set("sample_width", v)}
-            min={64}
-            max={2048}
-            step={64}
-            placeholder="same as resolution"
-          />
-          <NumberInput
-            label="Sample Height (optional)"
-            value={config.sample_height ?? null}
-            onChange={(v) => set("sample_height", v)}
-            min={64}
-            max={2048}
-            step={64}
-            placeholder="same as resolution"
-          />
-          <SampleSamplerFields
-            sampleScheduler={config.sample_scheduler ?? "euler"}
-            onChange={set}
+            disabled={!checkpointingEnabled}
           />
         </div>
-        <div className="mt-3">
-          <TextInput
-            label="Negative Prompt"
-            value={config.sample_negative_prompt ?? ""}
-            onChange={(v) => set("sample_negative_prompt", v)}
-            placeholder="low quality, blurry, ..."
+      </section>
+
+      {/* Sampling */}
+      <section className={`${sectionClass} ${!checkpointingEnabled ? "opacity-60" : ""}`}>
+        <div className={sectionTitleClass}>Sampling</div>
+        <div className="space-y-4">
+          <CheckboxInput
+            label="Run sampling after training for intermediate checkpoints"
+            checked={samplingEnabled}
+            onChange={(v) => set("sampling_enabled", v)}
+            disabled={!checkpointingEnabled}
           />
-        </div>
-        <div className="space-y-2 mt-2">
-          <div className="text-xs font-medium text-[var(--muted)]">Sample Prompts</div>
-          {samplePrompts.map((prompt, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                type="text"
-                className={inputClass}
-                value={prompt}
-                onChange={(e) => updatePrompt(i, e.target.value)}
-                placeholder={`Prompt ${i + 1}`}
-              />
-              <button
-                type="button"
-                onClick={() => removePrompt(i)}
-                className="p-1.5 rounded hover:bg-white/10 text-[var(--muted)] hover:text-red-400 shrink-0"
-              >
-                <X size={13} />
-              </button>
+          {!checkpointingEnabled && (
+            <p className="text-xs text-[var(--muted)]">Sampling requires checkpointing to be enabled.</p>
+          )}
+          {checkpointingEnabled && samplingEnabled && (
+            <div className="space-y-3">
+              <div className="text-xs font-medium text-[var(--muted)]">Sampling Config</div>
+              {samplingConfigsLoading ? (
+                <div className="text-sm text-[var(--muted)]">Loading sampling configs…</div>
+              ) : !samplingConfigs?.length ? (
+                <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center space-y-3">
+                  <p className="text-sm text-[var(--muted)]">
+                    No sampling configs yet. Create one to configure preview prompts and sampler settings.
+                  </p>
+                  <Link
+                    href="/configs/new?type=sampling"
+                    className="inline-flex items-center gap-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium"
+                  >
+                    Create Sampling Config
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <SelectInput
+                    label="Sampling Config"
+                    value={config.sampling_config_id != null ? String(config.sampling_config_id) : ""}
+                    onChange={(v) => set("sampling_config_id", v ? Number(v) : null)}
+                    options={[{ value: "", label: "None" }, ...samplingConfigOptions]}
+                  />
+                  {samplingEnabled && selectedSamplingPreview && (
+                    <p className="text-xs text-[var(--muted)]">
+                      {selectedSamplingPreview.promptCount} prompt(s), {selectedSamplingPreview.steps} steps,{" "}
+                      {selectedSamplingPreview.scheduler} scheduler
+                    </p>
+                  )}
+                  {samplingEnabled && config.sampling_config_id != null && !selectedSamplingConfig && (
+                    <p className="text-xs text-red-400">Sampling config not found</p>
+                  )}
+                  {samplingConfigRequired && config.sampling_config_id == null && (
+                    <p className="text-xs text-red-400">Select a sampling config when sampling is enabled</p>
+                  )}
+                </>
+              )}
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={addPrompt}
-            className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-white border border-dashed border-[var(--border)] hover:border-white/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
-          >
-            <Plus size={13} /> Add Prompt
-          </button>
+          )}
         </div>
       </section>
     </div>

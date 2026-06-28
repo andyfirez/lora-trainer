@@ -456,7 +456,7 @@ class SDXLLoRATrainer:
                             log.info("Cancellation requested with checkpoint save: %s", checkpoint_path)
                             raise TrainingCancelledAfterSave()
 
-                if (epoch + 1) % config.save_every_n_epochs == 0:
+                if config.checkpointing_enabled and (epoch + 1) % config.save_every_n_epochs == 0:
                     self._save_checkpoint(
                         unet,
                         text_encoder_1,

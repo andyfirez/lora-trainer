@@ -5,6 +5,17 @@ from src.sampler.sdxl.service import SDXLLoRASampler
 from src.trainer.config import TrainConfig
 
 
+def test_total_diffusion_steps_with_empty_lora_paths() -> None:
+    config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
+    sampler = SDXLLoRASampler(
+        config,
+        lora_paths=[],
+        output_dir=Path("out"),
+    )
+
+    assert sampler._total_diffusion_steps() == 60
+
+
 def test_total_diffusion_steps_counts_all_loras_prompts_and_steps() -> None:
     config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
     sampler = SDXLLoRASampler(

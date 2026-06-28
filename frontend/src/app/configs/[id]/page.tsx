@@ -5,7 +5,6 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Play, Loader2, X, Copy } from "lucide-react";
-import { parse as yamlParse } from "yaml";
 import { configsApi } from "@/lib/api/configs";
 import ConfigForm from "@/components/ConfigForm";
 
@@ -52,13 +51,6 @@ export default function ConfigDetailPage({ params }: Props) {
     setRunError(null);
     try {
       let body: Parameters<typeof configsApi.createJob>[1] = { name: jobName.trim(), enqueue };
-      if (config?.config_type === "sampling") {
-        const parsed = yamlParse(config.config_yaml) as { lora_paths?: string[] };
-        const loraPaths = (parsed.lora_paths ?? []).map((p) => p.trim()).filter(Boolean);
-        if (loraPaths.length) {
-          body = { ...body, lora_paths: loraPaths };
-        }
-      }
       const job = await configsApi.createJob(configId, body);
       setShowRunModal(false);
       router.push(`/jobs/${job.id}`);
