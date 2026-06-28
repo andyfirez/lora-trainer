@@ -582,12 +582,8 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             placeholder="same as resolution"
           />
           <SampleSamplerFields
-            useReforgeSampler={config.use_reforge_sampler ?? false}
             sampleScheduler={config.sample_scheduler ?? "euler"}
-            sampleSampler={config.sample_sampler ?? "euler_a"}
-            sampleSchedulerMode={config.sample_scheduler_mode ?? "normal"}
             onChange={set}
-            reforgeCheckboxLabel="Use reForge-style sampler preview path"
           />
         </div>
         <div className="mt-3">

@@ -9,21 +9,14 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 import torch
-from diffusers import (
-    DDIMScheduler,
-    DDPMScheduler,
-    DPMSolverMultistepScheduler,
-    EulerAncestralDiscreteScheduler,
-    EulerDiscreteScheduler,
-    StableDiffusionXLPipeline,
-)
+from diffusers import DDPMScheduler, StableDiffusionXLPipeline
 from peft import LoraConfig, get_peft_model
 from torch import Tensor
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
 from src.trainer.attention import configure_unet_attention
-from src.trainer.config import Optimizer, SampleScheduler, TrainConfig, WeightDtype
+from src.trainer.config import Optimizer, TrainConfig, WeightDtype
 from src.trainer.progress import TrainProgress
 from src.trainer.sdxl.dataset import (
     ConceptDataset,
@@ -35,7 +28,12 @@ from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_sta
 from src.trainer.sdxl.latent_cache import build_latent_cache
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, apply_lora_state_to_module
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
-from src.trainer.sdxl.reforge_sampler import generate_preview_image
+from src.trainer.sdxl.sampling import (
+    PromptEmbedCache,
+    build_inference_scheduler,
+    precompute_all_sample_embeds,
+    prepare_vae_for_decode,
+)
 from src.trainer.sdxl.te_cache import build_te_cache
 from src.trainer.training_log import JobTrainingLogger
 
@@ -46,20 +44,6 @@ _DTYPE_MAP = {
     WeightDtype.FLOAT_16: torch.float16,
     WeightDtype.BFLOAT_16: torch.bfloat16,
 }
-
-_SCHEDULER_MAP = {
-    SampleScheduler.EULER: EulerDiscreteScheduler,
-    SampleScheduler.EULER_A: EulerAncestralDiscreteScheduler,
-    SampleScheduler.DDIM: DDIMScheduler,
-    SampleScheduler.DPM_PP: DPMSolverMultistepScheduler,
-}
-
-
-def _build_inference_scheduler(
-    sample_scheduler: SampleScheduler,
-    noise_scheduler: DDPMScheduler,
-) -> object:
-    return _SCHEDULER_MAP[sample_scheduler].from_config(noise_scheduler.config)
 
 
 class TrainingCancelledAfterSave(Exception):
@@ -754,33 +738,46 @@ class SDXLLoRATrainer:
             height = config.sample_height or config.resolution
             autocast_dtype = _DTYPE_MAP[config.mixed_precision]
 
-            pipe: Optional[StableDiffusionXLPipeline] = None
-            if not config.use_reforge_sampler:
-                inference_scheduler = _build_inference_scheduler(config.sample_scheduler, noise_scheduler)
-                pipe = StableDiffusionXLPipeline(
-                    vae=vae,
-                    text_encoder=inference_te1,
-                    text_encoder_2=inference_te2,
-                    tokenizer=tokenizer_1,
-                    tokenizer_2=tokenizer_2,
-                    unet=inference_unet,
-                    scheduler=inference_scheduler,
-                )
-                pipe.set_progress_bar_config(disable=True)
-            else:
-                log.info(
-                    "[sampling e%d] using reForge sampler path (%s, %s)",
-                    epoch,
-                    config.sample_sampler,
-                    config.sample_scheduler_mode,
-                )
+            inference_scheduler = build_inference_scheduler(config.sample_scheduler, noise_scheduler)
+            pipe = StableDiffusionXLPipeline(
+                vae=vae,
+                text_encoder=inference_te1,
+                text_encoder_2=inference_te2,
+                tokenizer=tokenizer_1,
+                tokenizer_2=tokenizer_2,
+                unet=inference_unet,
+                scheduler=inference_scheduler,
+            )
+            pipe.set_progress_bar_config(disable=True)
             inference_unet.eval()
             inference_te1.eval()
             inference_te2.eval()
             log.info("[sampling e%d] move/build pipeline: %.2fs", epoch, time.perf_counter() - build_started_at)
 
+            embed_started_at = time.perf_counter()
+            negative_prompt = config.sample_negative_prompt or ""
+            prompt_embed_cache = PromptEmbedCache()
+            all_embeds = precompute_all_sample_embeds(
+                sample_prompts=config.sample_prompts,
+                negative_prompt=negative_prompt,
+                tokenizer_1=tokenizer_1,
+                tokenizer_2=tokenizer_2,
+                text_encoder_1=inference_te1,
+                text_encoder_2=inference_te2,
+                device=device,
+                dtype=autocast_dtype,
+                cache=prompt_embed_cache,
+            )
+            shared_negative_embeds = all_embeds[0].negative_prompt_embeds
+            shared_negative_pooled = all_embeds[0].negative_pooled_prompt_embeds
+            inference_te1.to("cpu")
+            inference_te2.to("cpu")
+            torch.cuda.empty_cache()
+            prepare_vae_for_decode(vae)
+            log.info("[sampling e%d] precompute embeds + TE offload: %.2fs", epoch, time.perf_counter() - embed_started_at)
+
             with torch.no_grad():
-                for i, prompt in enumerate(config.sample_prompts):
+                for i, embeds in enumerate(all_embeds):
                     if sampling_status_callback is not None:
                         sampling_status_callback(f"Sampling epoch {epoch} — image {i + 1}/{n_prompts}")
                     if sampling_progress_callback is not None:
@@ -804,85 +801,20 @@ class SDXLLoRATrainer:
                         return callback_kwargs
 
                     image_started_at = time.perf_counter()
-                    if config.use_reforge_sampler:
-                        prompt_embeds, pooled_prompt_embeds = self._encode_prompt(
-                            [prompt],
-                            tokenizer_1,
-                            tokenizer_2,
-                            inference_te1,
-                            inference_te2,
-                            device,
-                            autocast_dtype,
-                            train_te1=False,
-                            train_te2=False,
-                        )
-                        negative_prompt_embeds, negative_pooled_prompt_embeds = self._encode_prompt(
-                            [config.sample_negative_prompt or ""],
-                            tokenizer_1,
-                            tokenizer_2,
-                            inference_te1,
-                            inference_te2,
-                            device,
-                            autocast_dtype,
-                            train_te1=False,
-                            train_te2=False,
-                        )
-                        add_time_ids = self._get_add_time_ids(
-                            original_size=(height, width),
-                            crops_coords_top_left=(0, 0),
-                            target_size=(height, width),
-                            dtype=autocast_dtype,
-                            device=device,
-                            batch_size=1,
-                        )
-
-                        def _on_reforge_step(completed: int, total: int) -> None:
-                            if sampling_progress_callback is not None:
-                                sampling_progress_callback(completed, total)
-                            if completed % log_interval == 0 or completed == total:
-                                log.info(
-                                    "[sample %d/%d e%d] step %d/%d",
-                                    i + 1,
-                                    n_prompts,
-                                    epoch,
-                                    completed,
-                                    total,
-                                )
-
-                        image = generate_preview_image(
-                            unet=inference_unet,
-                            vae=vae,
-                            noise_scheduler_config=noise_scheduler.config,
-                            sampler_name=config.sample_sampler.value,
-                            scheduler_mode=config.sample_scheduler_mode.value,
-                            prompt_embeds=prompt_embeds,
-                            negative_prompt_embeds=negative_prompt_embeds,
-                            pooled_prompt_embeds=pooled_prompt_embeds,
-                            negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
-                            add_time_ids=add_time_ids,
+                    with torch.autocast(device_type=device.type, dtype=autocast_dtype):
+                        image = pipe(
+                            prompt_embeds=embeds.prompt_embeds,
+                            negative_prompt_embeds=shared_negative_embeds,
+                            pooled_prompt_embeds=embeds.pooled_prompt_embeds,
+                            negative_pooled_prompt_embeds=shared_negative_pooled,
                             width=width,
                             height=height,
                             num_inference_steps=config.sample_steps,
                             guidance_scale=config.sample_cfg_scale,
                             generator=generator,
-                            autocast_dtype=autocast_dtype,
-                            device=device,
-                            on_step_end=_on_reforge_step,
-                        )
-                    else:
-                        assert pipe is not None
-                        with torch.autocast(device_type=device.type, dtype=autocast_dtype):
-                            image = pipe(
-                                prompt=prompt,
-                                negative_prompt=config.sample_negative_prompt or None,
-                                width=width,
-                                height=height,
-                                num_inference_steps=config.sample_steps,
-                                guidance_scale=config.sample_cfg_scale,
-                                generator=generator,
-                                callback_on_step_end=_on_step_end,
-                                callback_on_step_end_tensor_inputs=[],
-                            ).images[0]
+                            callback_on_step_end=_on_step_end,
+                            callback_on_step_end_tensor_inputs=[],
+                        ).images[0]
 
                     filename = f"{config.lora_name}_epoch{epoch}_{i:02d}.png"
                     image.save(sample_dir / filename)

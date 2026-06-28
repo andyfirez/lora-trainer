@@ -10,22 +10,29 @@ from typing import Any, Callable
 import torch
 from diffusers import StableDiffusionXLPipeline
 from peft import LoraConfig, get_peft_model
-from torch import Tensor
 
 from src.trainer.attention import configure_unet_attention
-from src.trainer.config import TrainConfig
+from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
-from src.trainer.sdxl.reforge_sampler import generate_preview_image
-from src.trainer.sdxl.trainer import _DTYPE_MAP, _build_inference_scheduler
+from src.trainer.sdxl.sampling import (
+    PromptEmbedCache,
+    SamplePromptEmbeds,
+    build_inference_scheduler,
+    precompute_all_sample_embeds,
+    prepare_vae_for_decode,
+)
 
 logger = logging.getLogger(__name__)
 
 ProgressStatusCallback = Callable[[str | None], None]
 ProgressCallback = Callable[[int, int], None]
 
-PromptEmbedCacheKey = tuple[str, str]
-PromptEmbedCacheValue = tuple[Tensor, Tensor, Tensor, Tensor]
+_DTYPE_MAP = {
+    WeightDtype.FLOAT_32: torch.float32,
+    WeightDtype.FLOAT_16: torch.float16,
+    WeightDtype.BFLOAT_16: torch.bfloat16,
+}
 
 
 @dataclass
@@ -57,7 +64,7 @@ class SDXLLoRASampler:
         self._progress_status_callback = progress_status_callback
         self._progress_callback = progress_callback
         self._log = log or logger
-        self._prompt_embed_cache: dict[PromptEmbedCacheKey, PromptEmbedCacheValue] = {}
+        self._prompt_embed_cache = PromptEmbedCache()
 
     def run(self) -> None:
         config = self._config
@@ -188,7 +195,6 @@ class SDXLLoRASampler:
         unet_merged = False
         te1_merged = False
         te2_merged = False
-        pipe: StableDiffusionXLPipeline | None = None
         try:
             unet.merge_adapter()
             unet_merged = True
@@ -212,37 +218,54 @@ class SDXLLoRASampler:
             width = config.sample_width or config.resolution
             height = config.sample_height or config.resolution
             autocast_dtype = _DTYPE_MAP[config.mixed_precision]
-            if not config.use_reforge_sampler:
-                pipe = StableDiffusionXLPipeline(
-                    vae=stack.vae,
-                    text_encoder=inference_te1,
-                    text_encoder_2=inference_te2,
-                    tokenizer=stack.tokenizer_1,
-                    tokenizer_2=stack.tokenizer_2,
-                    unet=inference_unet,
-                    scheduler=_build_inference_scheduler(config.sample_scheduler, stack.noise_scheduler),
-                )
-                pipe.set_progress_bar_config(disable=True)
+
+            if config.text_encoder_1.train or config.text_encoder_2.train:
+                self._prompt_embed_cache.clear()
+
+            negative_prompt = config.sample_negative_prompt or ""
+            all_embeds = precompute_all_sample_embeds(
+                sample_prompts=config.sample_prompts,
+                negative_prompt=negative_prompt,
+                tokenizer_1=stack.tokenizer_1,
+                tokenizer_2=stack.tokenizer_2,
+                text_encoder_1=inference_te1,
+                text_encoder_2=inference_te2,
+                device=device,
+                dtype=autocast_dtype,
+                cache=self._prompt_embed_cache,
+            )
+            shared_negative_embeds = all_embeds[0].negative_prompt_embeds
+            shared_negative_pooled = all_embeds[0].negative_pooled_prompt_embeds
+            inference_te1.to("cpu")
+            inference_te2.to("cpu")
+            torch.cuda.empty_cache()
+            prepare_vae_for_decode(stack.vae)
+
+            pipe = StableDiffusionXLPipeline(
+                vae=stack.vae,
+                text_encoder=inference_te1,
+                text_encoder_2=inference_te2,
+                unet=inference_unet,
+                tokenizer=stack.tokenizer_1,
+                tokenizer_2=stack.tokenizer_2,
+                scheduler=build_inference_scheduler(config.sample_scheduler, stack.noise_scheduler),
+            )
+            pipe.set_progress_bar_config(disable=True)
 
             with torch.no_grad():
-                for prompt_index, prompt in enumerate(config.sample_prompts):
+                for prompt_index, embeds in enumerate(all_embeds):
                     self._set_status(f"{status_prefix} — image {prompt_index + 1}/{len(config.sample_prompts)}")
                     self._report_diffusion_progress(completed_images, prompt_index, 0)
                     generator = torch.Generator(device=device)
                     if config.seed is not None:
                         generator.manual_seed(config.seed + prompt_index)
                     image = self._generate_image(
-                        prompt=prompt,
+                        pipe=pipe,
+                        embeds=embeds,
+                        shared_negative_embeds=shared_negative_embeds,
+                        shared_negative_pooled=shared_negative_pooled,
                         prompt_index=prompt_index,
                         completed_images=completed_images,
-                        pipe=pipe,
-                        unet=inference_unet,
-                        vae=stack.vae,
-                        text_encoder_1=inference_te1,
-                        text_encoder_2=inference_te2,
-                        tokenizer_1=stack.tokenizer_1,
-                        tokenizer_2=stack.tokenizer_2,
-                        noise_scheduler=stack.noise_scheduler,
                         generator=generator,
                         width=width,
                         height=height,
@@ -265,17 +288,12 @@ class SDXLLoRASampler:
     def _generate_image(
         self,
         *,
-        prompt: str,
+        pipe: StableDiffusionXLPipeline,
+        embeds: SamplePromptEmbeds,
+        shared_negative_embeds: torch.Tensor,
+        shared_negative_pooled: torch.Tensor,
         prompt_index: int,
         completed_images: int,
-        pipe: StableDiffusionXLPipeline | None,
-        unet: torch.nn.Module,
-        vae: torch.nn.Module,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        tokenizer_1: Any,
-        tokenizer_2: Any,
-        noise_scheduler: Any,
         generator: torch.Generator,
         width: int,
         height: int,
@@ -283,56 +301,12 @@ class SDXLLoRASampler:
         device: torch.device,
     ) -> Any:
         config = self._config
-        negative_prompt = config.sample_negative_prompt or ""
-        if config.use_reforge_sampler:
-            (
-                prompt_embeds,
-                pooled_prompt_embeds,
-                negative_prompt_embeds,
-                negative_pooled_prompt_embeds,
-            ) = self._get_cached_prompt_embeds(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                tokenizer_1=tokenizer_1,
-                tokenizer_2=tokenizer_2,
-                text_encoder_1=text_encoder_1,
-                text_encoder_2=text_encoder_2,
-                device=device,
-                autocast_dtype=autocast_dtype,
-            )
-            add_time_ids = self._get_add_time_ids(
-                original_size=(height, width),
-                crops_coords_top_left=(0, 0),
-                target_size=(height, width),
-                dtype=autocast_dtype,
-                device=device,
-                batch_size=1,
-            )
-            return generate_preview_image(
-                unet=unet,
-                vae=vae,
-                noise_scheduler_config=noise_scheduler.config,
-                sampler_name=config.sample_sampler.value,
-                scheduler_mode=config.sample_scheduler_mode.value,
-                prompt_embeds=prompt_embeds,
-                negative_prompt_embeds=negative_prompt_embeds,
-                pooled_prompt_embeds=pooled_prompt_embeds,
-                negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
-                add_time_ids=add_time_ids,
-                width=width,
-                height=height,
-                num_inference_steps=config.sample_steps,
-                guidance_scale=config.sample_cfg_scale,
-                generator=generator,
-                autocast_dtype=autocast_dtype,
-                device=device,
-                on_step_end=self._make_reforge_progress_callback(prompt_index, completed_images),
-            )
-        assert pipe is not None
         with torch.autocast(device_type=device.type, dtype=autocast_dtype):
             return pipe(
-                prompt=prompt,
-                negative_prompt=negative_prompt or None,
+                prompt_embeds=embeds.prompt_embeds,
+                negative_prompt_embeds=shared_negative_embeds,
+                pooled_prompt_embeds=embeds.pooled_prompt_embeds,
+                negative_pooled_prompt_embeds=shared_negative_pooled,
                 width=width,
                 height=height,
                 num_inference_steps=config.sample_steps,
@@ -341,94 +315,6 @@ class SDXLLoRASampler:
                 callback_on_step_end=self._make_diffusers_progress_callback(prompt_index, completed_images),
                 callback_on_step_end_tensor_inputs=[],
             ).images[0]
-
-    def _get_cached_prompt_embeds(
-        self,
-        *,
-        prompt: str,
-        negative_prompt: str,
-        tokenizer_1: Any,
-        tokenizer_2: Any,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        device: torch.device,
-        autocast_dtype: torch.dtype,
-    ) -> PromptEmbedCacheValue:
-        cache_key = (prompt, negative_prompt)
-        cached = self._prompt_embed_cache.get(cache_key)
-        if cached is not None:
-            return cached
-
-        prompt_embeds, pooled_prompt_embeds = self._encode_prompt(
-            [prompt],
-            tokenizer_1,
-            tokenizer_2,
-            text_encoder_1,
-            text_encoder_2,
-            device,
-            autocast_dtype,
-        )
-        negative_prompt_embeds, negative_pooled_prompt_embeds = self._encode_prompt(
-            [negative_prompt],
-            tokenizer_1,
-            tokenizer_2,
-            text_encoder_1,
-            text_encoder_2,
-            device,
-            autocast_dtype,
-        )
-        value = (
-            prompt_embeds,
-            pooled_prompt_embeds,
-            negative_prompt_embeds,
-            negative_pooled_prompt_embeds,
-        )
-        self._prompt_embed_cache[cache_key] = value
-        return value
-
-    def _encode_prompt(
-        self,
-        captions: list[str],
-        tokenizer_1: Any,
-        tokenizer_2: Any,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> tuple[Tensor, Tensor]:
-        tokens_1 = tokenizer_1(
-            captions,
-            padding="max_length",
-            max_length=tokenizer_1.model_max_length,
-            truncation=True,
-            return_tensors="pt",
-        )
-        tokens_2 = tokenizer_2(
-            captions,
-            padding="max_length",
-            max_length=tokenizer_2.model_max_length,
-            truncation=True,
-            return_tensors="pt",
-        )
-        with torch.no_grad():
-            enc1_out = text_encoder_1(tokens_1.input_ids.to(device), output_hidden_states=True)
-            prompt_embeds_1 = enc1_out.hidden_states[-2].to(dtype=dtype)
-            enc2_out = text_encoder_2(tokens_2.input_ids.to(device), output_hidden_states=True)
-            prompt_embeds_2 = enc2_out.hidden_states[-2].to(dtype=dtype)
-            pooled_prompt_embeds = enc2_out[0].to(dtype=dtype)
-        return torch.cat([prompt_embeds_1, prompt_embeds_2], dim=-1), pooled_prompt_embeds
-
-    def _get_add_time_ids(
-        self,
-        original_size: tuple[int, int],
-        crops_coords_top_left: tuple[int, int],
-        target_size: tuple[int, int],
-        dtype: torch.dtype,
-        device: torch.device,
-        batch_size: int,
-    ) -> Tensor:
-        add_time_ids = list(original_size + crops_coords_top_left + target_size)
-        return torch.tensor([add_time_ids] * batch_size, dtype=dtype, device=device)
 
     def _total_diffusion_steps(self) -> int:
         return len(self._lora_paths) * len(self._config.sample_prompts) * self._config.sample_steps
@@ -452,17 +338,6 @@ class SDXLLoRASampler:
             self._report_diffusion_progress(completed_images, prompt_index, completed)
             self._log_sample_step(prompt_index, completed, self._config.sample_steps)
             return callback_kwargs
-
-        return _on_step_end
-
-    def _make_reforge_progress_callback(
-        self,
-        prompt_index: int,
-        completed_images: int,
-    ) -> Callable[[int, int], None]:
-        def _on_step_end(completed: int, total: int) -> None:
-            self._report_diffusion_progress(completed_images, prompt_index, completed)
-            self._log_sample_step(prompt_index, completed, total)
 
         return _on_step_end
 

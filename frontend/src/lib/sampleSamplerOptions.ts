@@ -9,13 +9,3 @@ export const diffusersSchedulerOptions: SelectOption[] = [
   { value: "ddim", label: "DDIM" },
   { value: "dpm++", label: "DPM++ (multistep)" },
 ];
-
-export const reforgeSamplerOptions: SelectOption[] = [
-  { value: "euler_a", label: "Euler Ancestral" },
-  { value: "dpmpp_2m", label: "DPM++ 2M" },
-];
-
-export const schedulerModeOptions: SelectOption[] = [
-  { value: "normal", label: "Normal" },
-  { value: "karras", label: "Karras" },
-];

@@ -51,9 +51,6 @@ sample_negative_prompt: ''
 sample_steps: 30
 sample_cfg_scale: 7.5
 sample_scheduler: euler
-use_reforge_sampler: false
-sample_sampler: euler_a
-sample_scheduler_mode: normal
 
 # Logging (loss graph + optional TensorBoard)
 logging:
@@ -75,9 +72,6 @@ sample_cfg_scale: 7.5
 # sample_width: 1024
 # sample_height: 1024
 sample_scheduler: euler
-use_reforge_sampler: false
-sample_sampler: euler_a
-sample_scheduler_mode: normal
 attention_mechanism: sdpa
 mixed_precision: float16
 vae_dtype: auto

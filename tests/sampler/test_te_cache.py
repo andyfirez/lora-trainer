@@ -1,46 +1,63 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import torch
 
-from src.sampler.sdxl.service import SDXLLoRASampler
-from src.trainer.config import TrainConfig
+from src.trainer.sdxl.sampling import PromptEmbedCache
 
 
-def test_get_cached_prompt_embeds_reuses_encoding() -> None:
-    config = TrainConfig(sample_prompts=["a"], use_reforge_sampler=True)
-    sampler = SDXLLoRASampler(
-        config,
-        lora_paths=[],
-        output_dir=MagicMock(),
-    )
-    encode_prompt = MagicMock(
-        side_effect=[
-            (torch.zeros(1, 2, 3), torch.zeros(1, 4)),
-            (torch.ones(1, 2, 3), torch.ones(1, 4)),
-        ]
-    )
-    sampler._encode_prompt = encode_prompt
+@patch("src.trainer.sdxl.sampling.encode_sdxl_prompt")
+def test_prompt_embed_cache_reuses_positive_encoding(mock_encode: MagicMock) -> None:
+    mock_encode.return_value = (torch.zeros(1, 2, 3), torch.zeros(1, 4))
+    cache = PromptEmbedCache()
 
-    first = sampler._get_cached_prompt_embeds(
+    first = cache.get_positive(
         prompt="hello",
+        tokenizer_1=MagicMock(),
+        tokenizer_2=MagicMock(),
+        text_encoder_1=MagicMock(),
+        text_encoder_2=MagicMock(),
+        device=torch.device("cpu"),
+        dtype=torch.float32,
+    )
+    second = cache.get_positive(
+        prompt="hello",
+        tokenizer_1=MagicMock(),
+        tokenizer_2=MagicMock(),
+        text_encoder_1=MagicMock(),
+        text_encoder_2=MagicMock(),
+        device=torch.device("cpu"),
+        dtype=torch.float32,
+    )
+
+    assert first[0] is second[0]
+    assert first[1] is second[1]
+    assert mock_encode.call_count == 1
+
+
+@patch("src.trainer.sdxl.sampling.encode_sdxl_prompt")
+def test_prompt_embed_cache_reuses_negative_encoding(mock_encode: MagicMock) -> None:
+    mock_encode.return_value = (torch.ones(1, 2, 3), torch.ones(1, 4))
+    cache = PromptEmbedCache()
+
+    first = cache.get_negative(
         negative_prompt="bad",
         tokenizer_1=MagicMock(),
         tokenizer_2=MagicMock(),
         text_encoder_1=MagicMock(),
         text_encoder_2=MagicMock(),
         device=torch.device("cpu"),
-        autocast_dtype=torch.float32,
+        dtype=torch.float32,
     )
-    second = sampler._get_cached_prompt_embeds(
-        prompt="hello",
+    second = cache.get_negative(
         negative_prompt="bad",
         tokenizer_1=MagicMock(),
         tokenizer_2=MagicMock(),
         text_encoder_1=MagicMock(),
         text_encoder_2=MagicMock(),
         device=torch.device("cpu"),
-        autocast_dtype=torch.float32,
+        dtype=torch.float32,
     )
 
-    assert first is second
-    assert encode_prompt.call_count == 2
+    assert first[0] is second[0]
+    assert first[1] is second[1]
+    assert mock_encode.call_count == 1

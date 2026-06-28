@@ -48,16 +48,6 @@ class SampleScheduler(StrEnum):
     DPM_PP = "dpm++"
 
 
-class ReforgeSampleSampler(StrEnum):
-    EULER_A = "euler_a"
-    DPMPP_2M = "dpmpp_2m"
-
-
-class ReforgeSampleSchedulerMode(StrEnum):
-    NORMAL = "normal"
-    KARRAS = "karras"
-
-
 class ConceptConfig(BaseModel):
     image_dir: str
     caption_extension: str = ".txt"
@@ -147,9 +137,6 @@ class TrainConfig(BaseModel):
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_scheduler: SampleScheduler = SampleScheduler.EULER
-    use_reforge_sampler: bool = False
-    sample_sampler: ReforgeSampleSampler = ReforgeSampleSampler.EULER_A
-    sample_scheduler_mode: ReforgeSampleSchedulerMode = ReforgeSampleSchedulerMode.NORMAL
     post_training_sampling_config_id: Optional[int] = None
 
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
@@ -173,5 +160,4 @@ class TrainConfig(BaseModel):
             attention_mechanism=self.attention_mechanism,
             mixed_precision=self.mixed_precision,
             vae_dtype=self.vae_dtype,
-            use_reforge_sampler=self.use_reforge_sampler,
         )

@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  diffusersSchedulerOptions,
-  reforgeSamplerOptions,
-  schedulerModeOptions,
-} from "@/lib/sampleSamplerOptions";
+import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
 
 const selectClass =
   "w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]";
@@ -43,75 +39,20 @@ function SelectInput({
   );
 }
 
-function CheckboxInput({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label className="flex items-center gap-2 cursor-pointer">
-      <input
-        type="checkbox"
-        className="w-4 h-4 rounded accent-[var(--accent)]"
-        checked={!!checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <span className="text-sm text-white">{label}</span>
-    </label>
-  );
-}
-
 export interface SampleSamplerFieldsProps {
-  useReforgeSampler: boolean;
   sampleScheduler: string;
-  sampleSampler: string;
-  sampleSchedulerMode: string;
   onChange: (key: string, value: unknown) => void;
-  reforgeCheckboxLabel: string;
 }
 
-export default function SampleSamplerFields({
-  useReforgeSampler,
-  sampleScheduler,
-  sampleSampler,
-  sampleSchedulerMode,
-  onChange,
-  reforgeCheckboxLabel,
-}: SampleSamplerFieldsProps) {
+export default function SampleSamplerFields({ sampleScheduler, onChange }: SampleSamplerFieldsProps) {
   return (
-    <div className="col-span-full space-y-3">
-      <CheckboxInput
-        label={reforgeCheckboxLabel}
-        checked={useReforgeSampler}
-        onChange={(v) => onChange("use_reforge_sampler", v)}
+    <div className="col-span-full">
+      <SelectInput
+        label="Sample Scheduler"
+        value={sampleScheduler}
+        onChange={(v) => onChange("sample_scheduler", v)}
+        options={diffusersSchedulerOptions}
       />
-      {useReforgeSampler ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SelectInput
-            label="Sampler"
-            value={sampleSampler}
-            onChange={(v) => onChange("sample_sampler", v)}
-            options={reforgeSamplerOptions}
-          />
-          <SelectInput
-            label="Scheduler Mode"
-            value={sampleSchedulerMode}
-            onChange={(v) => onChange("sample_scheduler_mode", v)}
-            options={schedulerModeOptions}
-          />
-        </div>
-      ) : (
-        <SelectInput
-          label="Sample Scheduler"
-          value={sampleScheduler}
-          onChange={(v) => onChange("sample_scheduler", v)}
-          options={diffusersSchedulerOptions}
-        />
-      )}
     </div>
   );
 }

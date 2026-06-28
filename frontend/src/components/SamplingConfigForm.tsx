@@ -264,12 +264,8 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
             placeholder="1024"
           />
           <SampleSamplerFields
-            useReforgeSampler={(config.use_reforge_sampler as boolean) ?? false}
             sampleScheduler={(config.sample_scheduler as string) ?? "euler"}
-            sampleSampler={(config.sample_sampler as string) ?? "euler_a"}
-            sampleSchedulerMode={(config.sample_scheduler_mode as string) ?? "normal"}
             onChange={set}
-            reforgeCheckboxLabel="Use reForge-style sampler"
           />
           <SelectInput
             label="Attention"

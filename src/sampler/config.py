@@ -5,13 +5,7 @@ from typing import Literal, Optional
 import yaml
 from pydantic import BaseModel, Field
 
-from src.trainer.config import (
-    ReforgeSampleSampler,
-    ReforgeSampleSchedulerMode,
-    SampleScheduler,
-    VaeDtype,
-    WeightDtype,
-)
+from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
 from src.trainer.gpu_config_validation import validate_gpu_config
 
 
@@ -28,9 +22,6 @@ class SamplingConfig(BaseModel):
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_scheduler: SampleScheduler = SampleScheduler.EULER
-    use_reforge_sampler: bool = False
-    sample_sampler: ReforgeSampleSampler = ReforgeSampleSampler.EULER_A
-    sample_scheduler_mode: ReforgeSampleSchedulerMode = ReforgeSampleSchedulerMode.NORMAL
     lora_paths: list[str] = Field(default_factory=list)
     attention_mechanism: Literal["default", "sdpa", "xformers"] = "sdpa"
     mixed_precision: WeightDtype = WeightDtype.FLOAT_16
@@ -54,7 +45,6 @@ class SamplingConfig(BaseModel):
             attention_mechanism=self.attention_mechanism,
             mixed_precision=self.mixed_precision,
             vae_dtype=self.vae_dtype,
-            use_reforge_sampler=self.use_reforge_sampler,
         )
 
     def to_train_config(self) -> "TrainConfig":
@@ -71,9 +61,6 @@ class SamplingConfig(BaseModel):
             sample_width=self.sample_width,
             sample_height=self.sample_height,
             sample_scheduler=self.sample_scheduler,
-            use_reforge_sampler=self.use_reforge_sampler,
-            sample_sampler=self.sample_sampler,
-            sample_scheduler_mode=self.sample_scheduler_mode,
             attention_mechanism=self.attention_mechanism,
             mixed_precision=self.mixed_precision,
             vae_dtype=self.vae_dtype,
