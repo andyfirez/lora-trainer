@@ -33,6 +33,11 @@ class SamplingJobDetails(BaseModel):
     progress_status: Optional[str] = None
 
 
+class TaggingJobDetails(BaseModel):
+    progress_status: Optional[str] = None
+    dataset_id: int
+
+
 class JobSampleResponse(BaseModel):
     filename: str
     path: str
@@ -58,6 +63,7 @@ class JobResponse(BaseModel):
     progress_total: Optional[int]
     training: Optional[TrainingJobDetails] = None
     sampling: Optional[SamplingJobDetails] = None
+    tagging: Optional[TaggingJobDetails] = None
     can_resume: bool = False
     created_at: datetime
     updated_at: datetime

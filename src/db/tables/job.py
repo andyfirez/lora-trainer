@@ -11,6 +11,7 @@ from src.db.tables.timestamp_mixin import TimestampMixin
 class JobType(StrEnum):
     TRAINING = "training"
     SAMPLING = "sampling"
+    TAGGING = "tagging"
 
 
 class JobStatus(StrEnum):

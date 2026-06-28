@@ -2,9 +2,10 @@
 
 import yaml
 
-from src.api.schemas.jobs import JobResponse, SamplingJobDetails, TrainingJobDetails
+from src.api.schemas.jobs import JobResponse, SamplingJobDetails, TaggingJobDetails, TrainingJobDetails
 from src.db.tables.job import Job, JobType
 from src.services.jobs.service import JobsService
+from src.tagger.config import TaggingConfig
 
 
 def to_job_response(job: Job, service: JobsService) -> JobResponse:
@@ -49,5 +50,10 @@ def to_job_response(job: Job, service: JobsService) -> JobResponse:
             lora_paths=service.get_lora_paths(job),
             source_job_id=job.source_job_id,
             progress_status=job.progress_status,
+        )
+    elif job.job_type == JobType.TAGGING:
+        payload["tagging"] = TaggingJobDetails(
+            progress_status=job.progress_status,
+            dataset_id=TaggingConfig.from_yaml(job.config_yaml).dataset_id,
         )
     return JobResponse.model_validate(payload)

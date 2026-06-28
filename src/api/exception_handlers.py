@@ -5,8 +5,10 @@ from fastapi.responses import JSONResponse
 
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
+    DatasetImageNotFoundError,
     DatasetNameConflictError,
     DatasetNotFoundError,
+    InvalidDatasetFilenameError,
 )
 from src.services.jobs.exceptions import (
     JobCheckpointNotFoundError,
@@ -92,3 +94,11 @@ async def dataset_name_conflict_handler(request: Request, exc: DatasetNameConfli
 
 async def dataset_dir_not_found_handler(request: Request, exc: DatasetDirectoryNotFoundError) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+async def dataset_image_not_found_handler(request: Request, exc: DatasetImageNotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+async def invalid_dataset_filename_handler(request: Request, exc: InvalidDatasetFilenameError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc)})

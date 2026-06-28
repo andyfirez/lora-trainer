@@ -9,6 +9,7 @@ import { jobsApi } from "@/lib/api/jobs";
 import StatusBadge from "@/components/StatusBadge";
 import TrainingJobPanel from "@/components/TrainingJobPanel";
 import SamplingJobPanel from "@/components/SamplingJobPanel";
+import TaggingJobPanel from "@/components/TaggingJobPanel";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -51,6 +52,7 @@ export default function JobDetailPage({ params }: Props) {
   if (!job) return <div className="text-red-400">Job not found</div>;
 
   const isTraining = job.job_type === "training";
+  const isTagging = job.job_type === "tagging";
 
   const handleEnqueue = async () => {
     await jobsApi.enqueue(id);
@@ -118,7 +120,14 @@ export default function JobDetailPage({ params }: Props) {
               onClick={() => void handleCancel()}
               className="flex items-center gap-1.5 bg-red-700 hover:bg-red-600 text-white rounded-lg px-3 py-1.5 text-sm"
             >
-              <Square size={13} /> {job.status === "running" ? (isTraining ? "Stop Training" : "Stop Sampling") : "Cancel"}
+              <Square size={13} />{" "}
+              {job.status === "running"
+                ? isTraining
+                  ? "Stop Training"
+                  : isTagging
+                    ? "Stop Tagging"
+                    : "Stop Sampling"
+                : "Cancel"}
             </button>
           )}
           <button
@@ -132,6 +141,8 @@ export default function JobDetailPage({ params }: Props) {
 
       {isTraining ? (
         <TrainingJobPanel job={job} lossGraphRunKey={lossGraphRunKey} />
+      ) : isTagging ? (
+        <TaggingJobPanel job={job} />
       ) : (
         <SamplingJobPanel job={job} />
       )}

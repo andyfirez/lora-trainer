@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import Link from "next/link";
 import { useState } from "react";
 import { PlusCircle, Trash2, Image as ImageIcon } from "lucide-react";
 import PathInput from "@/components/PathInput";
@@ -10,16 +11,18 @@ import type { Dataset } from "@/types";
 function CreateDatasetModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [imageDir, setImageDir] = useState("");
-  const [captionDir, setCaptionDir] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !imageDir) { setError("Name and image directory are required"); return; }
+    if (!name || !imageDir) {
+      setError("Name and image directory are required");
+      return;
+    }
     setSaving(true);
     try {
-      await datasetsApi.create({ name, image_dir: imageDir, caption_dir: captionDir || undefined });
+      await datasetsApi.create({ name, image_dir: imageDir });
       onCreated();
       onClose();
     } catch (err: unknown) {
@@ -52,17 +55,19 @@ function CreateDatasetModal({ onClose, onCreated }: { onClose: () => void; onCre
             pickerTitle="Select Image Directory"
             kind="directory"
           />
-          <PathInput
-            label="Caption Directory (optional)"
-            value={captionDir}
-            onChange={setCaptionDir}
-            placeholder="Same as image dir"
-            pickerTitle="Select Caption Directory"
-            kind="directory"
-          />
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-[var(--border)] rounded-lg py-2 text-[var(--muted)] hover:text-white text-sm">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 border border-[var(--border)] rounded-lg py-2 text-[var(--muted)] hover:text-white text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50"
+            >
               {saving ? "Adding…" : "Add Dataset"}
             </button>
           </div>
@@ -76,13 +81,23 @@ function DatasetCard({ dataset, onDelete }: { dataset: Dataset; onDelete: () => 
   const { data: images } = useSWR(`/datasets/${dataset.id}/images`, () => datasetsApi.listImages(dataset.id));
 
   return (
-    <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5 space-y-3">
+    <Link
+      href={`/datasets/${dataset.id}`}
+      className="block bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5 space-y-3 hover:border-[var(--accent)] transition-colors"
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-semibold text-white">{dataset.name}</div>
           <div className="text-xs text-[var(--muted)] mt-0.5 break-all">{dataset.image_dir}</div>
         </div>
-        <button onClick={onDelete} className="p-1.5 rounded hover:bg-white/10 text-red-400 hover:text-red-300 shrink-0">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            onDelete();
+          }}
+          className="p-1.5 rounded hover:bg-white/10 text-red-400 hover:text-red-300 shrink-0"
+        >
           <Trash2 size={14} />
         </button>
       </div>
@@ -90,10 +105,7 @@ function DatasetCard({ dataset, onDelete }: { dataset: Dataset; onDelete: () => 
         <ImageIcon size={14} />
         <span>{images?.images.length ?? "…"} images</span>
       </div>
-      {dataset.caption_dir && (
-        <div className="text-xs text-[var(--muted)]">Captions: {dataset.caption_dir}</div>
-      )}
-    </div>
+    </Link>
   );
 }
 
@@ -112,7 +124,7 @@ export default function DatasetsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Datasets</h1>
-          <p className="text-[var(--muted)] mt-1">Manage your training image datasets</p>
+          <p className="text-[var(--muted)] mt-1">Manage your training image datasets and tags</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}

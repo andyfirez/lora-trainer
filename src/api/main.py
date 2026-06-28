@@ -10,8 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.exception_handlers import (
     dataset_dir_not_found_handler,
+    dataset_image_not_found_handler,
     dataset_name_conflict_handler,
     dataset_not_found_handler,
+    invalid_dataset_filename_handler,
     job_already_queued_handler,
     job_checkpoint_not_found_handler,
     job_config_not_found_handler,
@@ -31,8 +33,10 @@ from src.services.worker.service import QueueWorker
 from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
+    DatasetImageNotFoundError,
     DatasetNameConflictError,
     DatasetNotFoundError,
+    InvalidDatasetFilenameError,
 )
 from src.services.jobs.exceptions import (
     JobAlreadyQueuedError,
@@ -91,6 +95,8 @@ app.add_exception_handler(SamplingPromptsNotConfiguredError, sampling_prompts_no
 app.add_exception_handler(DatasetNotFoundError, dataset_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(DatasetNameConflictError, dataset_name_conflict_handler)  # type: ignore[arg-type]
 app.add_exception_handler(DatasetDirectoryNotFoundError, dataset_dir_not_found_handler)  # type: ignore[arg-type]
+app.add_exception_handler(DatasetImageNotFoundError, dataset_image_not_found_handler)  # type: ignore[arg-type]
+app.add_exception_handler(InvalidDatasetFilenameError, invalid_dataset_filename_handler)  # type: ignore[arg-type]
 
 app.include_router(configs.router)
 app.include_router(jobs.router)

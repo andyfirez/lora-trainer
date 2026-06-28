@@ -208,6 +208,10 @@ class JobRepository(BaseRepository[Job]):
             job.cache_progress_total = None
             job.save_checkpoint_requested = False
             await self.update_sampling_status(job, None)
+        elif job.job_type in (JobType.SAMPLING, JobType.TAGGING):
+            job.progress_step = None
+            job.progress_total = None
+            await self.update_progress_status(job, None)
         else:
             await self.update_progress_status(job, None)
         return job
@@ -217,6 +221,10 @@ class JobRepository(BaseRepository[Job]):
         if job.job_type == JobType.TRAINING:
             job.save_checkpoint_requested = False
             await self.update_sampling_status(job, None)
+        elif job.job_type in (JobType.SAMPLING, JobType.TAGGING):
+            job.progress_step = None
+            job.progress_total = None
+            await self.update_progress_status(job, None)
         else:
             await self.update_progress_status(job, None)
         return job

@@ -17,3 +17,15 @@ class DatasetDirectoryNotFoundError(Exception):
     def __init__(self, path: str) -> None:
         super().__init__(f"Image directory not found: {path}")
         self.path = path
+
+
+class DatasetImageNotFoundError(Exception):
+    def __init__(self, filename: str) -> None:
+        super().__init__(f"Image not found: {filename}")
+        self.filename = filename
+
+
+class InvalidDatasetFilenameError(Exception):
+    def __init__(self, filename: str) -> None:
+        super().__init__(f"Invalid filename: {filename}")
+        self.filename = filename

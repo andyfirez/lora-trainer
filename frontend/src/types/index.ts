@@ -1,6 +1,7 @@
 export type JobStatus = "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
 export type ConfigType = "training" | "sampling";
-export type JobType = "training" | "sampling";
+export type JobType = "training" | "sampling" | "tagging";
+export type TaggingMode = "if_empty" | "overwrite" | "append";
 
 export interface TrainingJobDetails {
   progress_loss: number | null;
@@ -27,6 +28,11 @@ export interface SamplingJobDetails {
   progress_status: string | null;
 }
 
+export interface TaggingJobDetails {
+  progress_status: string | null;
+  dataset_id: number;
+}
+
 export interface Job {
   id: number;
   job_type: JobType;
@@ -42,6 +48,7 @@ export interface Job {
   progress_total: number | null;
   training: TrainingJobDetails | null;
   sampling: SamplingJobDetails | null;
+  tagging: TaggingJobDetails | null;
   can_resume: boolean;
   created_at: string;
   updated_at: string;
@@ -93,6 +100,44 @@ export interface DatasetImages {
   dataset_id: number;
   image_dir: string;
   images: string[];
+}
+
+export interface DatasetItem {
+  filename: string;
+  tags: string[];
+  has_caption: boolean;
+}
+
+export interface DatasetItems {
+  dataset_id: number;
+  items: DatasetItem[];
+}
+
+export interface TagStat {
+  tag: string;
+  count: number;
+}
+
+export interface TagStats {
+  tags: TagStat[];
+}
+
+export interface BulkTagResult {
+  updated_count: number;
+}
+
+export interface AutotagRequest {
+  mode?: TaggingMode;
+  threshold?: number;
+  model?: string;
+  caption_extension?: string;
+  strip_rating?: boolean;
+  filenames?: string[];
+  enqueue?: boolean;
+}
+
+export interface AutotagResponse {
+  job_id: number;
 }
 
 export interface CreateJobFromConfigRequest {

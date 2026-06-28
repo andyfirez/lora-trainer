@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import sys
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
@@ -14,7 +13,7 @@ from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus, JobType
 from src.sampler.config import SamplingConfig
 from src.sampler.sdxl.service import SDXLLoRASampler
-from src.settings.app_settings import settings
+from src.services.jobs.job_logging import build_job_log_path, build_job_logger
 
 logger = logging.getLogger(__name__)
 
@@ -117,35 +116,14 @@ def _make_progress_callback(job_id: int):
     return callback
 
 
-def build_log_path(job_id: int) -> Path:
-    logs_dir = Path(settings.training.logs_dir)
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    return logs_dir / f"job_{job_id}.log"
-
-
-def build_logger(job_id: int, log_path: Path) -> logging.Logger:
-    run_logger = logging.getLogger(f"sampling-job-{job_id}")
-    run_logger.setLevel(logging.INFO)
-    run_logger.handlers.clear()
-    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-    file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-    stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(formatter)
-    run_logger.addHandler(file_handler)
-    run_logger.addHandler(stream_handler)
-    run_logger.propagate = False
-    return run_logger
-
-
 async def _fail_job(job_id: int, run_logger: logging.Logger, message: str) -> None:
     run_logger.error(message)
     await _update_status(job_id, JobStatus.FAILED, error=message)
 
 
 async def run_sampling_job(job_id: int) -> int:
-    log_path = build_log_path(job_id)
-    run_logger = build_logger(job_id, log_path)
+    log_path = build_job_log_path(job_id)
+    run_logger = build_job_logger(job_id, log_path, name_prefix="sampling-job")
     await _set_log_path(job_id, str(log_path))
 
     try:

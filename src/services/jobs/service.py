@@ -31,6 +31,7 @@ from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
 )
+from src.tagger.config import TaggingConfig, TaggingMode
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
 from src.trainer.sdxl.checkpoint_state import find_latest_checkpoint, load_resume_state
@@ -99,6 +100,39 @@ class JobsService:
                 str(self._default_sampling_output_dir(sampling_config, job.id)),
             )
             return job
+        return await self._job_repo.add(job)
+
+    async def create_tagging_job(
+        self,
+        *,
+        dataset_id: int,
+        dataset_name: str,
+        image_dir: str,
+        mode: str = "if_empty",
+        threshold: float = 0.35,
+        model: str = "wd-v1-4-convnextv2-tagger-v2",
+        caption_extension: str = ".txt",
+        strip_rating: bool = True,
+        filenames: list[str] | None = None,
+    ) -> Job:
+        config = TaggingConfig(
+            dataset_id=dataset_id,
+            image_dir=image_dir,
+            mode=TaggingMode(mode),
+            threshold=threshold,
+            model=model,
+            caption_extension=caption_extension,
+            strip_rating=strip_rating,
+            filenames=filenames or [],
+        )
+        handler = get_job_handler(JobType.TAGGING)
+        config_yaml = config.to_yaml()
+        handler.validate_config_yaml(config_yaml)
+        job = Job(
+            job_type=JobType.TAGGING,
+            name=f"{dataset_name} auto-tag",
+            config_yaml=config_yaml,
+        )
         return await self._job_repo.add(job)
 
     async def create_auto_sampling_for_training_job(self, training_job: Job) -> Job | None:

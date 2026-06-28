@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
@@ -14,6 +15,7 @@ from src.db.session import register_all_tables
 from src.db.tables.job import Job
 from src.db.tables.job_config import ConfigType
 from src.services.configs.service import JobConfigService
+from src.services.datasets.service import DatasetsService
 from src.services.jobs.service import JobsService
 
 
@@ -37,6 +39,11 @@ async def jobs_service(session: AsyncSession) -> JobsService:
 @pytest_asyncio.fixture
 async def config_service(session: AsyncSession) -> JobConfigService:
     return JobConfigService(JobConfigRepository(session))
+
+
+@pytest_asyncio.fixture
+async def datasets_service(session: AsyncSession) -> DatasetsService:
+    return DatasetsService(DatasetRepository(session))
 
 
 @pytest_asyncio.fixture
