@@ -5,16 +5,19 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import torch
-from peft import LoraConfig, get_peft_model
+from peft import get_peft_model
 
 from src.trainer.attention import configure_unet_attention
 from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts
 from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
+from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
+from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
+from src.trainer.sdxl.lora_targets import SDXL_TE_LORA_TARGET_MODULES, SDXL_UNET_LORA_TARGET_MODULES
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.sampling import (
     PromptEmbedCache,
@@ -83,7 +86,6 @@ class SDXLLoRASampler:
             torch.backends.cudnn.allow_tf32 = True
 
         self._log.info("Loading SDXL pipeline from %s", config.base_model_name)
-        stack = self._load_stack(config, enable_lora=bool(self._lora_paths))
 
         total_diffusion_steps = self._total_diffusion_steps()
         self._set_progress(0, total_diffusion_steps)
@@ -93,31 +95,52 @@ class SDXLLoRASampler:
                 status_prefix = f"Sampling {lora_path.name} ({lora_index + 1}/{len(self._lora_paths)})"
                 self._set_status(f"{status_prefix} — loading LoRA")
                 state_dict = load_lora_file(lora_path)
+                lora_config = apply_lora_metadata_to_config(config, state_dict)
+                self._log.info(
+                    "LoRA %s: rank=%d alpha=%.1f te1=%s te2=%s",
+                    lora_path.name,
+                    lora_config.lora_rank,
+                    lora_config.lora_alpha,
+                    lora_config.text_encoder_1.train,
+                    lora_config.text_encoder_2.train,
+                )
+                stack = self._load_stack(lora_config, enable_lora=True)
                 apply_lora_state_dict(
                     state_dict,
                     unet=stack.unet,
                     text_encoder_1=stack.text_encoder_1,
                     text_encoder_2=stack.text_encoder_2,
-                    config=config,
+                    config=lora_config,
                 )
-                self._sample_pass(
-                    output_stem=self._safe_stem(lora_path),
-                    status_prefix=status_prefix,
-                    completed_images=completed_images,
-                    stack=stack,
-                    merge_unet_adapter=True,
-                )
+                try:
+                    self._sample_pass(
+                        output_stem=self._safe_stem(lora_path),
+                        status_prefix=status_prefix,
+                        completed_images=completed_images,
+                        stack=stack,
+                        lora_config=lora_config,
+                        merge_unet_adapter=True,
+                    )
+                finally:
+                    del stack
+                    torch.cuda.empty_cache()
                 completed_images += len(self._effective_sample_prompts())
         else:
+            stack = self._load_stack(config, enable_lora=False)
             status_prefix = "Sampling base model"
             self._set_status(status_prefix)
-            self._sample_pass(
-                output_stem="base",
-                status_prefix=status_prefix,
-                completed_images=0,
-                stack=stack,
-                merge_unet_adapter=False,
-            )
+            try:
+                self._sample_pass(
+                    output_stem="base",
+                    status_prefix=status_prefix,
+                    completed_images=0,
+                    stack=stack,
+                    lora_config=config,
+                    merge_unet_adapter=False,
+                )
+            finally:
+                del stack
+                torch.cuda.empty_cache()
         self._set_status(None)
 
     def _load_stack(self, config: TrainConfig, *, enable_lora: bool) -> _SamplingStack:
@@ -144,34 +167,31 @@ class SDXLLoRASampler:
         if enable_lora:
             unet = get_peft_model(
                 unet,
-                LoraConfig(
-                    r=config.lora_rank,
-                    lora_alpha=config.lora_alpha,
-                    lora_dropout=config.lora_dropout,
-                    init_lora_weights="gaussian",
-                    target_modules=["to_k", "to_q", "to_v", "to_out.0"],
+                build_sdxl_lora_config(
+                    rank=config.lora_rank,
+                    alpha=config.lora_alpha,
+                    dropout=config.lora_dropout,
+                    target_modules=SDXL_UNET_LORA_TARGET_MODULES,
                 ),
             )
         if enable_lora and config.text_encoder_1.train:
             text_encoder_1 = get_peft_model(
                 text_encoder_1,
-                LoraConfig(
-                    r=config.lora_rank,
-                    lora_alpha=config.lora_alpha,
-                    lora_dropout=config.lora_dropout,
-                    init_lora_weights="gaussian",
-                    target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
+                build_sdxl_lora_config(
+                    rank=config.lora_rank,
+                    alpha=config.lora_alpha,
+                    dropout=config.lora_dropout,
+                    target_modules=SDXL_TE_LORA_TARGET_MODULES,
                 ),
             )
         if enable_lora and config.text_encoder_2.train:
             text_encoder_2 = get_peft_model(
                 text_encoder_2,
-                LoraConfig(
-                    r=config.lora_rank,
-                    lora_alpha=config.lora_alpha,
-                    lora_dropout=config.lora_dropout,
-                    init_lora_weights="gaussian",
-                    target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
+                build_sdxl_lora_config(
+                    rank=config.lora_rank,
+                    alpha=config.lora_alpha,
+                    dropout=config.lora_dropout,
+                    target_modules=SDXL_TE_LORA_TARGET_MODULES,
                 ),
             )
 
@@ -199,6 +219,7 @@ class SDXLLoRASampler:
         status_prefix: str,
         completed_images: int,
         stack: _SamplingStack,
+        lora_config: TrainConfig,
         merge_unet_adapter: bool,
     ) -> None:
         config = self._config
@@ -218,13 +239,13 @@ class SDXLLoRASampler:
                 inference_unet = unet.base_model.model
             else:
                 inference_unet = unet
-            if config.text_encoder_1.train:
+            if lora_config.text_encoder_1.train:
                 text_encoder_1.merge_adapter()
                 te1_merged = True
                 inference_te1 = text_encoder_1.base_model.model
             else:
                 inference_te1 = text_encoder_1
-            if config.text_encoder_2.train:
+            if lora_config.text_encoder_2.train:
                 text_encoder_2.merge_adapter()
                 te2_merged = True
                 inference_te2 = text_encoder_2.base_model.model
@@ -238,7 +259,7 @@ class SDXLLoRASampler:
             height = config.sample_height or config.resolution
             autocast_dtype = _DTYPE_MAP[config.mixed_precision]
 
-            if config.text_encoder_1.train or config.text_encoder_2.train:
+            if lora_config.text_encoder_1.train or lora_config.text_encoder_2.train:
                 self._prompt_embed_cache.clear()
 
             negative_prompt = config.sample_negative_prompt or ""

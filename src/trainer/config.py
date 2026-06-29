@@ -75,7 +75,7 @@ class ConceptConfig(BaseModel):
     caption_extension: str = ".txt"
     trigger_words: list[str] = Field(default_factory=list)
     caption_suffix: str = ""
-    repeats: int = Field(default=1, ge=1)
+    repeats: int = Field(default=3, ge=1)
 
 
 class ModelPartConfig(BaseModel):
@@ -99,8 +99,8 @@ class TrainConfig(BaseModel):
     output_format: OutputFormat = OutputFormat.SAFETENSORS
 
     # LoRA
-    lora_rank: int = Field(default=16, ge=1, le=256)
-    lora_alpha: float = Field(default=16.0, gt=0.0)
+    lora_rank: int = Field(default=32, ge=1, le=256)
+    lora_alpha: float = Field(default=32.0, gt=0.0)
     lora_dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
 
     # Training targets
@@ -109,13 +109,15 @@ class TrainConfig(BaseModel):
     text_encoder_2: ModelPartConfig = Field(default_factory=lambda: ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16))
 
     # Training hyperparameters
-    epochs: int = Field(default=10, ge=1)
+    epochs: int = Field(default=30, ge=1)
     batch_size: int = Field(default=1, ge=1)
     gradient_accumulation_steps: int = Field(default=1, ge=1)
-    learning_rate: float = Field(default=1e-4, gt=0.0)
-    lr_scheduler: LRScheduler = LRScheduler.COSINE
-    lr_warmup_steps: int = Field(default=10, ge=0)
+    learning_rate: float = Field(default=5e-5, gt=0.0)
+    lr_scheduler: LRScheduler = LRScheduler.CONSTANT
+    lr_warmup_steps: int = Field(default=0, ge=0)
     optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig.defaults)
+    min_snr_gamma: float = Field(default=5.0, ge=0.0)
+    noise_offset: float = Field(default=0.0357, ge=0.0)
 
     # Data
     resolution: int = Field(default=1024, ge=64, le=2048)

@@ -414,7 +414,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             onChange={(v) => set("lora_rank", v)}
             min={1}
             max={256}
-            placeholder="16"
+            placeholder="32"
           />
           <NumberInput
             label="Alpha"
@@ -422,7 +422,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             onChange={(v) => set("lora_alpha", v)}
             min={0}
             step={0.1}
-            placeholder="16.0"
+            placeholder="32.0"
           />
           <NumberInput
             label="Dropout"
@@ -484,7 +484,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
       <section className={sectionClass}>
         <div className={sectionTitleClass}>Training</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <NumberInput label="Epochs" value={config.epochs} onChange={(v) => set("epochs", v)} min={1} placeholder="10" />
+          <NumberInput label="Epochs" value={config.epochs} onChange={(v) => set("epochs", v)} min={1} placeholder="30" />
           <NumberInput label="Batch Size" value={config.batch_size} onChange={(v) => set("batch_size", v)} min={1} placeholder="1" />
           <NumberInput
             label="Grad Accumulation Steps"
@@ -498,8 +498,8 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             value={config.learning_rate}
             onChange={(v) => set("learning_rate", v)}
             min={0}
-            step={0.0001}
-            placeholder="0.0001"
+            step={0.00001}
+            placeholder="0.00005"
           />
           <SelectInput
             label="LR Scheduler"
@@ -512,7 +512,23 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             value={config.lr_warmup_steps}
             onChange={(v) => set("lr_warmup_steps", v)}
             min={0}
-            placeholder="10"
+            placeholder="0"
+          />
+          <NumberInput
+            label="Min SNR Gamma"
+            value={config.min_snr_gamma}
+            onChange={(v) => set("min_snr_gamma", v)}
+            min={0}
+            step={0.5}
+            placeholder="5"
+          />
+          <NumberInput
+            label="Noise Offset"
+            value={config.noise_offset}
+            onChange={(v) => set("noise_offset", v)}
+            min={0}
+            step={0.001}
+            placeholder="0.0357"
           />
         </div>
       </section>

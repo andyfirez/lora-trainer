@@ -1,5 +1,6 @@
 """Convert PEFT LoRA weights to/from kohya-compatible safetensors format."""
 
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import torch
@@ -16,6 +17,53 @@ def detect_lora_format(state_dict: dict[str, Any]) -> Literal["kohya", "legacy"]
     if any(".lora_down.weight" in key for key in state_dict):
         return "kohya"
     return "legacy"
+
+
+@dataclass(frozen=True)
+class KohyaLoRAMetadata:
+    rank: int
+    alpha: float
+    train_te1: bool
+    train_te2: bool
+
+
+def infer_kohya_lora_metadata(state_dict: dict[str, Any]) -> KohyaLoRAMetadata:
+    if detect_lora_format(state_dict) != "kohya":
+        raise ValueError("Cannot infer LoRA metadata from non-kohya state dict")
+
+    ranks: set[int] = set()
+    alphas: list[float] = []
+    for key, value in state_dict.items():
+        if not isinstance(value, Tensor):
+            continue
+        if key.endswith(".lora_down.weight"):
+            ranks.add(int(value.shape[0]))
+        elif key.endswith(".alpha"):
+            alphas.append(float(value.item()))
+
+    if not ranks:
+        raise ValueError("No LoRA weights found in state dict")
+
+    if len(ranks) > 1:
+        raise ValueError(f"Inconsistent LoRA ranks in checkpoint: {sorted(ranks)}")
+
+    rank = ranks.pop()
+    alpha = alphas[0] if alphas else float(rank)
+    train_te1 = any(key.startswith("lora_te1_") for key in state_dict)
+    train_te2 = any(key.startswith("lora_te2_") for key in state_dict)
+    return KohyaLoRAMetadata(rank=rank, alpha=alpha, train_te1=train_te1, train_te2=train_te2)
+
+
+def apply_lora_metadata_to_config(config: TrainConfig, state_dict: dict[str, Any]) -> TrainConfig:
+    metadata = infer_kohya_lora_metadata(state_dict)
+    return config.model_copy(
+        update={
+            "lora_rank": metadata.rank,
+            "lora_alpha": metadata.alpha,
+            "text_encoder_1": config.text_encoder_1.model_copy(update={"train": metadata.train_te1}),
+            "text_encoder_2": config.text_encoder_2.model_copy(update={"train": metadata.train_te2}),
+        }
+    )
 
 
 def _peft_param_to_kohya_keys(name: str, prefix: str) -> tuple[str, str] | None:
@@ -105,6 +153,11 @@ def _apply_kohya_state_to_module(
         value = state_dict.get(f"{kohya_base}.{weight_suffix}")
         if value is None:
             continue
+        if tuple(value.shape) != tuple(param.shape):
+            raise ValueError(
+                f"LoRA weight shape mismatch for {kohya_base}.{weight_suffix}: "
+                f"checkpoint {tuple(value.shape)} vs model {tuple(param.shape)}"
+            )
         with torch.no_grad():
             param.copy_(value.to(dtype=param.dtype, device=param.device))
 

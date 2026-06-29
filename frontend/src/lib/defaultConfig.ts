@@ -6,8 +6,8 @@ lora_name: lora
 output_format: safetensors
 
 # LoRA settings
-lora_rank: 16
-lora_alpha: 16.0
+lora_rank: 32
+lora_alpha: 32.0
 lora_dropout: 0.0
 
 # Training targets
@@ -22,12 +22,14 @@ text_encoder_2:
   weight_dtype: float16
 
 # Training hyperparameters
-epochs: 10
+epochs: 30
 batch_size: 1
 gradient_accumulation_steps: 1
-learning_rate: 0.0001
-lr_scheduler: cosine
-lr_warmup_steps: 10
+learning_rate: 0.00005
+lr_scheduler: constant
+lr_warmup_steps: 0
+min_snr_gamma: 5.0
+noise_offset: 0.0357
 
 optimizer:
   type: adamw_8bit
@@ -49,7 +51,7 @@ concepts:
   - dataset_id: 1
     trigger_words: []
     caption_extension: .txt
-    repeats: 1
+    repeats: 3
 
 # Optimization
 gradient_checkpointing: true

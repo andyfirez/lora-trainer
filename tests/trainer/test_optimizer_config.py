@@ -35,8 +35,8 @@ def test_load_optimizer_presets_has_all_types() -> None:
 @pytest.mark.parametrize(
     ("optimizer_type", "expected_lr", "expected_scheduler", "expected_warmup"),
     [
-        (Optimizer.ADAMW, 1e-4, "cosine", 10),
-        (Optimizer.ADAMW_8BIT, 1e-4, "cosine", 10),
+        (Optimizer.ADAMW, 5e-5, "constant", 0),
+        (Optimizer.ADAMW_8BIT, 5e-5, "constant", 0),
         (Optimizer.ADAFACTOR, 1e-4, "constant_with_warmup", 10),
         (Optimizer.PRODIGY, 1.0, "constant", 0),
     ],

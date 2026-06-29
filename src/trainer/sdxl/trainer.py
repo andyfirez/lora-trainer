@@ -10,7 +10,7 @@ from typing import Any, Callable, Optional
 
 import torch
 from diffusers import DDPMScheduler
-from peft import LoraConfig, get_peft_model
+from peft import get_peft_model
 from torch import Tensor
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
@@ -28,8 +28,11 @@ from src.trainer.sdxl.dataset import (
 from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
 from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
 from src.trainer.sdxl.latent_cache import build_latent_cache
+from src.trainer.sdxl.loss import apply_noise_offset, min_snr_weight
 from src.trainer.sdxl.lora_export import export_kohya_state_dict
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, apply_lora_state_to_module
+from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
+from src.trainer.sdxl.lora_targets import SDXL_TE_LORA_TARGET_MODULES, SDXL_UNET_LORA_TARGET_MODULES
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
 from src.trainer.sdxl.sampling import (
@@ -133,34 +136,31 @@ class SDXLLoRATrainer:
         text_encoder_2.requires_grad_(False)
         unet.requires_grad_(False)
 
-        unet_lora_config = LoraConfig(
-            r=config.lora_rank,
-            lora_alpha=config.lora_alpha,
-            lora_dropout=config.lora_dropout,
-            init_lora_weights="gaussian",
-            target_modules=["to_k", "to_q", "to_v", "to_out.0"],
+        unet_lora_config = build_sdxl_lora_config(
+            rank=config.lora_rank,
+            alpha=config.lora_alpha,
+            dropout=config.lora_dropout,
+            target_modules=SDXL_UNET_LORA_TARGET_MODULES,
         )
         unet = get_peft_model(unet, unet_lora_config)
         trainable_params: list = list(unet.parameters())
 
         if config.text_encoder_1.train:
-            te1_lora_config = LoraConfig(
-                r=config.lora_rank,
-                lora_alpha=config.lora_alpha,
-                lora_dropout=config.lora_dropout,
-                init_lora_weights="gaussian",
-                target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
+            te1_lora_config = build_sdxl_lora_config(
+                rank=config.lora_rank,
+                alpha=config.lora_alpha,
+                dropout=config.lora_dropout,
+                target_modules=SDXL_TE_LORA_TARGET_MODULES,
             )
             text_encoder_1 = get_peft_model(text_encoder_1, te1_lora_config)
             trainable_params += list(text_encoder_1.parameters())
 
         if config.text_encoder_2.train:
-            te2_lora_config = LoraConfig(
-                r=config.lora_rank,
-                lora_alpha=config.lora_alpha,
-                lora_dropout=config.lora_dropout,
-                init_lora_weights="gaussian",
-                target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
+            te2_lora_config = build_sdxl_lora_config(
+                rank=config.lora_rank,
+                alpha=config.lora_alpha,
+                dropout=config.lora_dropout,
+                target_modules=SDXL_TE_LORA_TARGET_MODULES,
             )
             text_encoder_2 = get_peft_model(text_encoder_2, te2_lora_config)
             trainable_params += list(text_encoder_2.parameters())
@@ -360,6 +360,7 @@ class SDXLLoRATrainer:
                     # --- Noise + timesteps ---
                     with torch.no_grad():
                         noise = torch.randn_like(latents)
+                        noise = apply_noise_offset(latents, noise, config.noise_offset)
                         bsz = latents.shape[0]
                         timesteps = torch.randint(
                             0, noise_scheduler.config.num_train_timesteps, (bsz,), device=device
@@ -409,8 +410,21 @@ class SDXLLoRATrainer:
                         if noise_scheduler.config.prediction_type == "epsilon"
                         else noise_scheduler.get_velocity(latents, noise, timesteps)
                     )
-                    loss = torch.nn.functional.mse_loss(model_pred.float(), target.float(), reduction="mean")
-                    loss = loss / config.gradient_accumulation_steps
+                    per_sample_loss = torch.nn.functional.mse_loss(
+                        model_pred.float(),
+                        target.float(),
+                        reduction="none",
+                    ).mean(dim=(1, 2, 3))
+                    if config.min_snr_gamma > 0:
+                        v_prediction = noise_scheduler.config.prediction_type == "v_prediction"
+                        snr_weights = min_snr_weight(
+                            timesteps,
+                            noise_scheduler.alphas_cumprod,
+                            config.min_snr_gamma,
+                            v_prediction=v_prediction,
+                        )
+                        per_sample_loss = per_sample_loss * snr_weights.to(device=per_sample_loss.device)
+                    loss = per_sample_loss.mean() / config.gradient_accumulation_steps
                     loss.backward()
                     accumulated_loss += loss.item()
 

@@ -7,8 +7,10 @@ from src.trainer.config import TrainConfig
 from src.trainer.sdxl.lora_export import (
     _peft_param_to_kohya_keys,
     apply_kohya_state_dict,
+    apply_lora_metadata_to_config,
     detect_lora_format,
     export_kohya_state_dict,
+    infer_kohya_lora_metadata,
 )
 
 
@@ -85,3 +87,46 @@ def test_kohya_export_apply_roundtrip() -> None:
     ):
         assert src_name == tgt_name
         assert torch.allclose(src_param, tgt_param)
+
+
+def test_export_kohya_state_dict_ff_module() -> None:
+    unet = _FakePeftModule([
+        "base_model.model.down_blocks.0.attentions.0.transformer_blocks.0.ff.net.2.lora_A.default.weight",
+        "base_model.model.down_blocks.0.attentions.0.transformer_blocks.0.ff.net.2.lora_B.default.weight",
+    ])
+    config = TrainConfig(lora_alpha=32.0)
+    state_dict = export_kohya_state_dict(unet, nn.Module(), nn.Module(), config)
+
+    base = "lora_unet_down_blocks_0_attentions_0_transformer_blocks_0_ff_net_2"
+    assert f"{base}.lora_down.weight" in state_dict
+    assert f"{base}.lora_up.weight" in state_dict
+    assert f"{base}.alpha" in state_dict
+
+
+def test_infer_kohya_lora_metadata_from_state_dict() -> None:
+    state_dict = {
+        "lora_unet_down_blocks_0_attentions_0_transformer_blocks_0_attn1_to_q.lora_down.weight": torch.randn(16, 4),
+        "lora_unet_down_blocks_0_attentions_0_transformer_blocks_0_attn1_to_q.lora_up.weight": torch.randn(8, 16),
+        "lora_unet_down_blocks_0_attentions_0_transformer_blocks_0_attn1_to_q.alpha": torch.tensor(16.0),
+    }
+
+    metadata = infer_kohya_lora_metadata(state_dict)
+
+    assert metadata.rank == 16
+    assert metadata.alpha == 16.0
+    assert metadata.train_te1 is False
+    assert metadata.train_te2 is False
+
+
+def test_apply_lora_metadata_to_config_overrides_rank() -> None:
+    state_dict = {
+        "lora_unet_x.lora_down.weight": torch.randn(16, 4),
+        "lora_unet_x.lora_up.weight": torch.randn(8, 16),
+        "lora_unet_x.alpha": torch.tensor(16.0),
+    }
+    config = TrainConfig(lora_rank=32, lora_alpha=32.0)
+
+    resolved = apply_lora_metadata_to_config(config, state_dict)
+
+    assert resolved.lora_rank == 16
+    assert resolved.lora_alpha == 16.0

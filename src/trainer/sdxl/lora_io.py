@@ -32,6 +32,11 @@ def apply_lora_state_to_module(
         value = state_dict.get(key)
         if value is None:
             continue
+        if tuple(value.shape) != tuple(param.shape):
+            raise ValueError(
+                f"LoRA weight shape mismatch for {key}: "
+                f"checkpoint {tuple(value.shape)} vs model {tuple(param.shape)}"
+            )
         with torch.no_grad():
             param.copy_(value.to(dtype=param.dtype, device=param.device))
 

@@ -14,9 +14,9 @@
       "d0": 0.00001,
       "d_coef": 1.0
     },
-    "learning_rate": 0.0001,
-    "lr_scheduler": "cosine",
-    "lr_warmup_steps": 10
+    "learning_rate": 0.00005,
+    "lr_scheduler": "constant",
+    "lr_warmup_steps": 0
   },
   "adamw_8bit": {
     "optimizer": {
@@ -33,9 +33,9 @@
       "d0": 0.00001,
       "d_coef": 1.0
     },
-    "learning_rate": 0.0001,
-    "lr_scheduler": "cosine",
-    "lr_warmup_steps": 10
+    "learning_rate": 0.00005,
+    "lr_scheduler": "constant",
+    "lr_warmup_steps": 0
   },
   "adafactor": {
     "optimizer": {
