@@ -150,6 +150,16 @@ def prepared_image_path(prepared_dir: Path, filename: str) -> Path:
     return prepared_dir / filename
 
 
+def resolve_prepared_path(prepared_dir: Path, filename: str) -> Path | None:
+    prepared_path = prepared_dir / filename
+    if prepared_path.is_file():
+        return prepared_path
+    alt_png = prepared_dir / f"{Path(filename).stem}.png"
+    if alt_png.is_file():
+        return alt_png
+    return None
+
+
 def is_prepared_file_valid(prepared_path: Path, resolution: int) -> bool:
     if not prepared_path.is_file():
         return False

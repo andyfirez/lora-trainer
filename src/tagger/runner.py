@@ -8,10 +8,12 @@ import threading
 from collections.abc import Coroutine
 from pathlib import Path
 
+from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
 from src.services.datasets.captions import list_image_filenames, merge_tags, read_tags, write_tags
+from src.services.datasets.training_cache import invalidate_te_cache_for_image
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
 from src.tagger.config import TaggingConfig
 from src.tagger.wd14 import WD14Tagger
@@ -83,6 +85,15 @@ def _resolve_targets(config: TaggingConfig) -> list[str]:
     return list_image_filenames(image_dir)
 
 
+async def _load_dataset_target_resolution(dataset_id: int) -> int | None:
+    async with session_factory() as session:
+        repo = DatasetRepository(session)
+        dataset = await repo.get_by_id(dataset_id)
+        if dataset is None:
+            return None
+        return dataset.target_resolution
+
+
 async def run_tagging_job(job_id: int) -> int:
     log_path = build_job_log_path(job_id)
     run_logger = build_job_logger(job_id, log_path, name_prefix="tagging-job")
@@ -90,6 +101,7 @@ async def run_tagging_job(job_id: int) -> int:
 
     job = await _load_job(job_id)
     config = TaggingConfig.from_yaml(job.config_yaml)
+    target_resolution = await _load_dataset_target_resolution(config.dataset_id)
     targets = _resolve_targets(config)
     total = len(targets)
 
@@ -134,6 +146,7 @@ async def run_tagging_job(job_id: int) -> int:
         existing = read_tags(image_dir, filename, config.caption_extension)
         merged = merge_tags(existing, predicted, config.mode.value)
         write_tags(image_dir, filename, merged, config.caption_extension)
+        invalidate_te_cache_for_image(image_dir, filename, target_resolution)
         run_logger.info(
             "Tagged %s (%d/%d): %d tag(s) -> %d total",
             filename,

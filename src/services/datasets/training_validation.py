@@ -10,7 +10,7 @@ from src.services.datasets.exceptions import (
     DatasetNotPreparedError,
     DatasetResolutionMismatchError,
 )
-from src.services.datasets.preprocess import prepared_dir_path
+from src.services.datasets.preprocess import prepared_dir_path, resolve_prepared_path
 
 
 def validate_dataset_for_training(dataset: Dataset, resolution: int) -> None:
@@ -61,14 +61,10 @@ def validate_dataset_for_training(dataset: Dataset, resolution: int) -> None:
     missing: list[str] = []
     invalid_size: list[str] = []
     for filename in filenames:
-        prepared_path = prepared_dir / filename
-        if not prepared_path.is_file():
-            alt_png = prepared_dir / f"{Path(filename).stem}.png"
-            if alt_png.is_file():
-                prepared_path = alt_png
-            else:
-                missing.append(filename)
-                continue
+        prepared_path = resolve_prepared_path(prepared_dir, filename)
+        if prepared_path is None:
+            missing.append(filename)
+            continue
         try:
             with Image.open(prepared_path) as img:
                 if img.size != (resolution, resolution):

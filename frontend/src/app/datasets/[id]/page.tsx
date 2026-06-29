@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Pencil, Sparkles } from "lucide-react";
 import AutoTagModal from "@/components/dataset/AutoTagModal";
 import EditDatasetModal from "@/components/dataset/EditDatasetModal";
@@ -28,6 +28,9 @@ export default function DatasetDetailPage() {
   const [localItems, setLocalItems] = useState<DatasetItem[]>([]);
   const [cropFilename, setCropFilename] = useState<string | null>(null);
   const [filterIncomplete, setFilterIncomplete] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const bakingInFlight = useRef(false);
+  const lastBakeKey = useRef<string | null>(null);
 
   const {
     data: dataset,
@@ -134,8 +137,49 @@ export default function DatasetDetailPage() {
 
   const handleDatasetSaved = useCallback(async () => {
     setPage(1);
+    lastBakeKey.current = null;
     await refreshAll();
   }, [refreshAll]);
+
+  useEffect(() => {
+    if (!Number.isFinite(datasetId) || !dataset?.target_resolution || !preprocessStatus || cropFilename) {
+      return;
+    }
+
+    const incomplete =
+      preprocessStatus.no_crop + preprocessStatus.cropped + preprocessStatus.stale;
+    if (incomplete <= 0) {
+      lastBakeKey.current = null;
+      return;
+    }
+    if (bakingInFlight.current) return;
+
+    const bakeKey = [
+      dataset.target_resolution,
+      preprocessStatus.total,
+      preprocessStatus.no_crop,
+      preprocessStatus.cropped,
+      preprocessStatus.stale,
+    ].join(":");
+    if (lastBakeKey.current === bakeKey) return;
+
+    lastBakeKey.current = bakeKey;
+    bakingInFlight.current = true;
+    setPreparing(true);
+
+    void (async () => {
+      try {
+        await datasetsApi.bakeAll(datasetId);
+        lastBakeKey.current = null;
+        await refreshAll();
+      } catch {
+        // Status refresh will reflect partial progress; same bakeKey prevents retry loops.
+      } finally {
+        bakingInFlight.current = false;
+        setPreparing(false);
+      }
+    })();
+  }, [dataset?.target_resolution, preprocessStatus, cropFilename, datasetId, refreshAll]);
 
   const filteredItems = useMemo(() => {
     if (!filterIncomplete) return localItems;
@@ -228,7 +272,12 @@ export default function DatasetDetailPage() {
         </div>
       )}
 
-      <PreprocessPanel dataset={dataset} status={preprocessStatus} onUpdated={handleDatasetSaved} />
+      <PreprocessPanel
+        dataset={dataset}
+        status={preprocessStatus}
+        preparing={preparing}
+        onUpdated={handleDatasetSaved}
+      />
 
       <TagFrequencyPanel
         tags={tagStats?.tags ?? []}
@@ -292,6 +341,7 @@ export default function DatasetDetailPage() {
                 initialTags={item.tags}
                 preprocessState={item.preprocess_state as ImagePreprocessState | undefined}
                 canCrop={dataset.target_resolution != null}
+                preparing={preparing}
                 cacheKey={dataset.updated_at}
                 onCropClick={() => setCropFilename(item.filename)}
                 onSave={handleSaveTags}

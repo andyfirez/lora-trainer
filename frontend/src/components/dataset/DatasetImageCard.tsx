@@ -11,6 +11,7 @@ interface Props {
   initialTags: string[];
   preprocessState?: ImagePreprocessState | null;
   canCrop: boolean;
+  preparing?: boolean;
   cacheKey?: string;
   onCropClick: () => void;
   onTagsSaved: (filename: string, tags: string[]) => void;
@@ -30,6 +31,7 @@ export default function DatasetImageCard({
   initialTags,
   preprocessState,
   canCrop,
+  preparing = false,
   cacheKey,
   onCropClick,
   onTagsSaved,
@@ -82,6 +84,14 @@ export default function DatasetImageCard({
   }, []);
 
   const stateInfo = preprocessState ? STATE_LABELS[preprocessState] : null;
+  const badgeLabel =
+    preparing && preprocessState && preprocessState !== "ready"
+      ? "Preparing…"
+      : stateInfo?.label;
+  const badgeClassName =
+    preparing && preprocessState && preprocessState !== "ready"
+      ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+      : stateInfo?.className;
   const usePrepared = preprocessState === "ready" && !preparedFailed;
   const thumbnailSrc = usePrepared
     ? datasetPreparedImageUrl(datasetId, filename, 256, cacheKey)
@@ -106,11 +116,11 @@ export default function DatasetImageCard({
             if (usePrepared) setPreparedFailed(true);
           }}
         />
-        {stateInfo && (
+        {badgeLabel && badgeClassName && (
           <span
-            className={`absolute top-2 left-2 text-[10px] px-1.5 py-0.5 rounded border ${stateInfo.className}`}
+            className={`absolute top-2 left-2 text-[10px] px-1.5 py-0.5 rounded border ${badgeClassName}`}
           >
-            {stateInfo.label}
+            {badgeLabel}
           </span>
         )}
       </button>

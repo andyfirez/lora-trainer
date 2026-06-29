@@ -33,6 +33,7 @@ from src.services.datasets.exceptions import (
     DatasetTargetResolutionNotSetError,
     InvalidDatasetFilenameError,
 )
+from src.services.datasets.training_cache import invalidate_te_cache_for_image
 from src.services.datasets.preprocess import (
     CropMeta,
     ImagePreprocessState,
@@ -41,6 +42,9 @@ from src.services.datasets.preprocess import (
     build_crop_meta,
     build_fitted_preview_bytes,
     compute_preprocess_status,
+    default_crop_center,
+    get_image_state,
+    is_crop_stale,
     prepared_dir_path,
     recompute_preprocess_ready,
     source_mtime,
@@ -153,6 +157,13 @@ class DatasetsService:
         except FileNotFoundError as exc:
             raise DatasetImageNotFoundError(filename) from exc
 
+    def _invalidate_te_cache(self, dataset: Dataset, filename: str) -> None:
+        invalidate_te_cache_for_image(
+            dataset.image_dir,
+            filename,
+            dataset.target_resolution,
+        )
+
     def update_tags(
         self,
         dataset: Dataset,
@@ -169,6 +180,7 @@ class DatasetsService:
             write_tags(Path(dataset.image_dir), filename, normalized, caption_extension)
         except FileNotFoundError as exc:
             raise DatasetImageNotFoundError(filename) from exc
+        self._invalidate_te_cache(dataset, filename)
         return normalized
 
     def get_tag_stats(
@@ -202,6 +214,7 @@ class DatasetsService:
                 continue
             tags.append(normalized_tag)
             write_tags(image_dir, filename, tags, caption_extension)
+            self._invalidate_te_cache(dataset, filename)
             updated += 1
         return updated
 
@@ -233,6 +246,7 @@ class DatasetsService:
                 [t for t in tags if t != normalized_tag],
                 caption_extension,
             )
+            self._invalidate_te_cache(dataset, filename)
             updated += 1
         return updated
 
@@ -408,22 +422,55 @@ class DatasetsService:
         await self._crop_repo._session.flush()
         await self._update_preprocess_ready_flag(dataset)
 
+    async def _ensure_crop(self, dataset: Dataset, filename: str) -> DatasetImageCrop:
+        path = self._resolve_image_path(dataset, filename)
+        mtime = source_mtime(path)
+        now = datetime.now(timezone.utc)
+        existing = await self._crop_repo.get_by_dataset_and_filename(dataset.id, filename)  # type: ignore[arg-type]
+        if existing is None:
+            cx, cy = default_crop_center(0, 0)
+            crop = DatasetImageCrop(
+                dataset_id=dataset.id,  # type: ignore[arg-type]
+                filename=filename,
+                crop_center_x=cx,
+                crop_center_y=cy,
+                source_mtime=mtime,
+                baked_at=None,
+            )
+            await self._crop_repo.add(crop)
+            return crop
+        if is_crop_stale(existing.source_mtime, mtime):
+            existing.source_mtime = mtime
+            existing.baked_at = None
+            existing.updated_at = now
+            self._crop_repo._session.add(existing)
+            await self._crop_repo._session.flush()
+        return existing
+
     async def bake_all(self, dataset: Dataset, filenames: list[str] | None = None) -> int:
         if dataset.target_resolution is None:
             raise DatasetTargetResolutionNotSetError(dataset.id)  # type: ignore[arg-type]
         all_filenames = filenames if filenames else list_image_filenames(Path(dataset.image_dir))
+        resolution = dataset.target_resolution
+        image_dir = Path(dataset.image_dir)
         baked = 0
         errors: list[str] = []
         for filename in all_filenames:
-            crop = await self._crop_repo.get_by_dataset_and_filename(dataset.id, filename)  # type: ignore[arg-type]
-            if crop is None:
-                errors.append(f"{filename}: no crop defined")
-                continue
             try:
+                crop = await self._ensure_crop(dataset, filename)
+                state = get_image_state(
+                    filename=filename,
+                    image_dir=image_dir,
+                    resolution=resolution,
+                    crop_mtime=crop.source_mtime,
+                    crop_baked_at=crop.baked_at,
+                )
+                if state == ImagePreprocessState.READY:
+                    continue
                 await self.bake_image(dataset, filename)
                 baked += 1
-            except DatasetPreprocessError as exc:
-                errors.append(str(exc))
+            except (DatasetPreprocessError, DatasetImageNotFoundError, InvalidDatasetFilenameError) as exc:
+                errors.append(f"{filename}: {exc}")
         if errors and baked == 0:
             raise DatasetPreprocessError("; ".join(errors))
         await self._update_preprocess_ready_flag(dataset)
