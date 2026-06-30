@@ -26,5 +26,9 @@ Hypothesis A: `Winx_Bloom_CFTS_epoch5`, seed=42, prompt с trigger → `lora_out
 ## Что не делали
 
 - Bucketing
-- alpha = rank (32/32)
+- alpha = rank (32/32 или 16/16) + lr=1e-3 (Kohya parity, гипотеза G)
+- Fix add_time_ids: per-image original_size + crop coords (гипотезы H/I)
+- mixed_precision bfloat16 (гипотеза J)
+- optimizer adamw fp32 вместо adamw_8bit (гипотеза K)
+- max_token_length > 77 (гипотеза F)
 - Аудит train loop (noise target, VAE encode, timestep sampling) vs sd-scripts построчно
