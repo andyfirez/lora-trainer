@@ -207,6 +207,9 @@ function normalizeConcept(concept: unknown, datasets?: Dataset[]): Config {
 
 function sanitizeTrainConfig(next: Config, datasets?: Dataset[]): Config {
   let cleaned = stripInlineSamplingFields(next);
+  if (cleaned.clip_skip == null) {
+    cleaned = { ...cleaned, clip_skip: 2 };
+  }
   const concepts = cleaned.concepts;
   if (Array.isArray(concepts)) {
     cleaned = {
@@ -355,10 +358,15 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
   const samplingConfigRequired = samplingEnabled;
 
   useEffect(() => {
-    if (datasetsLoading || !datasets?.length) return;
-    const normalized = sanitizeTrainConfig(config, datasets);
-    const before = JSON.stringify(config.concepts ?? []);
-    const after = JSON.stringify(normalized.concepts ?? []);
+    const normalized = sanitizeTrainConfig(config, datasetsLoading ? undefined : datasets);
+    const before = JSON.stringify({
+      concepts: config.concepts ?? [],
+      clip_skip: config.clip_skip ?? null,
+    });
+    const after = JSON.stringify({
+      concepts: normalized.concepts ?? [],
+      clip_skip: normalized.clip_skip ?? null,
+    });
     if (before !== after) {
       onChange(normalized);
     }
@@ -478,6 +486,19 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             </tbody>
           </table>
         </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-[var(--border)]">
+          <NumberInput
+            label="CLIP Skip"
+            value={config.clip_skip ?? 2}
+            onChange={(v) => set("clip_skip", v ?? 2)}
+            min={1}
+            step={1}
+            placeholder="2"
+          />
+        </div>
+        <p className="text-xs text-[var(--muted)]">
+          CLIP hidden layer used for text encoding during training and sampling. Default 2 matches Kohya.
+        </p>
       </section>
 
       {/* Training Hyperparameters */}

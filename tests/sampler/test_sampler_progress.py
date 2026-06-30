@@ -5,25 +5,23 @@ from src.sampler.sdxl.service import SDXLLoRASampler
 from src.trainer.config import TrainConfig
 
 
-def test_effective_sample_prompts_adds_trigger_words_for_lora_sampling() -> None:
-    config = TrainConfig(sample_prompts=["portrait"])
+def test_effective_sample_prompts_returns_config_prompts() -> None:
+    config = TrainConfig(sample_prompts=["ohwx, portrait"])
     sampler = SDXLLoRASampler(
         config,
         lora_paths=[Path("one.safetensors")],
         output_dir=Path("out"),
-        trigger_words=["ohwx", "person"],
     )
 
-    assert sampler._effective_sample_prompts() == ["ohwx, person, portrait"]
+    assert sampler._effective_sample_prompts() == ["ohwx, portrait"]
 
 
-def test_effective_sample_prompts_unchanged_for_base_model_sampling() -> None:
+def test_effective_sample_prompts_same_for_base_model_sampling() -> None:
     config = TrainConfig(sample_prompts=["portrait"])
     sampler = SDXLLoRASampler(
         config,
         lora_paths=[],
         output_dir=Path("out"),
-        trigger_words=["ohwx"],
     )
 
     assert sampler._effective_sample_prompts() == ["portrait"]

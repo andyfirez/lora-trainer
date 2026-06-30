@@ -18,6 +18,7 @@ def test_prompt_embed_cache_reuses_positive_encoding(mock_encode: MagicMock) -> 
         text_encoder_2=MagicMock(),
         device=torch.device("cpu"),
         dtype=torch.float32,
+        clip_skip=2,
     )
     second = cache.get_positive(
         prompt="hello",
@@ -27,6 +28,7 @@ def test_prompt_embed_cache_reuses_positive_encoding(mock_encode: MagicMock) -> 
         text_encoder_2=MagicMock(),
         device=torch.device("cpu"),
         dtype=torch.float32,
+        clip_skip=2,
     )
 
     assert first[0] is second[0]
@@ -47,6 +49,7 @@ def test_prompt_embed_cache_reuses_negative_encoding(mock_encode: MagicMock) -> 
         text_encoder_2=MagicMock(),
         device=torch.device("cpu"),
         dtype=torch.float32,
+        clip_skip=2,
     )
     second = cache.get_negative(
         negative_prompt="bad",
@@ -56,6 +59,7 @@ def test_prompt_embed_cache_reuses_negative_encoding(mock_encode: MagicMock) -> 
         text_encoder_2=MagicMock(),
         device=torch.device("cpu"),
         dtype=torch.float32,
+        clip_skip=2,
     )
 
     assert first[0] is second[0]

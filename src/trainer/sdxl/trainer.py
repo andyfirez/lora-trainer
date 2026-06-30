@@ -25,7 +25,6 @@ from src.trainer.sdxl.dataset import (
     count_latent_cache_items,
     count_te_cache_items,
 )
-from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
 from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
 from src.trainer.sdxl.latent_cache import build_latent_cache
 from src.trainer.sdxl.loss import apply_noise_offset, min_snr_weight
@@ -34,6 +33,7 @@ from src.trainer.sdxl.lora_io import apply_lora_state_dict, apply_lora_state_to_
 from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
 from src.trainer.sdxl.lora_targets import SDXL_TE_LORA_TARGET_MODULES, SDXL_UNET_LORA_TARGET_MODULES
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
+from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
 from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
 from src.trainer.sdxl.sampling import (
     PromptEmbedCache,
@@ -267,7 +267,7 @@ class SDXLLoRATrainer:
         if config.cache_text_encoder_outputs_to_disk:
             log.warning(
                 "Text encoder disk cache is enabled. Delete *_te.npz files next to images "
-                "after changing trigger_words or captions."
+                "after changing trigger_words, captions, or clip_skip."
             )
 
         if config.cache_text_encoder_outputs:
@@ -280,6 +280,7 @@ class SDXLLoRATrainer:
                 text_encoder_2,
                 device,
                 weight_dtype,
+                config.clip_skip,
                 config.cache_text_encoder_outputs_to_disk,
                 on_progress=_on_cache_progress if cache_steps > 0 else None,
                 log=log,
@@ -392,6 +393,7 @@ class SDXLLoRATrainer:
                             text_encoder_2,
                             device,
                             weight_dtype,
+                            config.clip_skip,
                             train_te1=config.text_encoder_1.train,
                             train_te2=config.text_encoder_2.train,
                         )
@@ -520,6 +522,7 @@ class SDXLLoRATrainer:
         text_encoder_2: torch.nn.Module,
         device: torch.device,
         dtype: torch.dtype,
+        clip_skip: int,
         train_te1: bool,
         train_te2: bool,
     ) -> tuple[Tensor, Tensor]:
@@ -544,11 +547,11 @@ class SDXLLoRATrainer:
 
         with te1_ctx:
             enc1_out = text_encoder_1(tokens_1.input_ids.to(device), output_hidden_states=True)
-            prompt_embeds_1 = enc1_out.hidden_states[-2].to(dtype=dtype)
+            prompt_embeds_1 = select_clip_hidden_state(enc1_out.hidden_states, clip_skip).to(dtype=dtype)
 
         with te2_ctx:
             enc2_out = text_encoder_2(tokens_2.input_ids.to(device), output_hidden_states=True)
-            prompt_embeds_2 = enc2_out.hidden_states[-2].to(dtype=dtype)
+            prompt_embeds_2 = select_clip_hidden_state(enc2_out.hidden_states, clip_skip).to(dtype=dtype)
             pooled_prompt_embeds = enc2_out[0].to(dtype=dtype)
 
         prompt_embeds = torch.cat([prompt_embeds_1, prompt_embeds_2], dim=-1)
@@ -695,10 +698,7 @@ class SDXLLoRATrainer:
 
         sample_dir = self._work_dir(config) / "samples"
         sample_dir.mkdir(parents=True, exist_ok=True)
-        sample_prompts = apply_trigger_words_to_sample_prompts(
-            config.sample_prompts,
-            collect_trigger_words(config.concepts),
-        )
+        sample_prompts = config.sample_prompts
         n_prompts = len(sample_prompts)
         log.info("Sampling %d image(s) for epoch %d...", n_prompts, epoch)
 
@@ -768,6 +768,7 @@ class SDXLLoRATrainer:
                 text_encoder_2=inference_te2,
                 device=device,
                 dtype=autocast_dtype,
+                clip_skip=config.clip_skip,
                 cache=prompt_embed_cache,
             )
             inference_te1.to("cpu")

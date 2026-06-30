@@ -12,7 +12,6 @@ from peft import get_peft_model
 
 from src.trainer.attention import configure_unet_attention
 from src.trainer.config import TrainConfig, WeightDtype
-from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts
 from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
 from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
@@ -56,7 +55,6 @@ class SDXLLoRASampler:
         *,
         lora_paths: list[Path],
         output_dir: Path,
-        trigger_words: list[str] | None = None,
         progress_status_callback: ProgressStatusCallback | None = None,
         progress_callback: ProgressCallback | None = None,
         log: logging.Logger | None = None,
@@ -64,7 +62,6 @@ class SDXLLoRASampler:
         self._config = config
         self._lora_paths = lora_paths
         self._output_dir = output_dir
-        self._trigger_words = trigger_words or []
         self._progress_status_callback = progress_status_callback
         self._progress_callback = progress_callback
         self._log = log or logger
@@ -272,6 +269,7 @@ class SDXLLoRASampler:
                 text_encoder_2=inference_te2,
                 device=device,
                 dtype=autocast_dtype,
+                clip_skip=config.clip_skip,
                 cache=self._prompt_embed_cache,
             )
             inference_te1.to("cpu")
@@ -328,9 +326,7 @@ class SDXLLoRASampler:
         self._log_sample_step(prompt_index, completed, total)
 
     def _effective_sample_prompts(self) -> list[str]:
-        if not self._lora_paths:
-            return self._config.sample_prompts
-        return apply_trigger_words_to_sample_prompts(self._config.sample_prompts, self._trigger_words)
+        return self._config.sample_prompts
 
     def _total_diffusion_steps(self) -> int:
         lora_count = len(self._lora_paths) if self._lora_paths else 1

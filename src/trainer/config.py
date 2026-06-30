@@ -118,6 +118,7 @@ class TrainConfig(BaseModel):
     optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig.defaults)
     min_snr_gamma: float = Field(default=5.0, ge=0.0)
     noise_offset: float = Field(default=0.0357, ge=0.0)
+    clip_skip: int = Field(default=2, ge=1)
 
     # Data
     resolution: int = Field(default=1024, ge=64, le=2048)
@@ -198,10 +199,19 @@ class TrainConfig(BaseModel):
 
     def resolve_sampling(self, sampling: "SamplingConfig") -> "TrainConfig":
         from src.sampler.config import SamplingConfig
+        from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
 
         if not isinstance(sampling, SamplingConfig):
             raise TypeError("sampling must be a SamplingConfig instance")
-        return self.model_copy(update=sampling.build_sampling_field_updates())
+        merged = self.model_copy(update=sampling.build_sampling_field_updates())
+        return merged.model_copy(
+            update={
+                "sample_prompts": apply_trigger_words_to_sample_prompts(
+                    merged.sample_prompts,
+                    collect_trigger_words(self.concepts),
+                )
+            }
+        )
 
     def to_yaml(self) -> str:
         data = self.model_dump(mode="json", exclude_none=True)

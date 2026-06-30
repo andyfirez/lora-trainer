@@ -30,6 +30,7 @@ lr_scheduler: constant
 lr_warmup_steps: 0
 min_snr_gamma: 5.0
 noise_offset: 0.0357
+clip_skip: 2
 
 optimizer:
   type: adamw_8bit

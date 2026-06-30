@@ -22,6 +22,7 @@ def test_precompute_all_sample_embeds_encodes_negative_once(mock_encode: MagicMo
         text_encoder_2=MagicMock(),
         device=torch.device("cpu"),
         dtype=torch.float32,
+        clip_skip=2,
     )
 
     assert len(results) == 2

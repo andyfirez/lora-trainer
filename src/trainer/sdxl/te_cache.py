@@ -8,6 +8,8 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
+
 logger = logging.getLogger(__name__)
 
 _TE_NPZ_SUFFIX = "_te.npz"
@@ -18,8 +20,12 @@ def _te_npz_path(image_path: Path) -> Path:
     return image_path.parent / (image_path.stem + _TE_NPZ_SUFFIX)
 
 
-def _disk_cache_valid(image_path: Path, npz: Path) -> bool:
-    return npz.is_file() and npz.stat().st_mtime >= image_path.stat().st_mtime
+def _disk_cache_valid(image_path: Path, npz: Path, clip_skip: int) -> bool:
+    if not npz.is_file() or npz.stat().st_mtime < image_path.stat().st_mtime:
+        return False
+    data = np.load(npz)
+    cached_clip_skip = int(data["clip_skip"]) if "clip_skip" in data else None
+    return cached_clip_skip == clip_skip
 
 
 def build_te_cache(
@@ -30,6 +36,7 @@ def build_te_cache(
     text_encoder_2: torch.nn.Module,
     device: torch.device,
     dtype: torch.dtype,
+    clip_skip: int,
     to_disk: bool,
     on_progress: Optional[CacheProgressCallback] = None,
     log: logging.Logger | None = None,
@@ -71,7 +78,7 @@ def build_te_cache(
         processed += 1
 
         npz = _te_npz_path(image_path)
-        if to_disk and _disk_cache_valid(image_path, npz):
+        if to_disk and _disk_cache_valid(image_path, npz, clip_skip):
             data = np.load(npz)
             prompt_embeds = torch.from_numpy(data["prompt_embeds"].copy()).to(dtype)
             pooled_prompt_embeds = torch.from_numpy(data["pooled_prompt_embeds"].copy()).to(dtype)
@@ -98,10 +105,10 @@ def build_te_cache(
 
         with torch.no_grad():
             enc1_out = text_encoder_1(tokens_1.input_ids.to(device), output_hidden_states=True)
-            prompt_embeds_1 = enc1_out.hidden_states[-2].to(dtype=dtype).cpu()
+            prompt_embeds_1 = select_clip_hidden_state(enc1_out.hidden_states, clip_skip).to(dtype=dtype).cpu()
 
             enc2_out = text_encoder_2(tokens_2.input_ids.to(device), output_hidden_states=True)
-            prompt_embeds_2 = enc2_out.hidden_states[-2].to(dtype=dtype).cpu()
+            prompt_embeds_2 = select_clip_hidden_state(enc2_out.hidden_states, clip_skip).to(dtype=dtype).cpu()
             pooled_prompt_embeds = enc2_out[0].to(dtype=dtype).cpu()
 
         prompt_embeds = torch.cat([prompt_embeds_1, prompt_embeds_2], dim=-1)
@@ -112,6 +119,7 @@ def build_te_cache(
                 npz,
                 prompt_embeds=prompt_embeds.float().numpy(),
                 pooled_prompt_embeds=pooled_prompt_embeds.float().numpy(),
+                clip_skip=np.array(clip_skip),
             )
 
         cache[caption] = (prompt_embeds, pooled_prompt_embeds)

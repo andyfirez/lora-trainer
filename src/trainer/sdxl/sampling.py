@@ -14,6 +14,7 @@ from diffusers import (
 from torch import Tensor
 
 from src.trainer.config import SampleScheduler
+from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
 
 _SCHEDULER_MAP = {
     SampleScheduler.EULER: EulerDiscreteScheduler,
@@ -38,6 +39,7 @@ def encode_sdxl_prompt(
     text_encoder_2: torch.nn.Module,
     device: torch.device,
     dtype: torch.dtype,
+    clip_skip: int,
 ) -> tuple[Tensor, Tensor]:
     tokens_1 = tokenizer_1(
         captions,
@@ -55,9 +57,9 @@ def encode_sdxl_prompt(
     )
     with torch.no_grad():
         enc1_out = text_encoder_1(tokens_1.input_ids.to(device), output_hidden_states=True)
-        prompt_embeds_1 = enc1_out.hidden_states[-2].to(dtype=dtype)
+        prompt_embeds_1 = select_clip_hidden_state(enc1_out.hidden_states, clip_skip).to(dtype=dtype)
         enc2_out = text_encoder_2(tokens_2.input_ids.to(device), output_hidden_states=True)
-        prompt_embeds_2 = enc2_out.hidden_states[-2].to(dtype=dtype)
+        prompt_embeds_2 = select_clip_hidden_state(enc2_out.hidden_states, clip_skip).to(dtype=dtype)
         pooled_prompt_embeds = enc2_out[0].to(dtype=dtype)
     return torch.cat([prompt_embeds_1, prompt_embeds_2], dim=-1), pooled_prompt_embeds
 
@@ -77,6 +79,7 @@ class PromptEmbedCache:
         text_encoder_2: torch.nn.Module,
         device: torch.device,
         dtype: torch.dtype,
+        clip_skip: int,
     ) -> tuple[Tensor, Tensor]:
         cached = self._positive_entries.get(prompt)
         if cached is not None:
@@ -90,6 +93,7 @@ class PromptEmbedCache:
             text_encoder_2,
             device,
             dtype,
+            clip_skip,
         )
         self._positive_entries[prompt] = value
         return value
@@ -104,6 +108,7 @@ class PromptEmbedCache:
         text_encoder_2: torch.nn.Module,
         device: torch.device,
         dtype: torch.dtype,
+        clip_skip: int,
     ) -> tuple[Tensor, Tensor]:
         if self._negative is not None and self._negative[0] == negative_prompt:
             return self._negative[1], self._negative[2]
@@ -116,6 +121,7 @@ class PromptEmbedCache:
             text_encoder_2,
             device,
             dtype,
+            clip_skip,
         )
         self._negative = (negative_prompt, negative_prompt_embeds, negative_pooled_prompt_embeds)
         return negative_prompt_embeds, negative_pooled_prompt_embeds
@@ -143,6 +149,7 @@ def precompute_all_sample_embeds(
     text_encoder_2: torch.nn.Module,
     device: torch.device,
     dtype: torch.dtype,
+    clip_skip: int,
     cache: PromptEmbedCache | None = None,
 ) -> list[SamplePromptEmbeds]:
     embed_cache = cache if cache is not None else PromptEmbedCache()
@@ -154,6 +161,7 @@ def precompute_all_sample_embeds(
         text_encoder_2=text_encoder_2,
         device=device,
         dtype=dtype,
+        clip_skip=clip_skip,
     )
     results: list[SamplePromptEmbeds] = []
     for prompt in sample_prompts:
@@ -165,6 +173,7 @@ def precompute_all_sample_embeds(
             text_encoder_2=text_encoder_2,
             device=device,
             dtype=dtype,
+            clip_skip=clip_skip,
         )
         results.append(
             SamplePromptEmbeds(

@@ -15,7 +15,7 @@ from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import SDXLLoRASampler
 from src.trainer.config import TrainConfig
-from src.trainer.sdxl.caption import collect_trigger_words
+from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
 
 logger = logging.getLogger(__name__)
@@ -155,11 +155,16 @@ async def run_sampling_job(job_id: int) -> int:
                 source_job = await repo.get_by_id(source_job_id)
                 if source_job is not None and source_job.job_type == JobType.TRAINING:
                     source_train_config = TrainConfig.from_yaml(source_job.config_yaml)
-        trigger_words = (
-            collect_trigger_words(source_train_config.concepts)
-            if source_train_config is not None and lora_paths
-            else []
-        )
+        if source_train_config is not None:
+            train_config = train_config.model_copy(
+                update={
+                    "clip_skip": source_train_config.clip_skip,
+                    "sample_prompts": apply_trigger_words_to_sample_prompts(
+                        train_config.sample_prompts,
+                        collect_trigger_words(source_train_config.concepts),
+                    ),
+                }
+            )
         if output_path is None:
             output_path = str(
                 resolve_sampling_output_path(sampling_config, job_id, source_train_config)
@@ -171,7 +176,6 @@ async def run_sampling_job(job_id: int) -> int:
             train_config,
             lora_paths=lora_paths,
             output_dir=Path(output_path),
-            trigger_words=trigger_words,
             progress_status_callback=_make_progress_status_callback(job_id),
             progress_callback=_make_progress_callback(job_id),
             log=run_logger,

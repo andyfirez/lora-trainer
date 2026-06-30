@@ -4,7 +4,7 @@ from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.tables.job_config import ConfigType
 from src.sampler.config import SamplingConfig
 from src.services.configs.service import JobConfigService
-from src.trainer.config import TrainConfig
+from src.trainer.config import ConceptConfig, TrainConfig
 from src.trainer.sampling_resolution import resolve_sampling_config
 
 
@@ -80,6 +80,17 @@ def test_train_config_resolve_sampling_overlays_runtime_fields() -> None:
     assert resolved.sample_negative_prompt == "bad"
     assert resolved.sample_steps == 25
     assert resolved.sample_cfg_scale == 8.0
+
+
+def test_train_config_resolve_sampling_applies_trigger_words() -> None:
+    train_config = TrainConfig(
+        concepts=[ConceptConfig(dataset_id=1, trigger_words=["ohwx", "person"])],
+    )
+    sampling = SamplingConfig(sample_prompts=["portrait"])
+
+    resolved = train_config.resolve_sampling(sampling)
+
+    assert resolved.sample_prompts == ["ohwx, person, portrait"]
 
 
 def test_train_config_to_yaml_excludes_runtime_sampling_fields() -> None:
