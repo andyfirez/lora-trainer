@@ -12,17 +12,9 @@
 
 Если likeness появится хотя бы слабо → alpha scale был significant contributor.
 
-### 2. Inference при training resolution
+### 2. ~~Inference при training resolution~~ — **выполнено, отвергнуто**
 
-Тест в reForge с **1024×1024** (как train), не 832×1216:
-
-```
-Winx_Bloom_CFTS, <character tags>
-Size: 1024×1024
-Steps: 40, CFG: 7.5
-```
-
-Если likeness улучшится vs 832×1216 → подтверждает **add_time_ids / AR mismatch**.
+1024×1024 и 832×1216 — оба без likeness. См. §F.
 
 ### 3. Eval prompt
 
@@ -46,17 +38,18 @@ LoRA weight: 0.8–1.0
 
 | Feature | Why |
 |---------|-----|
-| **Per-image / per-bucket add_time_ids при train** | Train `[1024,1024,0,0,1024,1024]` ≠ inference `[1216,832,0,0,1216,832]` |
 | **Bucketing / multi-resolution** | 76/80 Bloom non-square; Kohya uses `enable_bucket` |
 | **Default lora_alpha = lora_rank** | Текущий scale 0.5 vs Kohya 1.0 |
+| Per-image add_time_ids при train | P2 после отвержения hypothesis A — mismatch не root cause |
 
 ### P1 — High
 
 | Feature | Why |
 |---------|-----|
-| clip_skip config (Kohya: 2) | Frozen TE + wrong CLIP layer |
-| TE cache invalidation by caption hash | Future-proofing |
+| TE cache invalidation by caption hash | Future-proofing (caption/trigger changes) |
 | Sampling config per LoRA project | UI eval broken (id=5, id=7 → Melanie) |
+
+~~clip_skip~~ — **не нужен для SDXL** (Kohya игнорирует; default=2 = старый hardcode). Параметр оставлен в UI для совместимости, но не влияет на root cause.
 
 ### P2 — Medium
 
@@ -90,6 +83,33 @@ LoRA weight: 0.8–1.0
 
 ## E. Open questions
 
-1. Насколько inference at 1024×1024 улучшит Bloom без code changes? (quick user test)
-2. Нужен ли TE LoRA при clip_skip=2?
-3. Совместим ли Kohya export scale с reForge при alpha≠rank?
+1. ~~Насколько inference at 1024×1024 улучшит Bloom без code changes?~~ → **Проверено (hypothesis A), см. §F**
+2. Совместим ли Kohya export scale с reForge при alpha≠rank?
+
+---
+
+## F. Hypothesis A test results (2026-06-30)
+
+**Setup:** `Winx_Bloom_CFTS_epoch5`, seed=42, steps=40, CFG=7.5, euler_a, prompt с trigger.
+
+| Resolution | add_time_ids | Output |
+|------------|--------------|--------|
+| 832×1216 (portrait) | `[1216,832,0,0,1216,832]` | `hypothesis_a/epoch5_portrait_832x1216_seed42_00.png` |
+| 1024×1024 (square) | `[1024,1024,0,0,1024,1024]` = train | `hypothesis_a/epoch5_square_1024x1024_seed42_00.png` |
+
+**Script:** `scripts/hypothesis_a_resolution_test.py`
+
+### Наблюдения
+
+1. **Trigger + правильный prompt** — orange hair + blue eyes (Bloom palette), в отличие от старых samples без trigger (Melanie/teal). Это eval issue, не train fix.
+2. **Оба resolution — плохое качество, likeness отсутствует** (подтверждено пользователем). Разница 832×1216 vs 1024×1024 **не даёт** заметного улучшения likeness.
+3. Inference при train AR **не спасает** результат → mismatch add_time_ids **не объясняет** провал один.
+
+### Вердict
+
+| | |
+|---|---|
+| **Гипотеза A (add_time_ids / AR mismatch = root cause)** | **Отвергнута** |
+| **add_time_ids mismatch** | Возможный minor factor для portrait vs square, но **не подтверждён** как значимый contributor |
+
+**Следующий приоритет:** гипотеза B (alpha=rank), bucketing, другие gaps vs Kohya.

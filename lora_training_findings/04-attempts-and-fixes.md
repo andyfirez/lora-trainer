@@ -163,4 +163,6 @@ tests/trainer/test_lora_peft.py     — NEW
 tests/trainer/test_lora_export.py    — extended
 ```
 
-**Не реализовано:** bucketing, clip_skip, max_token_length, caption dropout, cache invalidation by caption hash.
+**Не реализовано:** bucketing, max_token_length, caption dropout, cache invalidation by caption hash.
+
+**clip_skip (2026-06-30):** реализован, но **не меняет SDXL train** — default=2 идентичен старому `hidden_states[-2]`; Kohya sd-scripts тоже игнорирует clip_skip для SDXL. Отвергнуто как root cause.

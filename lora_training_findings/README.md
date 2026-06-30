@@ -21,9 +21,9 @@
 
 Наиболее вероятная причина — **systemic pipeline gap**, а не конкретный датасет:
 
-1. **add_time_ids mismatch**: train всегда `[1024,1024,0,0,1024,1024]`, inference `[1216,832,0,0,1216,832]`.
+1. ~~**add_time_ids mismatch**~~ — hypothesis A отвергнута (1024² = portrait, оба без likeness).
 2. **Нет bucketing**: 76/80 изображений Bloom — non-square, force crop в 1024².
 3. **lora_alpha/rank = 0.5** при Kohya alpha=rank (scale 1.0).
-4. **clip_skip** не реализован (Kohya uses 2).
+4. ~~**clip_skip**~~ — **red herring**: default=2 = старый `hidden_states[-2]`; Kohya игнорирует для SDXL train.
 
 Output артефакты: `D:/SD/lora_output/Winx_Bloom_CFTS/`, `D:/SD/lora_output/Winx_Chimera_CFTS/`.

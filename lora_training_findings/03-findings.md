@@ -17,7 +17,7 @@
 
 ---
 
-## 1. add_time_ids: train/inference mismatch (главный systemic suspect)
+## 1. add_time_ids: train/inference mismatch (suspect → hypothesis A отвергнута)
 
 **Файлы:** `src/trainer/sdxl/trainer.py`, `src/trainer/sdxl/latent_sampling/session.py`
 
@@ -37,7 +37,9 @@ add_time_ids = [1216, 832, 0, 0, 1216, 832]
 
 UNet SDXL использует `time_ids` как часть conditioning. LoRA учится под одни micro-cond signals, а применяется при других → **character signal не переносится в inference**.
 
-**Impact:** affects **все** прогоны одинаково (Chimera и Bloom). Совпадает с симптомом «в reForge то же самое».
+**Impact (теоретический):** affects все прогоны с portrait inference.
+
+**Hypothesis A test (2026-06-30):** epoch5, seed=42, trigger prompt — inference 1024×1024 (train-matched add_time_ids) и 832×1216. **Оба без likeness, оба плохого качества** → гипотеза **отвергнута** как root cause. Mismatch AR не объясняет провал.
 
 ---
 
@@ -207,7 +209,7 @@ Sampling config id=5 (Chimera) и id=7 (Bloom) — оба от Melanie, **без
 |----------------|--------------|
 | enable_bucket | ❌ нет |
 | max_token_length | ❌ нет (фикс. tokenizer max_length) |
-| clip_skip | ❌ нет (всегда hidden_states[-2]) |
+| clip_skip | ✅ config есть, но **не влияет на SDXL** (см. §16) |
 | caption_dropout | ❌ нет |
 | shuffle_caption | ❌ нет |
 | color_aug / flip_aug | ❌ нет |
@@ -217,7 +219,7 @@ Sampling config id=5 (Chimera) и id=7 (Bloom) — оба от Melanie, **без
 | FF + attention targets | ✅ (после fix) |
 | Kohya LoRA init | ✅ (после fix) |
 
-Наиболее критичный gap для Winx: **bucketing** + **clip_skip** (Kohya config использует `clip_skip: 2`).
+Наиболее критичный gap для Winx: **bucketing** (clip_skip — red herring, см. §16).
 
 ---
 
@@ -238,3 +240,57 @@ Sampling config id=5 (Chimera) и id=7 (Bloom) — оба от Melanie, **без
 ## 15. Crop centers
 
 Crop centers хранятся в DB (`dataset_image_crops`), baked в `.prepared/1024/`. Центры варьируются (0.38–0.56 по X). При square crop из landscape-кадров часть лица/композиции может теряться.
+
+---
+
+## 16. clip_skip — red herring для SDXL (2026-06-30)
+
+**Статус:** отвергнуто как contributing factor.
+
+### Что было до добавления clip_skip
+
+До commit `93c377c` код жёстко использовал penultimate layer:
+
+```python
+prompt_embeds_1 = enc1_out.hidden_states[-2]
+prompt_embeds_2 = enc2_out.hidden_states[-2]
+```
+
+### Что даёт новый параметр
+
+```python
+# prompt_encoding.py
+def select_clip_hidden_state(hidden_states, clip_skip):
+    return hidden_states[-clip_skip]
+```
+
+Default `clip_skip=2` → `hidden_states[-2]` — **идентично старому поведению**. Качество не могло улучшиться.
+
+### Kohya тоже не использует clip_skip для SDXL train
+
+sd-scripts явно предупреждает при SDXL training:
+
+> `clip_skip will be unexpected / SDXL学習ではclip_skipは動作しません`
+
+В Winx Kohya config `"clip_skip": 2` — **legacy UI field**, не активный train parameter для SDXL.
+
+Документация sd-scripts: `--clip_skip=N` — «**Not typically used for SDXL**».
+
+### Эталоны используют penultimate всегда
+
+| Проект | SDXL TE encoding |
+|--------|------------------|
+| ai-toolkit `text_encode_xl` | `hidden_states[-2]` — comment: «always penultimate layer» |
+| reForge `SDXLClipModel` | `clip_l` и `clip_g`: `layer_idx=-2` (фиксировано) |
+| diffusers SDXL pipeline | penultimate для обоих encoders |
+| lora-trainer (до и после) | `hidden_states[-2]` при default clip_skip=2 |
+
+### Inference mismatch при clip_skip ≠ 2
+
+Если поставить `clip_skip=1` в lora-trainer → `hidden_states[-1]` (last layer). reForge/reForge SDXL inference **всегда** `-2` → train/inference mismatch, качество только хуже.
+
+### Вывод
+
+- clip_skip — **SD1.5/SD2 concept**, не SDXL train gap.
+- Сравнение с Kohya по `clip_skip: 2` было **misleading**.
+- Реальные P0 остаются: **add_time_ids**, **bucketing**, **alpha=rank**.

@@ -33,7 +33,7 @@
 | max_bucket_reso | 2048 | — | ❌ |
 | min_bucket_reso | 512 | — | ❌ |
 | max_resolution | 1024,1024 | 1024 (square only) | ❌ |
-| clip_skip | **2** | **нет (always -2 layer)** | ❌ |
+| clip_skip | **2** (UI field; **ignored for SDXL train**) | default **2** = `hidden_states[-2]` | ✅ equivalent |
 | max_token_length | 250 | tokenizer default (77) | ❌ |
 | stop_text_encoder_training | 0 (TE frozen) | te train=false | ✅ |
 | xformers | true | xformers | ✅ |
@@ -75,9 +75,9 @@
 ## Наиболее значимые расхождения (по impact)
 
 1. **enable_bucket** — Kohya сохраняет aspect ratio; lora-trainer force square crop.
-2. **clip_skip=2** — Kohya пропускает последний слой CLIP; lora-trainer использует `hidden_states[-2]` без configurable skip (может не совпадать semantically).
-3. **Learning rate** — Kohya 1e-3 vs lora-trainer 1e-4 (но с repeats/epochs/bucketing сравнение не прямое).
-4. **Rank** — Kohya 16 vs lora-trainer 32 (больше capacity → выше риск overfit на 13 images).
+2. **Learning rate** — Kohya 1e-3 vs lora-trainer 1e-4 (но с repeats/epochs/bucketing сравнение не прямое).
+3. **Rank** — Kohya 16 vs lora-trainer 32 (больше capacity → выше риск overfit на 13 images).
+4. ~~**clip_skip=2**~~ — **не gap для SDXL**: Kohya игнорирует при train; оба используют penultimate layer.
 
 ---
 

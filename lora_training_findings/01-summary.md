@@ -30,10 +30,10 @@ Bloom — **контрольный эксперимент**: другой пер
 | Rank mismatch при sampling | **Исправлено** |
 | Узкий LoRA scope | **Исправлено** (FF layers) |
 | Kohya init | **Исправлено**, качество не изменилось |
-| **add_time_ids train ≠ inference** | **Главный systemic suspect** — train 1024², inference 832×1216 |
+| **add_time_ids train ≠ inference** | **Отвергнуто как root cause** (hypothesis A: 1024² и 832×1216 — оба без likeness) |
 | **Нет bucketing** (76/80 Bloom non-square) | **Подтверждено**, affects all runs |
 | **lora_alpha/rank = 0.5** (Kohya uses 1.0) | **Contributing factor** |
-| clip_skip отсутствует (Kohya uses 2) | **Contributing factor** |
+| clip_skip (Kohya config: 2) | **Отвергнуто для SDXL** — Kohya игнорирует; default=2 = старый `hidden_states[-2]` |
 | min_snr/noise_offset = 0 | В проблемных прогонах отключено |
 | Overcooking только на Chimera | **Недостаточно** — Bloom loss падает, результат всё равно плохой |
 
@@ -50,5 +50,6 @@ Bloom — **контрольный эксперимент**: другой пер
 **Root cause не доказан на 100%**, но Bloom сужает круг:
 
 - Это **не** «мало картинок» и **не** «LoRA не учится».
-- Это **systemic mismatch** между тем, как UNet conditioning формируется при train (square 1024, fixed add_time_ids) и при inference (832×1216 portrait).
-- Следующий приоритет в коде: **bucketing + per-image add_time_ids + alpha=rank**.
+- Это **systemic pipeline gap**, но **не add_time_ids** (hypothesis A отвергнута).
+- Следующий приоритет: **bucketing + alpha=rank**, затем глубже копать train loop vs Kohya.
+- clip_skip добавлен в код (default=2), но **не меняет SDXL-пайплайн** — см. §16 в `03-findings.md`.
