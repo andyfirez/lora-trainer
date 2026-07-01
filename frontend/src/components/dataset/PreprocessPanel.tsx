@@ -8,6 +8,7 @@ import type { Dataset, PreprocessStatus } from "@/types";
 const DEFAULT_RESOLUTION = 1024;
 const MIN_RESOLUTION = 64;
 const MAX_RESOLUTION = 2048;
+const WINX_BUCKET_STEPS = 256;
 
 interface Props {
   dataset: Dataset;
@@ -22,7 +23,10 @@ function clampResolution(value: number): number {
 
 export default function PreprocessPanel({ dataset, status, preparing, onUpdated }: Props) {
   const [resolution, setResolution] = useState(dataset.target_resolution ?? DEFAULT_RESOLUTION);
-  const [savingResolution, setSavingResolution] = useState(false);
+  const [enableBucket, setEnableBucket] = useState(dataset.enable_bucket ?? false);
+  const [bucketSteps, setBucketSteps] = useState(dataset.bucket_reso_steps ?? WINX_BUCKET_STEPS);
+  const [bucketNoUpscale, setBucketNoUpscale] = useState(dataset.bucket_no_upscale ?? true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const initStarted = useRef(false);
 
@@ -32,43 +36,61 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
 
   useEffect(() => {
     setResolution(dataset.target_resolution ?? DEFAULT_RESOLUTION);
-  }, [dataset.target_resolution]);
+    setEnableBucket(dataset.enable_bucket ?? false);
+    setBucketSteps(dataset.bucket_reso_steps ?? WINX_BUCKET_STEPS);
+    setBucketNoUpscale(dataset.bucket_no_upscale ?? true);
+  }, [
+    dataset.target_resolution,
+    dataset.enable_bucket,
+    dataset.bucket_reso_steps,
+    dataset.bucket_no_upscale,
+  ]);
 
-  const saveResolution = useCallback(
-    async (value: number) => {
-      const clamped = clampResolution(value);
-      if (clamped === dataset.target_resolution) return;
-      setSavingResolution(true);
+  const saveSettings = useCallback(
+    async (patch: Parameters<typeof datasetsApi.update>[1]) => {
+      setSaving(true);
       setError(null);
       try {
-        await datasetsApi.update(dataset.id, { target_resolution: clamped });
+        await datasetsApi.update(dataset.id, patch);
         onUpdated();
       } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Failed to save resolution");
+        setError(err instanceof Error ? err.message : "Failed to save settings");
       } finally {
-        setSavingResolution(false);
+        setSaving(false);
       }
     },
-    [dataset.id, dataset.target_resolution, onUpdated]
+    [dataset.id, onUpdated]
   );
 
-  const debouncedSaveResolution = useDebouncedCallback(
-    (value: number) => {
-      void saveResolution(value);
-    },
-    500
-  );
+  const debouncedSaveResolution = useDebouncedCallback((value: number) => {
+    void saveSettings({ target_resolution: clampResolution(value) });
+  }, 500);
 
   useEffect(() => {
     if (dataset.target_resolution != null || initStarted.current) return;
     initStarted.current = true;
-    void saveResolution(DEFAULT_RESOLUTION);
-  }, [dataset.target_resolution, saveResolution]);
+    void saveSettings({ target_resolution: DEFAULT_RESOLUTION });
+  }, [dataset.target_resolution, saveSettings]);
 
   const handleResolutionChange = (value: number) => {
     const clamped = clampResolution(value);
     setResolution(clamped);
     debouncedSaveResolution(clamped);
+  };
+
+  const handleBucketToggle = async (checked: boolean) => {
+    setEnableBucket(checked);
+    await saveSettings({ enable_bucket: checked });
+  };
+
+  const handleBucketStepsChange = (value: number) => {
+    setBucketSteps(value);
+    void saveSettings({ bucket_reso_steps: value });
+  };
+
+  const handleBucketNoUpscaleToggle = async (checked: boolean) => {
+    setBucketNoUpscale(checked);
+    await saveSettings({ bucket_no_upscale: checked });
   };
 
   const ready = status?.preprocess_ready ?? dataset.preprocess_ready;
@@ -77,7 +99,9 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
     <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4 space-y-3">
       <div className="text-sm font-medium text-white">Preprocessing</div>
       <p className="text-xs text-[var(--muted)]">
-        Images are prepared automatically. Click any image to adjust crop.
+        {enableBucket
+          ? "Aspect-ratio bucketing preserves image proportions. Click any image to adjust crop."
+          : "Images are center-cropped to square. Click any image to adjust crop."}
       </p>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -93,10 +117,47 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
             className="w-32 rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white"
           />
         </div>
-        {(savingResolution || preparing) && (
+        {(saving || preparing) && (
           <span className="text-xs text-[var(--muted)] pb-1.5">
-            {savingResolution ? "Saving resolution…" : "Preparing images…"}
+            {saving ? "Saving…" : "Preparing images…"}
           </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-4 text-sm">
+        <label className="flex items-center gap-2 text-white cursor-pointer">
+          <input
+            type="checkbox"
+            checked={enableBucket}
+            onChange={(e) => void handleBucketToggle(e.target.checked)}
+            className="rounded"
+          />
+          Enable bucketing
+        </label>
+        {enableBucket && (
+          <>
+            <div>
+              <label className="block text-xs text-[var(--muted)] mb-1">Bucket steps</label>
+              <input
+                type="number"
+                min={8}
+                max={512}
+                step={8}
+                value={bucketSteps}
+                onChange={(e) => handleBucketStepsChange(Number(e.target.value))}
+                className="w-24 rounded-lg bg-[var(--bg)] border border-[var(--border)] px-2 py-1 text-sm text-white"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-white cursor-pointer">
+              <input
+                type="checkbox"
+                checked={bucketNoUpscale}
+                onChange={(e) => void handleBucketNoUpscaleToggle(e.target.checked)}
+                className="rounded"
+              />
+              No upscale
+            </label>
+          </>
         )}
       </div>
 

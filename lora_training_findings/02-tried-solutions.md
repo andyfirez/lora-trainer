@@ -10,7 +10,13 @@
 | Rank mismatch при sampling | `lora_export.py`, `sampler/sdxl/service.py` | только inference bug |
 | clip_skip config | `prompt_encoding.py`, `te_cache.py` | нет (default=2 = старый `hidden_states[-2]`) |
 | Defaults (rank=32, alpha=32, lr=5e-5…) | `config.py` | не подтверждено |
-| **add_time_ids H/I** (fitted + crop, per-image) | `preprocess.py`, `dataset.py`, `trainer.py`, `runner.py` | **регрессия: шум** (Bloom + rank16/lr1e-3) |
+| **add_time_ids H/I** (fitted + crop, per-image, июнь) | `preprocess.py`, `dataset.py`, `trainer.py` | **регрессия: шум** (Bloom + rank16/lr1e-3) |
+| **Aspect-ratio bucketing** (offline bake, Kohya semantics, июль) | `buckets.py`, preprocess, DB, trainer | ep1 ok, ep2+ статик при lr1e-3 (до fix N) |
+| **add_time_ids collate fix** (batch_size>1) | `dataset.py`, `trainer.py` | fix корректности conditioning |
+| **Fix N: fp32 LoRA + GradScaler** | `mixed_precision.py`, `trainer.py`, `checkpoint_state.py` | ep2–3 ok; ep4+ статик при lr1e-3, warmup=0 |
+| **Диагностика fp16 stack (N)** | code review jul 2026 | выявлено: fp16 LoRA + no GradScaler vs Kohya |
+
+Детали N: `07-fp16-gradscaler-vs-kohya.md`. Post-run N: `08-fix-n-post-run-jul2026.md`. Bucketing run: `05-bucketing-run-jul2026.md`.
 
 ## Эксперименты пользователя
 
@@ -21,18 +27,22 @@
 | Retrain после Kohya init | плохо |
 | reForge + trigger | плохо |
 | **Hypothesis A:** inference 1024² vs 832×1216 | оба без likeness → **отвергнуто** |
-| **Bloom + rank16/alpha16/lr1e-3 + H/I fix** | **шум** (хуже «мыла» job 13); G/B не изолирован |
+| **Bloom + rank16/alpha16/lr1e-3 + H/I fix** (июнь) | **шум** с первых эпох |
+| **Bloom + bucketing + fix collate + rank16/lr1e-3** (июль, до fix N) | **ep1 ok → ep2+ статик**, loss стабилен |
+| **Bloom + fix N + rank16/lr1e-3, warmup=0** (июль, после fix N) | **ep1–3 ok → ep4+ статик**; в шуме картинка почти не меняется |
 
-Hypothesis A: `Winx_Bloom_CFTS_epoch5`, seed=42, prompt с trigger → `lora_output/Winx_Bloom_CFTS/hypothesis_a/`. Скрипт: `scripts/hypothesis_a_resolution_test.py`.
-
-H/I fix: per-image `time_ids` из fit-short-side bake (`compute_add_time_ids_for_bake`). Прогон Bloom с Kohya LR/alpha — eval reForge/sampler → изображения деградируют в шум.
+Hypothesis A: `Winx_Bloom_CFTS_epoch5`, seed=42 → `lora_output/Winx_Bloom_CFTS/hypothesis_a/`. Post-run fix N: `08-fix-n-post-run-jul2026.md`.
 
 ## Что не делали
 
-- Bucketing
-- **G/B изолированно:** rank=16, alpha=16, lr=1e-3 **без** H/I fix (единственный прогон был с H/I)
-- mixed_precision bfloat16 (гипотеза J)
-- optimizer adamw fp32 вместо adamw_8bit (гипотеза K)
 - max_token_length > 77 (гипотеза F)
-- Kohya-семантика add_time_ids (`source size` + `get_crop_ltrb`) с aligned inference
-- Аудит train loop (noise target, VAE encode, timestep sampling) vs sd-scripts построчно
+- Aligned inference add_time_ids (train crop coords → sampler/reForge)
+- Аудит train loop vs sd-scripts построчно (D)
+- Retrain с пониженным LR / warmup после fix N (гипотеза G — следующий шаг)
+
+## Что сделали (июль 2026)
+
+- Offline bucketing: non-square prepared images, `BucketBatchSampler`, per-image Kohya `add_time_ids`
+- Fix collate `add_time_ids` для `batch_size>1`
+- **Fix N:** fp32 LoRA weights + GradScaler при fp16; resume scaler state
+- Unit/integration tests: `test_buckets.py`, `test_bucket_batch_sampler.py`, `test_mixed_precision.py`, collate regression test

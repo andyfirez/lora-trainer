@@ -45,6 +45,11 @@ export const datasetsApi = {
       caption_dir: string;
       description: string;
       target_resolution: number | null;
+      enable_bucket: boolean;
+      bucket_reso_steps: number;
+      min_bucket_reso: number;
+      max_bucket_reso: number;
+      bucket_no_upscale: boolean;
     }>
   ) => api.patch<Dataset>(`/datasets/${id}`, data),
   delete: (id: number) => api.delete(`/datasets/${id}`),

@@ -33,7 +33,6 @@ def _make_transform() -> transforms.Compose:
 
 def build_latent_cache(
     image_paths: list[Path],
-    resolution: int,
     vae: torch.nn.Module,
     device: torch.device,
     to_disk: bool,
@@ -67,10 +66,10 @@ def build_latent_cache(
             continue
 
         image = Image.open(image_path).convert("RGB")
-        if image.size != (resolution, resolution):
+        width, height = image.size
+        if width % 8 != 0 or height % 8 != 0:
             raise ValueError(
-                f"Prepared image {image_path.name} has size {image.size}, "
-                f"expected ({resolution}, {resolution})"
+                f"Prepared image {image_path.name} size {image.size} must be divisible by 8 for VAE"
             )
         pixel_values = transform(image).unsqueeze(0).to(device, dtype=torch.float32)
 

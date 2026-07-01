@@ -122,6 +122,11 @@ class TrainConfig(BaseModel):
 
     # Data
     resolution: int = Field(default=1024, ge=64, le=2048)
+    enable_bucket: bool = False
+    bucket_reso_steps: int = Field(default=64, ge=8, le=512)
+    min_bucket_reso: int = Field(default=512, ge=64, le=2048)
+    max_bucket_reso: int = Field(default=2048, ge=64, le=2048)
+    bucket_no_upscale: bool = True
     concepts: list[ConceptConfig] = Field(default_factory=list)
 
     # Optimization

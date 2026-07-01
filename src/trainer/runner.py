@@ -17,6 +17,7 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
+from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
@@ -25,6 +26,7 @@ from src.db.tables.job import Job, JobStatus
 from src.settings.app_settings import settings
 from src.services.datasets.training_validation import validate_dataset_for_training
 from src.trainer.concept_resolution import resolve_concept_paths
+from src.trainer.concept_training_metadata import resolve_concept_training_metadata
 from src.trainer.config import TrainConfig
 from src.trainer.sampling_resolution import resolve_sampling_config
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
@@ -227,16 +229,28 @@ async def _run(job_id: int) -> None:
     config = TrainConfig.from_yaml(config_yaml)
     async with session_factory() as session:
         dataset_repo = DatasetRepository(session)
+        crop_repo = DatasetImageCropRepository(session)
         config_repo = JobConfigRepository(session)
         dataset_ids = [concept.dataset_id for concept in config.concepts]
         concept_paths = await resolve_concept_paths(dataset_ids, dataset_repo)
+        concept_metadata = await resolve_concept_training_metadata(
+            dataset_ids,
+            dataset_repo,
+            crop_repo,
+        )
         for concept in config.concepts:
             dataset = await dataset_repo.get_by_id(concept.dataset_id)
             if dataset is None:
                 logger.error("Dataset id=%d not found", concept.dataset_id)
                 sys.exit(1)
+            crops = await crop_repo.list_by_dataset(concept.dataset_id)
             try:
-                validate_dataset_for_training(dataset, config.resolution)
+                validate_dataset_for_training(
+                    dataset,
+                    config.resolution,
+                    enable_bucket=config.enable_bucket,
+                    crops=list(crops),
+                )
             except Exception as exc:
                 logger.error("Dataset validation failed: %s", exc)
                 sys.exit(1)
@@ -302,6 +316,7 @@ async def _run(job_id: int) -> None:
             training_logger=training_logger,
             checkpoint_callback=_checkpoint_callback,
             save_checkpoint_requested_callback=_save_checkpoint_requested,
+            concept_metadata=concept_metadata,
         )
         trainer.train()
         await _update_status(job_id, JobStatus.COMPLETED)

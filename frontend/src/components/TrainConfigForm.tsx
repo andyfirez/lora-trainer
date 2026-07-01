@@ -289,9 +289,13 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
   const isProdigy = optimizerType === "prodigy";
 
   const trainResolution = Number(config.resolution ?? 1024);
+  const trainEnableBucket = Boolean(config.enable_bucket);
 
   function isDatasetCompatible(dataset: Dataset): boolean {
-    return dataset.preprocess_ready && dataset.target_resolution === trainResolution;
+    if (!dataset.preprocess_ready || dataset.target_resolution !== trainResolution) {
+      return false;
+    }
+    return Boolean(dataset.enable_bucket) === trainEnableBucket;
   }
 
   function datasetOptionLabel(dataset: Dataset): string {
@@ -303,6 +307,9 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
     }
     if (!dataset.preprocess_ready) {
       return `${dataset.name} (not prepared)`;
+    }
+    if (Boolean(dataset.enable_bucket) !== trainEnableBucket) {
+      return `${dataset.name} (bucket ${dataset.enable_bucket ? "on" : "off"} ≠ train)`;
     }
     return dataset.name;
   }
@@ -663,6 +670,15 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           step={64}
           placeholder="1024"
         />
+        <label className="flex items-center gap-2 text-sm text-white mt-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={trainEnableBucket}
+            onChange={(e) => set("enable_bucket", e.target.checked)}
+            className="rounded"
+          />
+          Enable aspect-ratio bucketing
+        </label>
         <div className="space-y-3 mt-2">
           <div className="text-xs font-medium text-[var(--muted)]">Concepts</div>
           {datasetsLoading ? (

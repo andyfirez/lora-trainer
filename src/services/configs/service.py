@@ -173,6 +173,10 @@ class JobConfigService:
                     f"Dataset with id={concept.dataset_id} not found"
                 )
             try:
-                validate_dataset_for_training(dataset, config.resolution)
+                validate_dataset_for_training(
+                    dataset,
+                    config.resolution,
+                    enable_bucket=config.enable_bucket,
+                )
             except Exception as exc:
                 raise JobConfigValidationError(str(exc)) from exc

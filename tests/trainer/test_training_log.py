@@ -67,7 +67,7 @@ def test_build_latent_cache_uses_job_logger(tmp_path) -> None:
     vae.eval = MagicMock()
     vae.to = MagicMock(return_value=vae)
 
-    build_latent_cache([], 512, vae, torch.device("cpu"), False, log=job_logger.logger)
+    build_latent_cache([], vae, torch.device("cpu"), False, log=job_logger.logger)
     for handler in job_logger.logger.handlers:
         handler.flush()
 

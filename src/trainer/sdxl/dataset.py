@@ -3,10 +3,12 @@
 from pathlib import Path
 from typing import Callable
 
+import torch
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import ConcatDataset, Dataset
 from torchvision import transforms
 
+from src.trainer.concept_training_metadata import ConceptTrainingMetadata, ImageTrainingMeta
 from src.trainer.config import ConceptConfig, TrainConfig
 from src.trainer.sdxl.caption import join_trigger_words_and_text
 
@@ -82,13 +84,23 @@ CacheProgressCallback = Callable[[int, int, str], None]
 class ConceptDataset(Dataset):
     """Dataset for a single concept.
 
-    In cache_mode=True, __getitem__ returns {"image_path": str, "caption": str}.
-    In cache_mode=False, __getitem__ returns {"pixel_values": Tensor, "caption": str}.
+    In cache_mode=True, __getitem__ returns {"image_path", "caption", "add_time_ids"}.
+    In cache_mode=False, __getitem__ returns {"pixel_values", "caption", "add_time_ids"}.
     """
 
-    def __init__(self, concept: ConceptConfig, resolution: int, cache_mode: bool = False) -> None:
+    def __init__(
+        self,
+        concept: ConceptConfig,
+        resolution: int,
+        *,
+        cache_mode: bool = False,
+        enable_bucket: bool = False,
+        image_meta: dict[str, ImageTrainingMeta] | None = None,
+    ) -> None:
         self._concept = concept
         self._resolution = resolution
+        self._enable_bucket = enable_bucket
+        self._image_meta = image_meta or {}
         image_dir = _concept_image_dir(concept)
         prepared_dir = _concept_prepared_dir(concept)
         self._image_dir = image_dir
@@ -104,6 +116,26 @@ class ConceptDataset(Dataset):
     @property
     def image_paths(self) -> list[Path]:
         return [self._prepared_path(p) for p in self._image_paths]
+
+    def bucket_keys(self) -> list[str]:
+        keys: list[str] = []
+        for _ in range(self._concept.repeats):
+            for original_path in self._image_paths:
+                meta = self._meta_for(original_path.name)
+                keys.append(f"{meta.bucket_width}x{meta.bucket_height}")
+        return keys
+
+    def _meta_for(self, filename: str) -> ImageTrainingMeta:
+        meta = self._image_meta.get(filename)
+        if meta is None:
+            resolution = self._resolution
+            return ImageTrainingMeta(
+                filename=filename,
+                add_time_ids=(resolution, resolution, 0, 0, resolution, resolution),
+                bucket_width=resolution,
+                bucket_height=resolution,
+            )
+        return meta
 
     def _prepared_path(self, original_path: Path) -> Path:
         prepared = self._prepared_dir / original_path.name
@@ -121,12 +153,60 @@ class ConceptDataset(Dataset):
         original_path = self._image_paths[idx % len(self._image_paths)]
         prepared_path = self._prepared_path(original_path)
         caption = _load_caption(original_path, self._concept)
+        meta = self._meta_for(original_path.name)
+        add_time_ids = torch.tensor(meta.add_time_ids, dtype=torch.float32)
         if self._cache_mode:
-            return {"image_path": str(prepared_path), "caption": caption}
+            return {
+                "image_path": str(prepared_path),
+                "caption": caption,
+                "add_time_ids": add_time_ids,
+            }
         image = Image.open(prepared_path).convert("RGB")
-        if image.size != (self._resolution, self._resolution):
+        expected = (meta.bucket_width, meta.bucket_height)
+        if image.size != expected:
             raise ValueError(
-                f"Prepared image {prepared_path.name} has size {image.size}, "
-                f"expected ({self._resolution}, {self._resolution})"
+                f"Prepared image {prepared_path.name} has size {image.size}, expected {expected}"
             )
-        return {"pixel_values": self._transform(image), "caption": caption}
+        return {
+            "pixel_values": self._transform(image),
+            "caption": caption,
+            "add_time_ids": add_time_ids,
+        }
+
+
+def build_training_dataset(
+    config: TrainConfig,
+    *,
+    cache_mode: bool,
+    concept_metadata: dict[int, ConceptTrainingMetadata],
+) -> Dataset:
+    datasets: list[ConceptDataset] = []
+    for concept in config.concepts:
+        metadata = concept_metadata.get(concept.dataset_id)
+        enable_bucket = metadata.enable_bucket if metadata is not None else config.enable_bucket
+        image_meta = metadata.by_filename if metadata is not None else {}
+        datasets.append(
+            ConceptDataset(
+                concept,
+                config.resolution,
+                cache_mode=cache_mode,
+                enable_bucket=enable_bucket,
+                image_meta=image_meta,
+            )
+        )
+    if len(datasets) == 1:
+        return datasets[0]
+    return ConcatDataset(datasets)
+
+
+def collect_bucket_keys(dataset: Dataset) -> list[str]:
+    if isinstance(dataset, ConcatDataset):
+        keys: list[str] = []
+        for child in dataset.datasets:
+            if not isinstance(child, ConceptDataset):
+                raise TypeError("ConcatDataset children must be ConceptDataset for bucketing")
+            keys.extend(child.bucket_keys())
+        return keys
+    if isinstance(dataset, ConceptDataset):
+        return dataset.bucket_keys()
+    raise TypeError("Unsupported dataset type for bucketing")

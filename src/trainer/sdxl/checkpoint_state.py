@@ -23,6 +23,7 @@ class ResumeState:
     lora_state_dict: dict[str, Any]
     optimizer_state_dict: dict[str, Any]
     lr_scheduler_state_dict: dict[str, Any]
+    grad_scaler_state_dict: dict[str, Any] | None
 
 
 def state_path_for_checkpoint(checkpoint_path: Path) -> Path:
@@ -61,6 +62,7 @@ def save_resume_state(
     epoch: int,
     global_step: int,
     epoch_step: int,
+    grad_scaler_state_dict: dict[str, Any] | None = None,
 ) -> Path:
     state_path = state_path_for_checkpoint(checkpoint_path)
     payload = {
@@ -72,6 +74,8 @@ def save_resume_state(
         "optimizer_state_dict": optimizer_state_dict,
         "lr_scheduler_state_dict": lr_scheduler_state_dict,
     }
+    if grad_scaler_state_dict is not None:
+        payload["grad_scaler_state_dict"] = grad_scaler_state_dict
     torch.save(payload, state_path)
     return state_path
 
@@ -81,6 +85,8 @@ def load_resume_state(checkpoint_path: Path) -> ResumeState:
     if not state_path.is_file():
         raise FileNotFoundError(f"Resume state file is missing for checkpoint: {checkpoint_path}")
     raw = torch.load(state_path, map_location="cpu")
+    scaler_raw = raw.get("grad_scaler_state_dict")
+    grad_scaler_state_dict = dict(scaler_raw) if scaler_raw is not None else None
     return ResumeState(
         checkpoint_path=checkpoint_path,
         state_path=state_path,
@@ -90,4 +96,5 @@ def load_resume_state(checkpoint_path: Path) -> ResumeState:
         lora_state_dict=dict(raw.get("lora_state_dict", {})),
         optimizer_state_dict=dict(raw.get("optimizer_state_dict", {})),
         lr_scheduler_state_dict=dict(raw.get("lr_scheduler_state_dict", {})),
+        grad_scaler_state_dict=grad_scaler_state_dict,
     )

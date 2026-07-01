@@ -30,6 +30,25 @@ from src.api.schemas.datasets import (
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
 
+def _crop_meta_response(meta) -> CropMetaResponse:
+    return CropMetaResponse(
+        crop_center_x=meta.crop_center_x,
+        crop_center_y=meta.crop_center_y,
+        fitted_width=meta.fitted_width,
+        fitted_height=meta.fitted_height,
+        source_width=meta.source_width,
+        source_height=meta.source_height,
+        state=meta.state.value,
+        enable_bucket=meta.enable_bucket,
+        bucket_width=meta.bucket_width,
+        bucket_height=meta.bucket_height,
+        scale_to_width=meta.scale_to_width,
+        scale_to_height=meta.scale_to_height,
+        crop_x=meta.crop_x,
+        crop_y=meta.crop_y,
+    )
+
+
 @router.get("/", response_model=list[DatasetResponse])
 async def list_datasets(service: DatasetsServiceDep) -> Sequence[DatasetResponse]:
     return await service.list_datasets()  # type: ignore[return-value]
@@ -54,6 +73,13 @@ async def get_dataset(dataset_id: int, service: DatasetsServiceDep) -> DatasetRe
 @router.patch("/{dataset_id}", response_model=DatasetResponse)
 async def update_dataset(dataset_id: int, body: DatasetUpdate, service: DatasetsServiceDep) -> DatasetResponse:
     fields_set = body.model_fields_set
+    bucket_fields = {
+        "enable_bucket",
+        "bucket_reso_steps",
+        "min_bucket_reso",
+        "max_bucket_reso",
+        "bucket_no_upscale",
+    }
     return await service.update_dataset(  # type: ignore[return-value]
         dataset_id,
         name=body.name,
@@ -62,6 +88,12 @@ async def update_dataset(dataset_id: int, body: DatasetUpdate, service: Datasets
         description=body.description,
         target_resolution=body.target_resolution,
         update_target_resolution="target_resolution" in fields_set,
+        enable_bucket=body.enable_bucket,
+        bucket_reso_steps=body.bucket_reso_steps,
+        min_bucket_reso=body.min_bucket_reso,
+        max_bucket_reso=body.max_bucket_reso,
+        bucket_no_upscale=body.bucket_no_upscale,
+        update_bucket_settings=bool(fields_set & bucket_fields),
     )
 
 
@@ -242,15 +274,7 @@ async def get_crop_meta(
 ) -> CropMetaResponse:
     dataset = await service.get_dataset(dataset_id)
     meta = await service.get_crop_meta(dataset, filename)
-    return CropMetaResponse(
-        crop_center_x=meta.crop_center_x,
-        crop_center_y=meta.crop_center_y,
-        fitted_width=meta.fitted_width,
-        fitted_height=meta.fitted_height,
-        source_width=meta.source_width,
-        source_height=meta.source_height,
-        state=meta.state.value,
-    )
+    return _crop_meta_response(meta)
 
 
 @router.get("/{dataset_id}/images/{filename}/crop-preview")
@@ -273,15 +297,7 @@ async def save_crop(
 ) -> CropMetaResponse:
     dataset = await service.get_dataset(dataset_id)
     meta = await service.save_crop(dataset, filename, body.crop_center_x, body.crop_center_y)
-    return CropMetaResponse(
-        crop_center_x=meta.crop_center_x,
-        crop_center_y=meta.crop_center_y,
-        fitted_width=meta.fitted_width,
-        fitted_height=meta.fitted_height,
-        source_width=meta.source_width,
-        source_height=meta.source_height,
-        state=meta.state.value,
-    )
+    return _crop_meta_response(meta)
 
 
 @router.post("/{dataset_id}/preprocess/bake", response_model=BakeResponse)
@@ -305,12 +321,4 @@ async def bake_single_image(
     dataset = await service.get_dataset(dataset_id)
     await service.bake_image(dataset, filename)
     meta = await service.get_crop_meta(dataset, filename)
-    return CropMetaResponse(
-        crop_center_x=meta.crop_center_x,
-        crop_center_y=meta.crop_center_y,
-        fitted_width=meta.fitted_width,
-        fitted_height=meta.fitted_height,
-        source_width=meta.source_width,
-        source_height=meta.source_height,
-        state=meta.state.value,
-    )
+    return _crop_meta_response(meta)

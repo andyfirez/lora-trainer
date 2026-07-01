@@ -20,31 +20,54 @@ interface Props {
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
-const PREVIEW_SIZE = 160;
+const PREVIEW_MAX = 160;
 
-function centerToArea(meta: CropMeta, resolution: number): Area {
-  const half = resolution / 2;
-  const x = Math.max(0, Math.min(meta.crop_center_x * meta.fitted_width - half, meta.fitted_width - resolution));
-  const y = Math.max(0, Math.min(meta.crop_center_y * meta.fitted_height - half, meta.fitted_height - resolution));
-  return { x, y, width: resolution, height: resolution };
+function cropDimensions(meta: CropMeta, targetResolution: number): { width: number; height: number } {
+  if (meta.enable_bucket && meta.bucket_width && meta.bucket_height) {
+    return { width: meta.bucket_width, height: meta.bucket_height };
+  }
+  return { width: targetResolution, height: targetResolution };
+}
+
+function centerToArea(meta: CropMeta, cropWidth: number, cropHeight: number): Area {
+  const halfW = cropWidth / 2;
+  const halfH = cropHeight / 2;
+  const x = Math.max(0, Math.min(meta.crop_center_x * meta.fitted_width - halfW, meta.fitted_width - cropWidth));
+  const y = Math.max(0, Math.min(meta.crop_center_y * meta.fitted_height - halfH, meta.fitted_height - cropHeight));
+  return { x, y, width: cropWidth, height: cropHeight };
 }
 
 function areaToCenter(area: Area, meta: CropMeta): { x: number; y: number } {
-  const half = area.width / 2;
-  const cx = Math.max(half, Math.min(area.x + half, meta.fitted_width - half));
-  const cy = Math.max(half, Math.min(area.y + half, meta.fitted_height - half));
+  const halfW = area.width / 2;
+  const halfH = area.height / 2;
+  const cx = Math.max(halfW, Math.min(area.x + halfW, meta.fitted_width - halfW));
+  const cy = Math.max(halfH, Math.min(area.y + halfH, meta.fitted_height - halfH));
   return {
     x: cx / meta.fitted_width,
     y: cy / meta.fitted_height,
   };
 }
 
-function computeDisplayCropSize(mediaSize: MediaSize, targetResolution: number): { width: number; height: number } {
+function computeDisplayCropSize(
+  mediaSize: MediaSize,
+  cropWidth: number,
+  cropHeight: number
+): { width: number; height: number } {
   const scale = mediaSize.width / mediaSize.naturalWidth;
-  const size = Math.round(targetResolution * scale);
-  const maxSize = Math.floor(Math.min(mediaSize.width, mediaSize.height));
-  const clamped = Math.min(size, maxSize);
-  return { width: clamped, height: clamped };
+  const width = Math.round(cropWidth * scale);
+  const height = Math.round(cropHeight * scale);
+  return {
+    width: Math.min(width, Math.floor(mediaSize.width)),
+    height: Math.min(height, Math.floor(mediaSize.height)),
+  };
+}
+
+function previewCanvasSize(cropWidth: number, cropHeight: number): { width: number; height: number } {
+  const scale = PREVIEW_MAX / Math.max(cropWidth, cropHeight);
+  return {
+    width: Math.round(cropWidth * scale),
+    height: Math.round(cropHeight * scale),
+  };
 }
 
 interface CropperSession {
@@ -53,20 +76,23 @@ interface CropperSession {
   crop: { x: number; y: number };
   zoom: number;
   initialArea: Area;
+  cropWidth: number;
+  cropHeight: number;
 }
 
 function drawCropPreview(
   canvas: HTMLCanvasElement,
   image: HTMLImageElement,
   area: Area,
-  outputSize: number
+  outputWidth: number,
+  outputHeight: number
 ): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  canvas.width = outputSize;
-  canvas.height = outputSize;
-  ctx.clearRect(0, 0, outputSize, outputSize);
-  ctx.drawImage(image, area.x, area.y, area.width, area.height, 0, 0, outputSize, outputSize);
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+  ctx.clearRect(0, 0, outputWidth, outputHeight);
+  ctx.drawImage(image, area.x, area.y, area.width, area.height, 0, 0, outputWidth, outputHeight);
 }
 
 export default function ImageCropModal({ datasetId, filename, targetResolution, onClose, onSaved }: Props) {
@@ -83,6 +109,9 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
   const [error, setError] = useState<string | null>(null);
 
   const imageUrl = useMemo(() => datasetCropPreviewUrl(datasetId, filename), [datasetId, filename]);
+
+  const cropSize = meta ? cropDimensions(meta, targetResolution) : { width: targetResolution, height: targetResolution };
+  const previewSize = previewCanvasSize(cropSize.width, cropSize.height);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,7 +142,8 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
         const loaded = await datasetsApi.getCropMeta(datasetId, filename);
         if (cancelled) return;
         setMeta(loaded);
-        setCroppedAreaPixels(centerToArea(loaded, targetResolution));
+        const dims = cropDimensions(loaded, targetResolution);
+        setCroppedAreaPixels(centerToArea(loaded, dims.width, dims.height));
       } catch (err: unknown) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load crop");
@@ -127,12 +157,15 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
     };
   }, [datasetId, filename, targetResolution]);
 
-  const updatePreview = useCallback((area: Area | null) => {
-    const canvas = previewCanvasRef.current;
-    const image = sourceImageRef.current;
-    if (!canvas || !image || !area) return;
-    drawCropPreview(canvas, image, area, PREVIEW_SIZE);
-  }, []);
+  const updatePreview = useCallback(
+    (area: Area | null) => {
+      const canvas = previewCanvasRef.current;
+      const image = sourceImageRef.current;
+      if (!canvas || !image || !area) return;
+      drawCropPreview(canvas, image, area, previewSize.width, previewSize.height);
+    },
+    [previewSize.width, previewSize.height]
+  );
 
   useEffect(() => {
     updatePreview(croppedAreaPixels);
@@ -141,8 +174,9 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
   const handleMediaLoaded = useCallback(
     (mediaSize: MediaSize) => {
       if (!meta || session) return;
-      const displayCropSize = computeDisplayCropSize(mediaSize, targetResolution);
-      const initialArea = centerToArea(meta, targetResolution);
+      const dims = cropDimensions(meta, targetResolution);
+      const displayCropSize = computeDisplayCropSize(mediaSize, dims.width, dims.height);
+      const initialArea = centerToArea(meta, dims.width, dims.height);
       const initial = getInitialCropFromCroppedAreaPixels(
         initialArea,
         mediaSize,
@@ -157,6 +191,8 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
         crop: initial.crop,
         zoom: initial.zoom,
         initialArea,
+        cropWidth: dims.width,
+        cropHeight: dims.height,
       });
       setCrop(initial.crop);
       setZoom(initial.zoom);
@@ -170,15 +206,15 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
   }, []);
 
   const handleSave = async () => {
-    if (!meta || !croppedAreaPixels) return;
+    if (!meta || !croppedAreaPixels || !session) return;
     setSaving(true);
     setError(null);
     try {
       const normalizedArea: Area = {
         x: croppedAreaPixels.x,
         y: croppedAreaPixels.y,
-        width: targetResolution,
-        height: targetResolution,
+        width: session.cropWidth,
+        height: session.cropHeight,
       };
       const center = areaToCenter(normalizedArea, meta);
       await datasetsApi.saveCrop(datasetId, filename, center.x, center.y);
@@ -192,13 +228,20 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
     }
   };
 
+  const aspect = cropSize.width / cropSize.height;
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
       <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl w-full max-w-4xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
           <div>
             <div className="text-sm font-medium text-white">Crop image</div>
-            <div className="text-xs text-[var(--muted)] truncate max-w-md">{filename}</div>
+            <div className="text-xs text-[var(--muted)] truncate max-w-md">
+              {filename}
+              {meta?.enable_bucket && meta.bucket_width && meta.bucket_height
+                ? ` · ${meta.bucket_width}×${meta.bucket_height}`
+                : ` · ${targetResolution}×${targetResolution}`}
+            </div>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-white/5 text-[var(--muted)]">
             <X size={18} />
@@ -216,7 +259,7 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
                 image={imageUrl}
                 crop={crop}
                 zoom={zoom}
-                aspect={1}
+                aspect={aspect}
                 minZoom={MIN_ZOOM}
                 maxZoom={MAX_ZOOM}
                 cropSize={session.cropSize}
@@ -231,7 +274,7 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
                 image={imageUrl}
                 crop={{ x: 0, y: 0 }}
                 zoom={MIN_ZOOM}
-                aspect={1}
+                aspect={aspect}
                 onCropChange={() => {}}
                 onMediaLoaded={handleMediaLoaded}
                 restrictPosition
@@ -251,7 +294,7 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
             <canvas
               ref={previewCanvasRef}
               className="rounded-lg border border-[var(--border)] bg-black"
-              style={{ width: PREVIEW_SIZE, height: PREVIEW_SIZE }}
+              style={{ width: previewSize.width, height: previewSize.height }}
             />
             <div className="text-[10px] text-[var(--muted)] text-center max-w-[160px]">
               Updates as you move the image under the crop frame

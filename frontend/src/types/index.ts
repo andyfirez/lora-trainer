@@ -94,6 +94,11 @@ export interface Dataset {
   description: string | null;
   target_resolution: number | null;
   preprocess_ready: boolean;
+  enable_bucket: boolean;
+  bucket_reso_steps: number;
+  min_bucket_reso: number;
+  max_bucket_reso: number;
+  bucket_no_upscale: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -131,6 +136,13 @@ export interface CropMeta {
   source_width: number;
   source_height: number;
   state: ImagePreprocessState;
+  enable_bucket?: boolean;
+  bucket_width?: number | null;
+  bucket_height?: number | null;
+  scale_to_width?: number | null;
+  scale_to_height?: number | null;
+  crop_x?: number;
+  crop_y?: number;
 }
 
 export interface DatasetItems {

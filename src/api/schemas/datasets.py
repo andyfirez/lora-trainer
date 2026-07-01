@@ -19,6 +19,11 @@ class DatasetUpdate(BaseModel):
     caption_dir: Optional[str] = None
     description: Optional[str] = None
     target_resolution: Optional[int] = Field(default=None, ge=64, le=2048)
+    enable_bucket: Optional[bool] = None
+    bucket_reso_steps: Optional[int] = Field(default=None, ge=8, le=512)
+    min_bucket_reso: Optional[int] = Field(default=None, ge=64, le=2048)
+    max_bucket_reso: Optional[int] = Field(default=None, ge=64, le=2048)
+    bucket_no_upscale: Optional[bool] = None
 
 
 class DatasetResponse(BaseModel):
@@ -29,6 +34,11 @@ class DatasetResponse(BaseModel):
     description: Optional[str]
     target_resolution: Optional[int]
     preprocess_ready: bool
+    enable_bucket: bool
+    bucket_reso_steps: int
+    min_bucket_reso: int
+    max_bucket_reso: int
+    bucket_no_upscale: bool
     created_at: datetime
     updated_at: datetime
 
@@ -53,6 +63,13 @@ class CropMetaResponse(BaseModel):
     source_width: int
     source_height: int
     state: str
+    enable_bucket: bool = False
+    bucket_width: Optional[int] = None
+    bucket_height: Optional[int] = None
+    scale_to_width: Optional[int] = None
+    scale_to_height: Optional[int] = None
+    crop_x: int = 0
+    crop_y: int = 0
 
 
 class CropUpdateRequest(BaseModel):

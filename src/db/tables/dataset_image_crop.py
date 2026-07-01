@@ -18,3 +18,9 @@ class DatasetImageCrop(TimestampMixin, SQLModel, table=True):
     crop_center_y: float = Field(ge=0.0, le=1.0)
     source_mtime: float
     baked_at: Optional[datetime] = Field(default=None)
+    bucket_width: Optional[int] = Field(default=None, ge=64, le=2048)
+    bucket_height: Optional[int] = Field(default=None, ge=64, le=2048)
+    scale_to_width: Optional[int] = Field(default=None, ge=64, le=4096)
+    scale_to_height: Optional[int] = Field(default=None, ge=64, le=4096)
+    crop_x: int = Field(default=0, ge=0)
+    crop_y: int = Field(default=0, ge=0)

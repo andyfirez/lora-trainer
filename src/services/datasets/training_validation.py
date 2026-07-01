@@ -5,6 +5,7 @@ from pathlib import Path
 from PIL import Image
 
 from src.db.tables.dataset import Dataset
+from src.db.tables.dataset_image_crop import DatasetImageCrop
 from src.services.datasets.captions import list_image_filenames
 from src.services.datasets.exceptions import (
     DatasetNotPreparedError,
@@ -13,7 +14,13 @@ from src.services.datasets.exceptions import (
 from src.services.datasets.preprocess import prepared_dir_path, resolve_prepared_path
 
 
-def validate_dataset_for_training(dataset: Dataset, resolution: int) -> None:
+def validate_dataset_for_training(
+    dataset: Dataset,
+    resolution: int,
+    *,
+    enable_bucket: bool = False,
+    crops: list[DatasetImageCrop] | None = None,
+) -> None:
     if dataset.target_resolution is None:
         raise DatasetNotPreparedError(
             dataset.id,
@@ -32,6 +39,18 @@ def validate_dataset_for_training(dataset: Dataset, resolution: int) -> None:
             dataset.id,
             dataset.name,
             "Dataset preprocessing is not complete; crop and bake all images first",
+        )
+    if enable_bucket and not dataset.enable_bucket:
+        raise DatasetNotPreparedError(
+            dataset.id,
+            dataset.name,
+            "Training has enable_bucket=true but dataset was prepared without bucketing",
+        )
+    if not enable_bucket and dataset.enable_bucket:
+        raise DatasetNotPreparedError(
+            dataset.id,
+            dataset.name,
+            "Dataset was prepared with bucketing but training has enable_bucket=false",
         )
 
     image_dir = Path(dataset.image_dir)
@@ -58,6 +77,10 @@ def validate_dataset_for_training(dataset: Dataset, resolution: int) -> None:
             f"Prepared directory not found: {prepared_dir}",
         )
 
+    crop_by_filename = {crop.filename: crop for crop in (crops or [])}
+    if crops is None:
+        return
+
     missing: list[str] = []
     invalid_size: list[str] = []
     for filename in filenames:
@@ -65,9 +88,17 @@ def validate_dataset_for_training(dataset: Dataset, resolution: int) -> None:
         if prepared_path is None:
             missing.append(filename)
             continue
+        crop = crop_by_filename.get(filename)
+        if enable_bucket:
+            if crop is None or crop.bucket_width is None or crop.bucket_height is None:
+                invalid_size.append(filename)
+                continue
+            expected = (crop.bucket_width, crop.bucket_height)
+        else:
+            expected = (resolution, resolution)
         try:
             with Image.open(prepared_path) as img:
-                if img.size != (resolution, resolution):
+                if img.size != expected:
                     invalid_size.append(filename)
         except OSError:
             invalid_size.append(filename)
@@ -82,7 +113,7 @@ def validate_dataset_for_training(dataset: Dataset, resolution: int) -> None:
         raise DatasetNotPreparedError(
             dataset.id,
             dataset.name,
-            f"{len(invalid_size)} prepared image(s) have wrong size (expected {resolution}x{resolution})",
+            f"{len(invalid_size)} prepared image(s) have wrong size",
         )
 
     prepared_files = [

@@ -12,16 +12,19 @@ import torch
 from diffusers import DDPMScheduler
 from peft import get_peft_model
 from torch import Tensor
-from torch.utils.data import ConcatDataset, DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
 from src.trainer.attention import configure_unet_attention
 from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.optimizer_config import Optimizer, build_optimizer
 from src.trainer.progress import TrainProgress
+from src.trainer.concept_training_metadata import ConceptTrainingMetadata
+from src.trainer.sdxl.bucket_batch_sampler import build_bucket_batch_sampler
 from src.trainer.sdxl.dataset import (
-    ConceptDataset,
+    build_training_dataset,
     collect_all_image_paths_and_captions,
+    collect_bucket_keys,
     count_latent_cache_items,
     count_te_cache_items,
 )
@@ -30,6 +33,7 @@ from src.trainer.sdxl.latent_cache import build_latent_cache
 from src.trainer.sdxl.loss import apply_noise_offset, min_snr_weight
 from src.trainer.sdxl.lora_export import export_kohya_state_dict
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, apply_lora_state_to_module
+from src.trainer.sdxl.mixed_precision import cast_trainable_params_to_fp32, create_grad_scaler
 from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
 from src.trainer.sdxl.lora_targets import SDXL_TE_LORA_TARGET_MODULES, SDXL_UNET_LORA_TARGET_MODULES
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
@@ -66,8 +70,10 @@ class SDXLLoRATrainer:
         training_logger: Optional[JobTrainingLogger] = None,
         checkpoint_callback: Optional[Callable[[str, int, int], None]] = None,
         save_checkpoint_requested_callback: Optional[Callable[[], bool]] = None,
+        concept_metadata: Optional[dict[int, ConceptTrainingMetadata]] = None,
     ) -> None:
         self._config = config
+        self._concept_metadata = concept_metadata or {}
         self._progress_callback = progress_callback
         self._sampling_status_callback = sampling_status_callback
         self._sampling_progress_callback = sampling_progress_callback
@@ -95,6 +101,7 @@ class SDXLLoRATrainer:
             )
         device = torch.device("cuda")
         weight_dtype = _DTYPE_MAP[config.mixed_precision]
+        grad_scaler = create_grad_scaler(config.mixed_precision)
 
         if config.tf32:
             torch.backends.cuda.matmul.allow_tf32 = True
@@ -174,6 +181,9 @@ class SDXLLoRATrainer:
                 config=config,
             )
 
+        fp32_cast_count = cast_trainable_params_to_fp32(unet, text_encoder_1, text_encoder_2)
+        log.info("LoRA trainable params cast to fp32 (N=%d)", fp32_cast_count)
+
         if config.gradient_checkpointing:
             unet.enable_gradient_checkpointing()
 
@@ -202,13 +212,26 @@ class SDXLLoRATrainer:
         self._device = device
         cache_mode = config.cache_latents or config.cache_text_encoder_outputs
         train_dataset = self._build_dataset(config, cache_mode=cache_mode)
-        dataloader = DataLoader(
-            train_dataset,
-            batch_size=config.batch_size,
-            shuffle=True,
-            num_workers=config.num_dataloader_workers,
-            pin_memory=config.dataloader_pin_memory and config.num_dataloader_workers > 0,
-        )
+        if config.enable_bucket:
+            bucket_sampler = build_bucket_batch_sampler(
+                train_dataset,
+                collect_bucket_keys(train_dataset),
+                config.batch_size,
+            )
+            dataloader = DataLoader(
+                train_dataset,
+                batch_sampler=bucket_sampler,
+                num_workers=config.num_dataloader_workers,
+                pin_memory=config.dataloader_pin_memory and config.num_dataloader_workers > 0,
+            )
+        else:
+            dataloader = DataLoader(
+                train_dataset,
+                batch_size=config.batch_size,
+                shuffle=True,
+                num_workers=config.num_dataloader_workers,
+                pin_memory=config.dataloader_pin_memory and config.num_dataloader_workers > 0,
+            )
 
         num_update_steps_per_epoch = math.ceil(len(dataloader) / config.gradient_accumulation_steps)
         total_steps = config.epochs * num_update_steps_per_epoch
@@ -256,7 +279,6 @@ class SDXLLoRATrainer:
             log.info("Building latent cache...")
             latent_cache = build_latent_cache(
                 all_paths,
-                config.resolution,
                 vae,
                 device,
                 config.cache_latents_to_disk,
@@ -315,6 +337,8 @@ class SDXLLoRATrainer:
         if resume_state is not None:
             optimizer.load_state_dict(resume_state.optimizer_state_dict)
             lr_scheduler.load_state_dict(resume_state.lr_scheduler_state_dict)
+            if grad_scaler is not None and resume_state.grad_scaler_state_dict is not None:
+                grad_scaler.load_state_dict(resume_state.grad_scaler_state_dict)
             self._progress.global_step = resume_state.global_step
             self._progress.epoch_step = resume_state.epoch_step
 
@@ -367,14 +391,7 @@ class SDXLLoRATrainer:
                             0, noise_scheduler.config.num_train_timesteps, (bsz,), device=device
                         ).long()
                         noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
-                        add_time_ids = self._get_add_time_ids(
-                            original_size=(config.resolution, config.resolution),
-                            crops_coords_top_left=(0, 0),
-                            target_size=(config.resolution, config.resolution),
-                            dtype=weight_dtype,
-                            device=device,
-                            batch_size=bsz,
-                        )
+                        add_time_ids = batch["add_time_ids"].to(dtype=weight_dtype, device=device)
 
                     # --- Text embeddings ---
                     if te_cache is not None:
@@ -427,12 +444,21 @@ class SDXLLoRATrainer:
                         )
                         per_sample_loss = per_sample_loss * snr_weights.to(device=per_sample_loss.device)
                     loss = per_sample_loss.mean() / config.gradient_accumulation_steps
-                    loss.backward()
+                    if grad_scaler is not None:
+                        grad_scaler.scale(loss).backward()
+                    else:
+                        loss.backward()
                     accumulated_loss += loss.item()
 
                     if (step + 1) % config.gradient_accumulation_steps == 0:
+                        if grad_scaler is not None:
+                            grad_scaler.unscale_(optimizer)
                         torch.nn.utils.clip_grad_norm_(trainable_params, 1.0)
-                        optimizer.step()
+                        if grad_scaler is not None:
+                            grad_scaler.step(optimizer)
+                            grad_scaler.update()
+                        else:
+                            optimizer.step()
                         lr_scheduler.step()
                         optimizer.zero_grad()
                         self._progress.next_step(accumulated_loss)
@@ -476,6 +502,7 @@ class SDXLLoRATrainer:
                                 epoch_step=self._progress.epoch_step,
                                 checkpoint_name=f"{config.lora_name}_step{self._progress.global_step}",
                                 log=log,
+                                grad_scaler=grad_scaler,
                             )
                             log.info("Cancellation requested with checkpoint save: %s", checkpoint_path)
                             raise TrainingCancelledAfterSave()
@@ -494,6 +521,7 @@ class SDXLLoRATrainer:
                         epoch_step=0,
                         checkpoint_name=f"{config.lora_name}_epoch{epoch + 1}",
                         log=log,
+                        grad_scaler=grad_scaler,
                     )
 
             self._save_final(unet, text_encoder_1, text_encoder_2, config)
@@ -557,23 +585,12 @@ class SDXLLoRATrainer:
         prompt_embeds = torch.cat([prompt_embeds_1, prompt_embeds_2], dim=-1)
         return prompt_embeds, pooled_prompt_embeds
 
-    def _get_add_time_ids(
-        self,
-        original_size: tuple[int, int],
-        crops_coords_top_left: tuple[int, int],
-        target_size: tuple[int, int],
-        dtype: torch.dtype,
-        device: torch.device,
-        batch_size: int,
-    ) -> Tensor:
-        add_time_ids = list(original_size + crops_coords_top_left + target_size)
-        return torch.tensor([add_time_ids] * batch_size, dtype=dtype, device=device)
-
     def _build_dataset(self, config: TrainConfig, cache_mode: bool = False) -> Dataset:
-        datasets = [ConceptDataset(c, config.resolution, cache_mode=cache_mode) for c in config.concepts]
-        if len(datasets) == 1:
-            return datasets[0]
-        return ConcatDataset(datasets)
+        return build_training_dataset(
+            config,
+            cache_mode=cache_mode,
+            concept_metadata=self._concept_metadata,
+        )
 
     def _work_dir(self, config: TrainConfig) -> Path:
         return Path(config.output_dir) / config.lora_name
@@ -598,11 +615,13 @@ class SDXLLoRATrainer:
         epoch_step: int,
         checkpoint_name: str,
         log: logging.Logger,
+        grad_scaler: Any | None = None,
     ) -> Path:
         ext = f".{config.output_format.value}"
         checkpoint_path = self._work_dir(config) / f"{checkpoint_name}{ext}"
         self._export_lora(unet, text_encoder_1, text_encoder_2, config, checkpoint_path)
         lora_state_dict = self._collect_lora_state_dict(unet, text_encoder_1, text_encoder_2, config)
+        grad_scaler_state_dict = grad_scaler.state_dict() if grad_scaler is not None else None
         save_resume_state(
             checkpoint_path=checkpoint_path,
             lora_state_dict=lora_state_dict,
@@ -611,6 +630,7 @@ class SDXLLoRATrainer:
             epoch=resume_epoch_index,
             global_step=checkpoint_step,
             epoch_step=epoch_step,
+            grad_scaler_state_dict=grad_scaler_state_dict,
         )
         if self._checkpoint_callback is not None:
             self._checkpoint_callback(str(checkpoint_path), epoch, checkpoint_step)
