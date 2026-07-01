@@ -9,7 +9,8 @@ Dataset (.jpg + .txt)
   → TE cache: CLIP-L/G penultimate → *_te.npz  (clip_skip=2 ≡ hidden_states[-2], max 77 tokens)
   → train loop (trainer.py):
       latents + noisy_latents
-      add_time_ids = [R,R, 0,0, R,R]   # BUG: original_size=crop size, crop offset always 0
+      add_time_ids = per-image [H,W,crop_top,crop_left,R,R]   # H/I fix (fitted+crop); ⚠️ регрессия → revert
+      # baseline job 9/13: фикс. [R,R,0,0,R,R]
       prompt_embeds из cache или live encode
       UNet forward + MSE loss (optional min_snr, noise_offset)
       LoRA on UNet (attention + FF), TE frozen
@@ -20,7 +21,7 @@ Dataset (.jpg + .txt)
 
 **Ключевые файлы:** `preprocess.py`, `latent_cache.py`, `te_cache.py`, `trainer.py`, `loss.py`, `latent_sampling/session.py`
 
-**Ограничения:** нет bucketing; add_time_ids не per-image; TE cache valid по mtime image (не caption); UI sampling configs id=5/7 без trigger персонажа.
+**Ограничения:** нет bucketing; H/I fix (fitted+crop) даёт шум — revert перед P0; sampler/reForge всё ещё `(H,W,0,0,H,W)` на inference; TE cache valid по mtime image (не caption).
 
 ## Kohya sd-scripts (эталон Winx)
 
@@ -40,7 +41,7 @@ Dataset (folder 10_* = 10 repeats)
 | | Kohya (Winx) | lora-trainer (job_9/13) |
 |---|--------------|-------------------------|
 | enable_bucket | ✅ | ❌ |
-| add_time_ids | per-image (source size + crop) | фикс. `[R,R,0,0,R,R]` ❌ |
+| add_time_ids (train) | per-image Kohya (source + virtual crop) | fitted+crop fix → **шум**; baseline `[R,R,0,0,R,R]` |
 | effective LR `(α/rank)×lr` | 1.0 × 1e-3 = **1e-3** | 0.5 × 1e-4 = **5e-5** ❌ |
 | max_token_length | 250 | 77 ❌ |
 | rank / alpha | 16 / 16 (scale 1.0) | 32 / 16 (scale 0.5) ❌ |
@@ -56,19 +57,23 @@ Dataset (folder 10_* = 10 repeats)
 | TE encoding SDXL | penultimate | penultimate ✅ |
 | sample AR | 832×1216 | 832×1216 ✅ |
 
-## add_time_ids: что не так в lora-trainer
+## add_time_ids
 
-Landscape source ~1216×918, bake 1024×1024 center crop:
+### Baseline (job 9/13)
 
-| Поле | Должно быть | Сейчас |
-|------|-------------|--------|
-| original_size | ~(1216, 918) | (1024, 1024) |
-| crops_coords_top_left | ~(96, 0) | (0, 0) |
-| target_size | bucket/crop size | (1024, 1024) ✅ |
+Фикс. `[R,R,0,0,R,R]` — неверно для landscape, но единообразно с inference `(H,W,0,0,H,W)`. Результат: мыло, без likeness.
 
-SDXL использует original_size как quality/resolution conditioning. Неверные coords дают ложную spatial info.
+### H/I fix (отвергнуто, июнь 2026)
 
-Hypothesis A проверяла **inference** resolution — отвергнута. H/I — про **training** conditioning (другой слой проблемы).
+Реализация: fitted size + `_crop_box` offset per-image (`compute_add_time_ids_for_bake`). Пример landscape 1216×918 @ 1024: `(1024, 1356, 0, 166, 1024, 1024)`.
+
+Bloom retrain с rank=16, alpha=16, lr=1e-3 → **шум** (хуже baseline). Причины: семантика ≠ Kohya `get_crop_ltrb`; train/infer mismatch по crop coords.
+
+### Kohya (эталон)
+
+Landscape source ~1216×918, bucket 1024×1024: `original_size` = source HW, crop = virtual `get_crop_ltrb`, не pixel offset после fit-short-side.
+
+Hypothesis A (inference resolution) — отвергнута. H/I (training conditioning, fitted+crop) — отвергнута.
 
 ## OneTrainer
 
