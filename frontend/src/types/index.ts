@@ -20,6 +20,7 @@ export interface TrainingJobDetails {
   resume_from_epoch: number | null;
   resume_from_step: number | null;
   save_checkpoint_requested: boolean;
+  sampling_config_id: number | null;
 }
 
 export interface SamplingJobDetails {

@@ -13,10 +13,11 @@
 | **add_time_ids H/I** (fitted + crop, per-image, июнь) | `preprocess.py`, `dataset.py`, `trainer.py` | **регрессия: шум** (Bloom + rank16/lr1e-3) |
 | **Aspect-ratio bucketing** (offline bake, Kohya semantics, июль) | `buckets.py`, preprocess, DB, trainer | ep1 ok, ep2+ статик при lr1e-3 (до fix N) |
 | **add_time_ids collate fix** (batch_size>1) | `dataset.py`, `trainer.py` | fix корректности conditioning |
-| **Fix N: fp32 LoRA + GradScaler** | `mixed_precision.py`, `trainer.py`, `checkpoint_state.py` | ep2–3 ok; ep4+ при lr1e-3; lr3e-4 constant — лучше, ep4+ шум остаётся (M) |
+| **Fix N: fp32 LoRA + GradScaler** | `mixed_precision.py`, `trainer.py`, `checkpoint_state.py` | ep2–3 ok; ep4+ при lr1e-3; lr3e-4 лучше |
+| **Fix M: aligned inference add_time_ids** | `concept_training_metadata.py`, `session.py`, `trainer.py`, `service.py`, `job_runner.py` | validation pending — re-sample ep4+ |
 | **Диагностика fp16 stack (N)** | code review jul 2026 | выявлено: fp16 LoRA + no GradScaler vs Kohya |
 
-Детали N: `07-fp16-gradscaler-vs-kohya.md`. Post-run N: `08`. lr3e-4 constant: `09-lr-constant-post-run-jul2026.md`. Bucketing: `05-bucketing-run-jul2026.md`.
+Детали N: `07`. Fix M: `10-fix-m-validation.md`. Post-run: `08`, `09`. Bucketing: `05`.
 
 ## Эксперименты пользователя
 
@@ -37,12 +38,13 @@ Post-run: `08`, `09-lr-constant-post-run-jul2026.md`.
 ## Что не делали
 
 - max_token_length > 77 (гипотеза F)
-- **Fix M:** aligned inference `add_time_ids` (train crop coords → sampler/reForge) — **P0, следующий шаг**
 - Аудит train loop vs sd-scripts построчно (D)
+- **Ручная валидация fix M** — re-sample ep4/ep5 (шаги в `10-fix-m-validation.md`)
 
 ## Что сделали (июль 2026)
 
 - Offline bucketing: non-square prepared images, `BucketBatchSampler`, per-image Kohya `add_time_ids`
 - Fix collate `add_time_ids` для `batch_size>1`
-- **Fix N:** fp32 LoRA weights + GradScaler при fp16; resume scaler state
-- Unit/integration tests: `test_buckets.py`, `test_bucket_batch_sampler.py`, `test_mixed_precision.py`, collate regression test
+- **Fix N:** fp32 LoRA weights + GradScaler при fp16
+- **Fix M:** aligned inference add_time_ids (median train bucket match)
+- Unit/integration tests: `test_concept_training_metadata.py`, `test_mixed_precision.py`, ...

@@ -25,6 +25,7 @@ class TrainingJobDetails(BaseModel):
     resume_from_epoch: Optional[int] = None
     resume_from_step: Optional[int] = None
     save_checkpoint_requested: bool = False
+    sampling_config_id: Optional[int] = None
 
 
 class SamplingJobDetails(BaseModel):

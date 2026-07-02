@@ -19,7 +19,7 @@ from src.trainer.attention import configure_unet_attention
 from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.optimizer_config import Optimizer, build_optimizer
 from src.trainer.progress import TrainProgress
-from src.trainer.concept_training_metadata import ConceptTrainingMetadata
+from src.trainer.concept_training_metadata import ConceptTrainingMetadata, resolve_reference_add_time_ids
 from src.trainer.sdxl.bucket_batch_sampler import build_bucket_batch_sampler
 from src.trainer.sdxl.dataset import (
     build_training_dataset,
@@ -796,6 +796,19 @@ class SDXLLoRATrainer:
             torch.cuda.empty_cache()
             log.info("[sampling e%d] precompute embeds + TE offload: %.2fs", epoch, time.perf_counter() - embed_started_at)
 
+            reference_add_time_ids = resolve_reference_add_time_ids(
+                self._concept_metadata,
+                dataset_ids=[c.dataset_id for c in config.concepts],
+                width=width,
+                height=height,
+            )
+            if reference_add_time_ids is not None:
+                log.info(
+                    "Sampling e%d: using aligned add_time_ids %s (bucket match)",
+                    epoch,
+                    reference_add_time_ids,
+                )
+
             session = SDXLSamplingSession.create(
                 unet=inference_unet,
                 vae=vae,
@@ -806,6 +819,7 @@ class SDXLLoRATrainer:
                 sample_steps=config.sample_steps,
                 autocast_dtype=autocast_dtype,
                 config=config,
+                reference_add_time_ids=reference_add_time_ids,
             )
 
             def _on_status(prompt_index: int, total_prompts: int) -> None:

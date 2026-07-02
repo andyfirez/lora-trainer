@@ -8,12 +8,15 @@ from typing import Any
 
 import yaml
 
+from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
+from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus, JobType
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import SDXLLoRASampler
+from src.trainer.concept_training_metadata import ConceptTrainingMetadata, resolve_concept_training_metadata
 from src.trainer.config import TrainConfig
 from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
@@ -171,6 +174,18 @@ async def run_sampling_job(job_id: int) -> int:
             )
             await _set_output_path(job_id, output_path)
 
+        concept_metadata: dict[int, ConceptTrainingMetadata] | None = None
+        if source_train_config is not None:
+            dataset_ids = [c.dataset_id for c in source_train_config.concepts]
+            async with session_factory() as session:
+                dataset_repo = DatasetRepository(session)
+                crop_repo = DatasetImageCropRepository(session)
+                concept_metadata = await resolve_concept_training_metadata(
+                    dataset_ids,
+                    dataset_repo,
+                    crop_repo,
+                )
+
         run_logger.info("Starting sampling job id=%d with %d LoRA file(s)", job_id, len(lora_paths))
         sampler = SDXLLoRASampler(
             train_config,
@@ -179,6 +194,7 @@ async def run_sampling_job(job_id: int) -> int:
             progress_status_callback=_make_progress_status_callback(job_id),
             progress_callback=_make_progress_callback(job_id),
             log=run_logger,
+            concept_metadata=concept_metadata,
         )
         sampler.run()
         await _update_progress_status(job_id, None)

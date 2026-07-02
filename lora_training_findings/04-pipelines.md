@@ -16,12 +16,12 @@ Dataset (.jpg + .txt)
       autocast(fp16) forward; MSE fp32; clip_grad_norm; AdamW8bit
   → export .safetensors
   → sampling: latent k-sample
-      add_time_ids inference: (H, W, 0, 0, H, W)  ⚠️ M — mismatch с train bucketing
+      add_time_ids inference: median train bucket match if available (fix M ✅), else (H,W,0,0,H,W)
 ```
 
 **Ключевые файлы:** `buckets.py`, `preprocess.py`, `concept_training_metadata.py`, `bucket_batch_sampler.py`, `dataset.py`, `latent_cache.py`, `te_cache.py`, `trainer.py`, `loss.py`, `latent_sampling/session.py`
 
-**Ограничения:** inference add_time_ids mismatch (M, P0); max_token_length=77. Fix N ✅ в коде.
+**Ограничения:** reForge вне scope fix M; max_token_length=77. Fix N ✅, fix M inference ✅ (validation pending).
 
 ## Kohya sd-scripts (эталон Winx)
 
@@ -44,12 +44,12 @@ Dataset (folder 10_* = 10 repeats)
 |---|--------------|-------------------------------|
 | enable_bucket | ✅ | ✅ |
 | add_time_ids (train) | per-image Kohya | per-image Kohya ✅ |
-| add_time_ids (infer) | aligned in pipeline | `(H,W,0,0,H,W)` ⚠️ **M** |
+| add_time_ids (infer) | aligned in pipeline | median train bucket (fix M) or fallback |
 | effective LR | 1.0 × 1e-3 (типично) | 3e-4 constant (последний run) |
 | LoRA weight dtype | fp32 | fp32 trainable ✅ (fix N) |
 | backward | GradScaler | GradScaler ✅ (fix N) |
 | optimizer | AdamW8bit | AdamW8bit ✅ |
-| результат | likeness, без шума | ep1–3 ok; ep4+ шум ⚠️ M |
+| результат | likeness, без шума | ep1–3 ok; ep4+ — validate fix M |
 
 ## add_time_ids
 
@@ -71,9 +71,9 @@ Bloom retrain: ep1–3 ok при lr3e-4 constant; ep4+ шум. Root cause stack:
 
 LoRA fp32 + GradScaler. Частично подтверждено: убрал раннюю деградацию ep2. См. `07`, `08`.
 
-### Train/infer add_time_ids M — открыто, P0
+### Train/infer add_time_ids M — fix inference ✅ (validation pending)
 
-Train: crop coords из bucket. Infer: `(H,W,0,0,H,W)`. Kohya aligned → стабилен при любых LR. lora-trainer ep4+ шум даже при lr3e-4. См. `09`.
+`resolve_reference_add_time_ids` + `SDXLSamplingSession.create(reference_add_time_ids=...)`. См. `10-fix-m-validation.md`.
 
 ### Collate bug L (fix, июль 2026)
 

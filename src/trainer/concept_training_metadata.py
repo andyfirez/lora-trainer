@@ -1,5 +1,6 @@
 """Resolve per-image training metadata from dataset crop records."""
 
+import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -86,3 +87,37 @@ async def resolve_concept_training_metadata(
             by_filename=by_filename,
         )
     return result
+
+
+def resolve_reference_add_time_ids(
+    metadata_by_dataset: dict[int, ConceptTrainingMetadata],
+    dataset_ids: list[int],
+    width: int,
+    height: int,
+) -> tuple[float, float, float, float, float, float] | None:
+    """Median train-time add_time_ids for images whose bucket matches (width, height).
+
+    Returns None when no matching bucket data exists (falls back to (H,W,0,0,H,W)).
+    """
+    matching: list[tuple[int, int, int, int, int, int]] = []
+    for dataset_id in dict.fromkeys(dataset_ids):
+        concept_meta = metadata_by_dataset.get(dataset_id)
+        if concept_meta is None:
+            continue
+        for image_meta in concept_meta.by_filename.values():
+            if image_meta.bucket_width == width and image_meta.bucket_height == height:
+                matching.append(image_meta.add_time_ids)
+    if not matching:
+        return None
+    source_heights = [ids[0] for ids in matching]
+    source_widths = [ids[1] for ids in matching]
+    crop_tops = [ids[2] for ids in matching]
+    crop_lefts = [ids[3] for ids in matching]
+    return (
+        float(statistics.median(source_heights)),
+        float(statistics.median(source_widths)),
+        float(statistics.median(crop_tops)),
+        float(statistics.median(crop_lefts)),
+        float(height),
+        float(width),
+    )

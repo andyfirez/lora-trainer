@@ -12,6 +12,7 @@ from peft import get_peft_model
 
 from src.trainer.attention import configure_unet_attention
 from src.trainer.config import TrainConfig, WeightDtype
+from src.trainer.concept_training_metadata import ConceptTrainingMetadata, resolve_reference_add_time_ids
 from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
 from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
@@ -58,6 +59,7 @@ class SDXLLoRASampler:
         progress_status_callback: ProgressStatusCallback | None = None,
         progress_callback: ProgressCallback | None = None,
         log: logging.Logger | None = None,
+        concept_metadata: dict[int, ConceptTrainingMetadata] | None = None,
     ) -> None:
         self._config = config
         self._lora_paths = lora_paths
@@ -66,6 +68,7 @@ class SDXLLoRASampler:
         self._progress_callback = progress_callback
         self._log = log or logger
         self._prompt_embed_cache = PromptEmbedCache()
+        self._concept_metadata = concept_metadata or {}
 
     def run(self) -> None:
         config = self._config
@@ -276,6 +279,19 @@ class SDXLLoRASampler:
             inference_te2.to("cpu")
             torch.cuda.empty_cache()
 
+            reference_add_time_ids = resolve_reference_add_time_ids(
+                self._concept_metadata,
+                dataset_ids=self._reference_dataset_ids(config),
+                width=width,
+                height=height,
+            )
+            if reference_add_time_ids is not None:
+                self._log.info(
+                    "Sampling %s: using aligned add_time_ids %s (bucket match)",
+                    output_stem,
+                    reference_add_time_ids,
+                )
+
             session = SDXLSamplingSession.create(
                 unet=inference_unet,
                 vae=stack.vae,
@@ -286,6 +302,7 @@ class SDXLLoRASampler:
                 sample_steps=config.sample_steps,
                 autocast_dtype=autocast_dtype,
                 config=config,
+                reference_add_time_ids=reference_add_time_ids,
             )
 
             run_sdxl_sampling_pass(
@@ -327,6 +344,11 @@ class SDXLLoRASampler:
 
     def _effective_sample_prompts(self) -> list[str]:
         return self._config.sample_prompts
+
+    def _reference_dataset_ids(self, config: TrainConfig) -> list[int]:
+        if config.concepts:
+            return [c.dataset_id for c in config.concepts]
+        return list(self._concept_metadata.keys())
 
     def _total_diffusion_steps(self) -> int:
         lora_count = len(self._lora_paths) if self._lora_paths else 1
