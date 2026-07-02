@@ -14,8 +14,9 @@
 | [08-fix-n-post-run-jul2026.md](08-fix-n-post-run-jul2026.md) | Post-N retrain Winx_Bloom: ep1–3 ok, ep4+ статик |
 | [09-lr-constant-post-run-jul2026.md](09-lr-constant-post-run-jul2026.md) | lr=3e-4 constant: лучше, но ep4+ шум; M → P0 |
 | [10-fix-m-validation.md](10-fix-m-validation.md) | Fix M inference add_time_ids — код + валидация (итог: no-op) |
-| [11-revised-ep4-noise-jul2026.md](11-revised-ep4-noise-jul2026.md) | Пересмотр: M отклонена; ep4+ шум → train loop/weights (O, D) |
+| [11-revised-ep4-noise-jul2026.md](11-revised-ep4-noise-jul2026.md) | Пересмотр: M и O отклонены; weight-stats vs Kohya |
+| [12-train-scheduler-bug-jul2026.md](12-train-scheduler-bug-jul2026.md) | **ROOT CAUSE:** train forward process на EulerDiscreteScheduler |
 
-**Статус (июль 2026):** Fix M **отклонён как root cause** — ручная валидация дала no-op (`11`). Ключевой довод: ep4+ шум виден и в reForge, где Kohya-LoRA стабильна → проблема в **весах checkpoint'ов** lora-trainer, не в inference. **Текущий P0:** weight-stats анализ (O) + train loop audit vs Kohya (D). Usable checkpoint: ep2–3 (lr3e-4 constant).
+**Статус (июль 2026): ROOT CAUSE найден (гипотеза D).** train loop зашумляет латенты через `EulerDiscreteScheduler` (из `pipeline.scheduler` single-file чекпойнта), а не через DDPM. Его `add_noise` не variance-preserving — вход в UNet раздут до ×14.6 на высоких timestep'ах → неверный градиент, накапливается по эпохам. Kohya использует DDPMScheduler → стабилен. **Fix:** собирать train `noise_scheduler` как `DDPMScheduler` (`model_loader.py`); требует retrain. Отклонены: M (inference add_time_ids, no-op), O (веса здоровы), предпосылка N (Kohya `full_fp16=true`). См. `12`.
 
 **Артефакты:** `D:/SD/lora_output/Winx_Bloom_CFTS/`, `D:/SD/lora_output/Winx_Chimera_CFTS/`

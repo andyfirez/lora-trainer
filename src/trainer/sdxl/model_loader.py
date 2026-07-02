@@ -37,6 +37,11 @@ def is_checkpoint_file(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in _CHECKPOINT_EXTENSIONS
 
 
+def _build_training_noise_scheduler(source: object) -> DDPMScheduler:
+    """Build variance-preserving DDPM scheduler for the train forward process."""
+    return DDPMScheduler.from_config(source.config)
+
+
 def resolve_vae_dtype(vae_dtype: VaeDtype) -> torch.dtype:
     if vae_dtype != VaeDtype.AUTO:
         return _DTYPE_MAP[vae_dtype]
@@ -85,7 +90,9 @@ def _load_from_pretrained(
     return SDXLComponents(
         tokenizer_1=CLIPTokenizer.from_pretrained(base_model_name, subfolder="tokenizer"),
         tokenizer_2=CLIPTokenizer.from_pretrained(base_model_name, subfolder="tokenizer_2"),
-        noise_scheduler=DDPMScheduler.from_pretrained(base_model_name, subfolder="scheduler"),
+        noise_scheduler=_build_training_noise_scheduler(
+            DDPMScheduler.from_pretrained(base_model_name, subfolder="scheduler")
+        ),
         text_encoder_1=CLIPTextModel.from_pretrained(
             base_model_name,
             subfolder="text_encoder",
@@ -121,7 +128,7 @@ def _load_from_checkpoint(
     return SDXLComponents(
         tokenizer_1=pipeline.tokenizer,
         tokenizer_2=pipeline.tokenizer_2,
-        noise_scheduler=pipeline.scheduler,
+        noise_scheduler=_build_training_noise_scheduler(pipeline.scheduler),
         text_encoder_1=pipeline.text_encoder.to(dtype=_DTYPE_MAP[text_encoder_1_dtype]),
         text_encoder_2=pipeline.text_encoder_2.to(dtype=_DTYPE_MAP[text_encoder_2_dtype]),
         vae=pipeline.vae.to(dtype=vae_dtype),

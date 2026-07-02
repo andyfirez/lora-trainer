@@ -13,6 +13,9 @@ Dataset (.jpg + .txt)
       GradScaler при fp16 mixed precision (fix N ✅)
       BucketBatchSampler if enable_bucket
       add_time_ids = per-image Kohya tuple (crop ≠ 0 для landscape)
+      noise_scheduler = pipeline.scheduler = EulerDiscreteScheduler ⚠️ ROOT CAUSE (D, `12`)
+        add_noise = x + σ·noise (НЕ variance-preserving) → вход UNet раздут ×14.6 на high-t
+        должен быть DDPMScheduler (как Kohya)
       autocast(fp16) forward; MSE fp32; clip_grad_norm; AdamW8bit
   → export .safetensors
   → sampling: latent k-sample
@@ -32,11 +35,14 @@ Dataset (folder 10_* = 10 repeats)
   → bucketing: сохраняет AR, bucket_reso_steps=256
   → cache latents + TE (sdxl_cache_text_encoder_outputs)
   → train: MSE l2, enable_bucket, max_token_length=250
-  → LoRA network weights fp32 (default; --full_fp16 опционально)
+  → DDPMScheduler для forward process (variance-preserving add_noise) ✅
+  → network weights fp16 (config: full_fp16=true) — стабильно
   → mixed_precision fp16 → autocast forward only
   → accelerator.backward(loss) → GradScaler при fp16
   → add_time_ids: per-image original_size + crop coords из bucket
 ```
+
+**Подтверждено из реального конфига Kohya** (`config_lora-20260523-093348.toml`): `full_fp16=true`, `mixed_precision=fp16`, `bucket_reso_steps=256`, `max_token_length=250`, DDPM train scheduler. Ключевое отличие от lora-trainer — **DDPM vs Euler для train add_noise** (root cause D, `12`).
 
 ## Расхождения (значимые)
 

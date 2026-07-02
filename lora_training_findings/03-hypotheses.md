@@ -1,16 +1,22 @@
 # Гипотезы
 
-## На проверку (приоритет)
+## ROOT CAUSE НАЙДЕН (июль 2026)
 
-| ID | Гипотеза | Приоритет | Как проверить |
-|----|----------|-----------|---------------|
-| **O** | Порча/насыщение весов LoRA к ep4+ (объединяет E) | **P0** | Weight-stats ep1/ep3/ep4/ep10 lora-trainer vs Kohya (без GPU) |
-| **D** | Баг в train loop (target, latents, scheduler, timesteps) | **P0** | Diff vs Kohya sd-scripts построчно |
-| **R** | bucket_reso_steps 64 vs Kohya 256 | **P1** | Parity bucket'ов и per-image add_time_ids |
-| **F** | max_token_length 77 vs Kohya 250 | **P2** | Длинные caption обрезаются молча |
-| **M** | Train/infer add_time_ids mismatch | **Отклонена как root cause** (validation no-op). Косметический preview-fix. См. `10`, `11` |
+**D подтверждена — train forward process использует `EulerDiscreteScheduler` вместо DDPM.** См. `12-train-scheduler-bug-jul2026.md`.
 
-**Пересмотр (июль 2026):** M была P0, но ручная валидация дала no-op (`11-revised-ep4-noise-jul2026.md`). Ключевой довод: ep4+ шум виден и в reForge, где Kohya-LoRA стабильна на тех же данных → root cause в **весах checkpoint'ов** (train loop), а не в inference conditioning. Fix M структурно не может это объяснить.
+`model_loader.py` берёт `noise_scheduler = pipeline.scheduler` из single-file чекпойнта → это `EulerDiscreteScheduler`. Его `add_noise` даёт `x + σ·noise` (не variance-preserving); вход в UNet раздут до ×14.6 на высоких timestep'ах (t=999: ‖noisy‖ 3766 vs корректных 257). UNet получает мис-масштабированный латент → систематически неверный градиент, накапливается по эпохам. Kohya использует DDPMScheduler для train → стабилен.
+
+**Fix (предложен, требует retrain):** собирать train `noise_scheduler` как `DDPMScheduler` из бет pipeline; sampling-путь не трогать.
+
+## Статус гипотез
+
+| ID | Гипотеза | Статус |
+|----|----------|--------|
+| **D** | Train forward process (scheduler) | **ROOT CAUSE подтверждён** (`12`) |
+| **O** | Порча/насыщение весов LoRA к ep4+ | **Отклонена** — веса растут плавно, меньше здоровой Kohya (`11`) |
+| **M** | Train/infer add_time_ids mismatch | **Отклонена** (validation no-op) (`10`, `11`) |
+| **R** | bucket_reso_steps 64 vs Kohya 256 | Открыта, P2 (parity, не root cause) |
+| **F** | max_token_length 77 vs Kohya 250 | Открыта, P3 |
 
 ## Реализовано / закрыто
 
@@ -117,32 +123,31 @@ Job 9/13: мыло без likeness (низкий LR). Bloom jul с lr1e-3: ep1 o
 | **AdamW8bit betas/wd как root cause** | Совпадают с Kohya; Kohya стабилен с тем же optimizer |
 | **bf16 обязателен для стабильности** | Kohya stable на fp16; нужен fp32 weights + GradScaler (N) |
 
-## План (обновлён, июль 2026 — после отклонения M)
+## План (обновлён, июль 2026 — root cause найден)
 
 **Завершено:**
 
-1. ~~Fix N (GradScaler + fp32 LoRA)~~ **готово** (`07`, `08`)
-2. ~~Retrain G (lr3e-4 constant)~~ **выполнено** — улучшение ep1–3, ep4+ шум остаётся (`09`)
-3. ~~Fix M + ручная валидация~~ **выполнено — M отклонена (no-op)** (`10`, `11`)
+1. ~~Fix N (GradScaler + fp32 LoRA)~~ **готово**, но предпосылка неверна — Kohya `full_fp16=true` (`07`, `08`, `12`)
+2. ~~Retrain G (lr3e-4 constant)~~ **выполнено** (`09`)
+3. ~~Fix M + валидация~~ **M отклонена (no-op)** (`10`, `11`)
+4. ~~Weight-stats (O)~~ **O отклонена** — веса здоровые (`11`)
+5. ~~Train loop audit (D)~~ **ROOT CAUSE найден: Euler scheduler в train** (`12`)
 
 **P0 (текущее):**
 
-1. **Weight-stats анализ (O)** — нормы `lora_down`/`lora_up`, max abs, рост по эпохам: ep1/ep3/ep4/ep10 lora-trainer vs Kohya. Без GPU. См. `11`.
-2. **Train loop audit (D)** — построчный diff `trainer.py` train step vs Kohya sd-scripts: target/prediction_type, timesteps sampling, latents scaling, clip_grad_norm, steps-per-epoch.
-3. **Проверка цели:** ep2–3 checkpoint → reForge `832×1216` — подтвердить high-res генерацию с ранних checkpoint'ов.
+1. **Fix scheduler** — собирать train `noise_scheduler` как `DDPMScheduler` из бет pipeline (`model_loader.py`). Sampling не трогать.
+2. **Unit-тест** — `add_noise` train-scheduler'а variance-preserving (‖noisy‖ ≈ const по t).
+3. **Retrain Bloom** — проверить ep4–10 без шума + likeness.
 
-**Usable checkpoint:** ep2–3 прогона lr3e-4 constant.
+**P2 (parity, после fix):**
 
-**P1:**
-
-- bucket_reso_steps parity 64 vs 256 (R)
-- max_token_length 250 (F)
+- bucket_reso_steps 64 vs 256 (R)
+- max_token_length 77 vs 250 (F)
 
 **Не приоритет:**
 
 - TE cache invalidation by caption hash
-- Повторять H/I fitted+crop
-- Train-side/ inference изменения add_time_ids (M снята)
+- add_time_ids изменения (M снята)
 
 ## Не приоритет сейчас
 
