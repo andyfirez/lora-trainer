@@ -13,10 +13,10 @@
 | **add_time_ids H/I** (fitted + crop, per-image, июнь) | `preprocess.py`, `dataset.py`, `trainer.py` | **регрессия: шум** (Bloom + rank16/lr1e-3) |
 | **Aspect-ratio bucketing** (offline bake, Kohya semantics, июль) | `buckets.py`, preprocess, DB, trainer | ep1 ok, ep2+ статик при lr1e-3 (до fix N) |
 | **add_time_ids collate fix** (batch_size>1) | `dataset.py`, `trainer.py` | fix корректности conditioning |
-| **Fix N: fp32 LoRA + GradScaler** | `mixed_precision.py`, `trainer.py`, `checkpoint_state.py` | ep2–3 ok; ep4+ статик при lr1e-3, warmup=0 |
+| **Fix N: fp32 LoRA + GradScaler** | `mixed_precision.py`, `trainer.py`, `checkpoint_state.py` | ep2–3 ok; ep4+ при lr1e-3; lr3e-4 constant — лучше, ep4+ шум остаётся (M) |
 | **Диагностика fp16 stack (N)** | code review jul 2026 | выявлено: fp16 LoRA + no GradScaler vs Kohya |
 
-Детали N: `07-fp16-gradscaler-vs-kohya.md`. Post-run N: `08-fix-n-post-run-jul2026.md`. Bucketing run: `05-bucketing-run-jul2026.md`.
+Детали N: `07-fp16-gradscaler-vs-kohya.md`. Post-run N: `08`. lr3e-4 constant: `09-lr-constant-post-run-jul2026.md`. Bucketing: `05-bucketing-run-jul2026.md`.
 
 ## Эксперименты пользователя
 
@@ -29,16 +29,16 @@
 | **Hypothesis A:** inference 1024² vs 832×1216 | оба без likeness → **отвергнуто** |
 | **Bloom + rank16/alpha16/lr1e-3 + H/I fix** (июнь) | **шум** с первых эпох |
 | **Bloom + bucketing + fix collate + rank16/lr1e-3** (июль, до fix N) | **ep1 ok → ep2+ статик**, loss стабилен |
-| **Bloom + fix N + rank16/lr1e-3, warmup=0** (июль, после fix N) | **ep1–3 ok → ep4+ статик**; в шуме картинка почти не меняется |
+| **Bloom + fix N + rank16/lr1e-3, warmup=0** (jul) | **ep1–3 ok → ep4+ статик** |
+| **Bloom + fix N + lr3e-4, constant scheduler** (jul) | **значительно лучше ep1–3; ep4+ шум**; Kohya без шума при любых настройках → M |
 
-Hypothesis A: `Winx_Bloom_CFTS_epoch5`, seed=42 → `lora_output/Winx_Bloom_CFTS/hypothesis_a/`. Post-run fix N: `08-fix-n-post-run-jul2026.md`.
+Post-run: `08`, `09-lr-constant-post-run-jul2026.md`.
 
 ## Что не делали
 
 - max_token_length > 77 (гипотеза F)
-- Aligned inference add_time_ids (train crop coords → sampler/reForge)
+- **Fix M:** aligned inference `add_time_ids` (train crop coords → sampler/reForge) — **P0, следующий шаг**
 - Аудит train loop vs sd-scripts построчно (D)
-- Retrain с пониженным LR / warmup после fix N (гипотеза G — следующий шаг)
 
 ## Что сделали (июль 2026)
 

@@ -12,7 +12,8 @@
 | [06-add-time-ids-collate-bug.md](06-add-time-ids-collate-bug.md) | Техническая записка: баг collate при batch_size>1 |
 | [07-fp16-gradscaler-vs-kohya.md](07-fp16-gradscaler-vs-kohya.md) | fp16 LoRA weights без GradScaler vs Kohya (Accelerate) |
 | [08-fix-n-post-run-jul2026.md](08-fix-n-post-run-jul2026.md) | Post-N retrain Winx_Bloom: ep1–3 ok, ep4+ статик |
+| [09-lr-constant-post-run-jul2026.md](09-lr-constant-post-run-jul2026.md) | lr=3e-4 constant: лучше, но ep4+ шум; M → P0 |
 
-**Статус (июль 2026):** Fix N (fp32 LoRA + GradScaler) **частично подтверждён** — ep2–3 норм, ep4+ статик при `lr=1e-3`, `warmup=0`. **P0:** гипотеза G (понизить LR, добавить warmup). Usable checkpoint текущего прогона: **ep2–3**. См. `08-fix-n-post-run-jul2026.md`.
+**Статус (июль 2026):** Fix N + понижение LR (3e-4, constant) **существенно улучшили** качество ep1–3. Шум с ep4 **сохраняется** — LR alone не объясняет. **P0:** гипотеза **M** (train/infer `add_time_ids` mismatch). Kohya стабилен при любых LR — структурное расхождение пайплайна. Usable checkpoint: **ep2–3**. См. `09-lr-constant-post-run-jul2026.md`.
 
 **Артефакты:** `D:/SD/lora_output/Winx_Bloom_CFTS/`, `D:/SD/lora_output/Winx_Chimera_CFTS/`
