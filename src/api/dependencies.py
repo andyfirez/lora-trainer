@@ -8,6 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
+from src.db.repositories.job_config_version_repo import JobConfigVersionRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import session_factory
@@ -49,7 +50,14 @@ def _get_dataset_repo(session: SessionDep) -> DatasetRepository:
 
 JobRepoDep = Annotated[JobRepository, Depends(_get_job_repo)]
 QueueRepoDep = Annotated[QueueRepository, Depends(_get_queue_repo)]
+
+
+def _get_version_repo(session: SessionDep) -> JobConfigVersionRepository:
+    return JobConfigVersionRepository(session)
+
+
 ConfigRepoDep = Annotated[JobConfigRepository, Depends(_get_config_repo)]
+VersionRepoDep = Annotated[JobConfigVersionRepository, Depends(_get_version_repo)]
 DatasetRepoDep = Annotated[DatasetRepository, Depends(_get_dataset_repo)]
 
 
@@ -65,8 +73,9 @@ def _get_jobs_service(
 def _get_config_service(
     config_repo: ConfigRepoDep,
     dataset_repo: DatasetRepoDep,
+    version_repo: VersionRepoDep,
 ) -> JobConfigService:
-    return JobConfigService(config_repo, dataset_repo)
+    return JobConfigService(config_repo, dataset_repo, version_repo)
 
 
 def _get_queues_service(

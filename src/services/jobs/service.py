@@ -9,6 +9,7 @@ import yaml
 from src.api.schemas.job_loss import JobLossResponse
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
+from src.db.repositories.job_config_version_repo import JobConfigVersionRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.tables.job import Job, JobStatus, JobType
@@ -19,6 +20,7 @@ from src.sampler.output_paths import resolve_sampling_output_path
 from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
 from src.services.configs.service import JobConfigService
 from src.services.datasets.training_validation import validate_dataset_for_training
+from src.services.configs.versioning import apply_lora_version_to_train_config
 from src.services.jobs.exceptions import (
     JobAlreadyQueuedError,
     JobCheckpointNotFoundError,
@@ -52,7 +54,11 @@ class JobsService:
         self._job_repo = job_repo
         self._queue_repo = queue_repo
         self._dataset_repo = dataset_repo
-        self._config_service = JobConfigService(config_repo, dataset_repo)
+        self._config_service = JobConfigService(
+            config_repo,
+            dataset_repo,
+            JobConfigVersionRepository(config_repo._session),
+        )
 
     async def list_jobs(self, *, job_type: JobType | None = None) -> Sequence[Job]:
         if job_type is not None:
@@ -98,6 +104,7 @@ class JobsService:
                 job_type=JobType.TRAINING,
                 name=job_name,
                 config_id=config.id,
+                config_version=config.active_version,
                 config_yaml=config.config_yaml,
             )
         else:
@@ -178,7 +185,8 @@ class JobsService:
             return None
         if sampling_config_entity.config_type != ConfigType.SAMPLING:
             return None
-        if not self._find_intermediate_checkpoints(train_config):
+        runtime_config = self._runtime_train_config(training_job)
+        if not self._find_intermediate_checkpoints(runtime_config):
             raise SamplingCheckpointsNotFoundError(training_job.id)
         job = await self.create_from_config(
             sampling_config_entity.id,
@@ -212,7 +220,7 @@ class JobsService:
             if job.job_type == JobType.TRAINING:
                 await self._job_repo.clear_resume_state(job)
         if job.job_type == JobType.TRAINING and reset_runtime:
-            config = TrainConfig.from_yaml(job.config_yaml)
+            config = self._runtime_train_config(job)
             if config.logging.use_ui_logger:
                 reset_loss_log(build_loss_log_path(config))
         await self._job_repo.update_status(job, JobStatus.QUEUED)
@@ -224,7 +232,7 @@ class JobsService:
             raise JobOperationNotSupportedError(job_id, "resume")
         if job.status not in (JobStatus.FAILED, JobStatus.CANCELLED):
             raise JobNotResumableError(job_id, job.status)
-        config = TrainConfig.from_yaml(job.config_yaml)
+        config = self._runtime_train_config(job)
         work_dir = Path(config.output_dir) / config.lora_name
         checkpoint = find_latest_checkpoint(work_dir, config.lora_name, config.output_format.value)
         if checkpoint is None:
@@ -278,7 +286,7 @@ class JobsService:
         job = await self.get_job(job_id)
         if job.job_type != JobType.TRAINING:
             raise JobOperationNotSupportedError(job_id, "loss")
-        config = TrainConfig.from_yaml(job.config_yaml)
+        config = self._runtime_train_config(job)
         log_path = build_loss_log_path(config)
         return read_loss_log(
             log_path,
@@ -323,7 +331,7 @@ class JobsService:
         source_job = await self._job_repo.get_by_id(source_job_id)
         if source_job is None or source_job.job_type != JobType.TRAINING:
             return []
-        train_config = TrainConfig.from_yaml(source_job.config_yaml)
+        train_config = self._runtime_train_config(source_job)
         return [str(path) for path in self._find_intermediate_checkpoints(train_config)]
 
     def _find_intermediate_checkpoints(self, config: TrainConfig) -> list[Path]:
@@ -343,5 +351,9 @@ class JobsService:
         if source_job_id is not None:
             source_job = await self._job_repo.get_by_id(source_job_id)
             if source_job is not None and source_job.job_type == JobType.TRAINING:
-                source_train_config = TrainConfig.from_yaml(source_job.config_yaml)
+                source_train_config = self._runtime_train_config(source_job)
         return resolve_sampling_output_path(sampling_config, job_id, source_train_config)
+
+    def _runtime_train_config(self, job: Job) -> TrainConfig:
+        config = TrainConfig.from_yaml(job.config_yaml)
+        return apply_lora_version_to_train_config(config, job.config_version)

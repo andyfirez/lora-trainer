@@ -109,9 +109,9 @@ async def test_resume_job_queues_with_resume_state(
     tmp_path,
 ) -> None:
     output_dir = tmp_path / "output"
-    work_dir = output_dir / "test_lora"
+    work_dir = output_dir / "test_lora_v1"
     work_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = work_dir / "test_lora_epoch3.safetensors"
+    checkpoint_path = work_dir / "test_lora_v1_epoch3.safetensors"
     checkpoint_path.write_bytes(b"checkpoint")
     save_resume_state(
         checkpoint_path=checkpoint_path,
@@ -171,7 +171,7 @@ concepts:
   - dataset_id: {training_dataset.id}
 """
     job = await create_training_job(config_yaml=config_yaml)
-    loss_log = output_dir / "test_lora" / "loss_log.db"
+    loss_log = output_dir / "test_lora_v1" / "loss_log.db"
     logger = MetricLogger(loss_log)
     logger.log({"loss/loss": 0.9})
     logger.commit(step=10)

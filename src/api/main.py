@@ -22,6 +22,7 @@ from src.api.exception_handlers import (
     job_checkpoint_not_found_handler,
     job_config_not_found_handler,
     job_config_validation_handler,
+    job_config_version_not_found_handler,
     job_not_cancellable_handler,
     job_not_found_handler,
     job_not_resumable_handler,
@@ -34,7 +35,11 @@ from src.api.exception_handlers import (
 from src.api.routers import configs, datasets, files, jobs, queues
 from src.db.session import run_migrations
 from src.services.worker.service import QueueWorker
-from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
+from src.services.configs.exceptions import (
+    JobConfigNotFoundError,
+    JobConfigValidationError,
+    JobConfigVersionNotFoundError,
+)
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetImageNotFoundError,
@@ -97,6 +102,7 @@ app.add_exception_handler(JobOperationNotSupportedError, job_operation_not_suppo
 app.add_exception_handler(QueueEntryNotFoundError, queue_entry_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(JobConfigNotFoundError, job_config_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(JobConfigValidationError, job_config_validation_handler)  # type: ignore[arg-type]
+app.add_exception_handler(JobConfigVersionNotFoundError, job_config_version_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(SamplingLoRAPathNotFoundError, sampling_lora_path_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(SamplingCheckpointsNotFoundError, sampling_checkpoints_not_found_handler)  # type: ignore[arg-type]
 app.add_exception_handler(SamplingPromptsNotConfiguredError, sampling_prompts_not_configured_handler)  # type: ignore[arg-type]

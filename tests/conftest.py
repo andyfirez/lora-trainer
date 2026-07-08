@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
+from src.db.repositories.job_config_version_repo import JobConfigVersionRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import register_all_tables
@@ -69,7 +70,11 @@ async def jobs_service(session: AsyncSession) -> JobsService:
 
 @pytest_asyncio.fixture
 async def config_service(session: AsyncSession) -> JobConfigService:
-    return JobConfigService(JobConfigRepository(session), DatasetRepository(session))
+    return JobConfigService(
+        JobConfigRepository(session),
+        DatasetRepository(session),
+        JobConfigVersionRepository(session),
+    )
 
 
 @pytest_asyncio.fixture

@@ -17,6 +17,7 @@ def register_all_tables() -> None:
     import src.db.tables.dataset_image_crop  # noqa: F401
     import src.db.tables.job  # noqa: F401
     import src.db.tables.job_config  # noqa: F401
+    import src.db.tables.job_config_version  # noqa: F401
     import src.db.tables.queue_entry  # noqa: F401
 
 

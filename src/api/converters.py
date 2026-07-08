@@ -16,6 +16,7 @@ def to_job_response(job: Job, service: JobsService) -> JobResponse:
         "name": job.name,
         "status": job.status,
         "config_id": job.config_id,
+        "config_version": job.config_version,
         "config_yaml": job.config_yaml,
         "output_path": job.output_path,
         "log_path": job.log_path,

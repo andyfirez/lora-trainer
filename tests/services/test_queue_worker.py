@@ -361,9 +361,9 @@ async def test_finalize_job_queues_sampling_when_runner_already_completed(
     tmp_path: Path,
 ) -> None:
     output_dir = tmp_path / "output"
-    work_dir = output_dir / "demo"
+    work_dir = output_dir / "demo_v1"
     work_dir.mkdir(parents=True)
-    (work_dir / "demo_epoch1.safetensors").write_bytes(b"epoch")
+    (work_dir / "demo_v1_epoch1.safetensors").write_bytes(b"epoch")
 
     sampling_config = await config_service.create_config(
         name="post-train sampling",

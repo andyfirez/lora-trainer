@@ -22,7 +22,11 @@ from src.services.jobs.exceptions import (
     JobNotResumableError,
     JobOperationNotSupportedError,
 )
-from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
+from src.services.configs.exceptions import (
+    JobConfigNotFoundError,
+    JobConfigValidationError,
+    JobConfigVersionNotFoundError,
+)
 from src.services.queues.exceptions import QueueEntryNotFoundError
 from src.services.sampling.exceptions import (
     SamplingCheckpointsNotFoundError,
@@ -68,6 +72,13 @@ async def job_config_not_found_handler(request: Request, exc: JobConfigNotFoundE
 
 async def job_config_validation_handler(request: Request, exc: JobConfigValidationError) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": exc.message})
+
+
+async def job_config_version_not_found_handler(
+    request: Request,
+    exc: JobConfigVersionNotFoundError,
+) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 async def sampling_lora_path_not_found_handler(request: Request, exc: SamplingLoRAPathNotFoundError) -> JSONResponse:

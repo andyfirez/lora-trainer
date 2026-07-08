@@ -85,6 +85,9 @@ export default function ConfigsPage() {
             <thead className="bg-[var(--surface)]">
               <tr>
                 <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Name</th>
+                {tab === "training" && (
+                  <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Version</th>
+                )}
                 <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Description</th>
                 <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Updated</th>
                 <th className="px-4 py-3 text-right text-[var(--muted)] font-medium">Actions</th>
@@ -101,6 +104,13 @@ export default function ConfigsPage() {
                       {config.name}
                     </Link>
                   </td>
+                  {tab === "training" && (
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center rounded-full bg-[var(--accent)]/15 text-[var(--accent)] px-2.5 py-0.5 text-xs font-medium">
+                        v{config.active_version ?? 1}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-[var(--muted)] max-w-xs truncate">
                     {config.description || "—"}
                   </td>

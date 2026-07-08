@@ -17,6 +17,10 @@ import type { Dataset, JobConfig } from "@/types";
 
 type Config = Record<string, any>;
 
+function stripLoraVersionSuffix(name: string): string {
+  return name.replace(/_v\d+$/, "");
+}
+
 interface TrainConfigFormProps {
   config: Config;
   onChange: (config: Config) => void;
@@ -404,10 +408,13 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
         </div>
         <TextInput
           label="LoRA Name"
-          value={config.lora_name ?? ""}
+          value={stripLoraVersionSuffix(config.lora_name ?? "")}
           onChange={(v) => set("lora_name", v)}
           placeholder="my_lora"
         />
+        <p className="text-xs text-[var(--muted)] -mt-2">
+          Version suffix <code className="text-[var(--muted)]">_vN</code> is added to output files automatically when training starts.
+        </p>
         <SelectInput
           label="Output Format"
           value={config.output_format ?? "safetensors"}

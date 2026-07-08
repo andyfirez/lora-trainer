@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Play, Loader2, X, Copy } from "lucide-react";
 import { configsApi } from "@/lib/api/configs";
 import ConfigForm from "@/components/ConfigForm";
+import ConfigVersionHistory from "@/components/ConfigVersionHistory";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -16,7 +17,7 @@ export default function ConfigDetailPage({ params }: Props) {
   const { id: idParam } = use(params);
   const configId = Number(idParam);
   const router = useRouter();
-  const { data: config, isLoading } = useSWR(`/configs/${configId}`, () => configsApi.get(configId));
+  const { data: config, isLoading, mutate } = useSWR(`/configs/${configId}`, () => configsApi.get(configId));
 
   const [showRunModal, setShowRunModal] = useState(false);
   const [jobName, setJobName] = useState("");
@@ -61,6 +62,10 @@ export default function ConfigDetailPage({ params }: Props) {
     }
   };
 
+  const handleSaved = () => {
+    void mutate();
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-[var(--muted)] py-20">
@@ -80,7 +85,14 @@ export default function ConfigDetailPage({ params }: Props) {
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">{config.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-white">{config.name}</h1>
+            {config.config_type === "training" && (
+              <span className="text-sm rounded-full bg-[var(--accent)]/15 text-[var(--accent)] px-2.5 py-0.5 font-medium">
+                v{config.active_version ?? 1}
+              </span>
+            )}
+          </div>
           <p className="text-[var(--muted)] mt-1 capitalize">{config.config_type} config</p>
         </div>
         <div className="flex items-center gap-2">
@@ -92,22 +104,30 @@ export default function ConfigDetailPage({ params }: Props) {
             {cloning ? <Loader2 className="animate-spin" size={14} /> : <Copy size={14} />}
             {cloning ? "Duplicating…" : "Duplicate"}
           </button>
-          <button
-            onClick={openRunModal}
-            className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg px-4 py-2 text-sm font-medium"
-          >
-            <Play size={14} /> Run Job
-          </button>
+          {config.config_type === "training" && (
+            <button
+              onClick={openRunModal}
+              className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg px-4 py-2 text-sm font-medium"
+            >
+              <Play size={14} /> Run Job
+            </button>
+          )}
         </div>
       </div>
 
       <ConfigForm
+        key={config.active_version ?? config.updated_at}
         configType={config.config_type}
         configId={configId}
         initialName={config.name}
         initialDescription={config.description ?? ""}
         initialYaml={config.config_yaml}
+        onSaved={handleSaved}
       />
+
+      {config.config_type === "training" && (
+        <ConfigVersionHistory configId={configId} activeVersion={config.active_version} />
+      )}
 
       {showRunModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -122,7 +142,7 @@ export default function ConfigDetailPage({ params }: Props) {
               </button>
             </div>
             <p className="text-sm text-[var(--muted)]">
-              Create a new job from this config and optionally add it to the queue.
+              Create a new job from version {config.active_version ?? 1} and optionally add it to the queue.
             </p>
             {runError && (
               <div className="rounded-lg bg-red-900/30 border border-red-800 text-red-300 px-3 py-2 text-sm">

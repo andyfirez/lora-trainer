@@ -19,6 +19,7 @@ interface ConfigFormProps {
   initialDescription?: string;
   initialYaml?: string;
   configId?: number;
+  onSaved?: () => void;
 }
 
 type Tab = "form" | "yaml";
@@ -29,6 +30,7 @@ export default function ConfigForm({
   initialDescription = "",
   initialYaml,
   configId,
+  onSaved,
 }: ConfigFormProps) {
   const router = useRouter();
   const defaultYaml = configType === "training" ? TrainConfig.DEFAULT_YAML : SamplingConfig.DEFAULT_YAML;
@@ -77,7 +79,13 @@ export default function ConfigForm({
     setError(null);
     try {
       if (configId) {
-        await configsApi.update(configId, { name, config_yaml: yaml, description: description || null });
+        const updated = await configsApi.update(configId, {
+          name,
+          config_yaml: yaml,
+          description: description || null,
+        });
+        setYaml(updated.config_yaml);
+        onSaved?.();
         router.push(`/configs/${configId}`);
         return;
       }

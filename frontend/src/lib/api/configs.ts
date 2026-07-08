@@ -1,5 +1,5 @@
 import { api } from "@/lib/api/client";
-import type { ConfigType, CreateJobFromConfigRequest, Job, JobConfig } from "@/types";
+import type { ConfigType, CreateJobFromConfigRequest, Job, JobConfig, JobConfigVersion, JobConfigVersionSummary } from "@/types";
 
 export interface JobConfigCreate {
   name: string;
@@ -32,4 +32,7 @@ export const configsApi = {
     api.post<JobConfig>(`/configs/${id}/clone`, body),
   createJob: (configId: number, body: CreateJobFromConfigRequest = {}) =>
     api.post<Job>(`/configs/${configId}/jobs`, body),
+  listVersions: (id: number) => api.get<JobConfigVersionSummary[]>(`/configs/${id}/versions`),
+  getVersion: (id: number, version: number) =>
+    api.get<JobConfigVersion>(`/configs/${id}/versions/${version}`),
 };
