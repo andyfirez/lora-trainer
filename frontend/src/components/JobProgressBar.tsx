@@ -24,7 +24,7 @@ export default function JobProgressBar({
   total,
   percent,
   active,
-  barClassName = "bg-[var(--accent)]",
+  barClassName = "bg-accent",
   titleExtra,
   headerRight,
   footer,
@@ -32,17 +32,17 @@ export default function JobProgressBar({
   showBar = true,
 }: Props) {
   return (
-    <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5 space-y-3">
+    <div className="bg-surface rounded-xl border border-border p-5 space-y-3">
       <div className="flex justify-between text-sm">
-        <span className="text-white font-medium flex items-center gap-2">
-          {showSpinner && <Loader2 className="animate-spin text-[var(--accent)]" size={14} />}
+        <span className="text-text font-medium flex items-center gap-2">
+          {showSpinner && <Loader2 className="animate-spin text-accent" size={14} />}
           {title}
           {titleExtra}
         </span>
         {headerRight}
       </div>
       {showBar && (
-        <div className="bg-[var(--border)] rounded-full h-2.5">
+        <div className="bg-border rounded-full h-2.5">
           <div
             className={`${barClassName} h-2.5 rounded-full transition-all duration-500`}
             style={{ width: `${percent}%` }}

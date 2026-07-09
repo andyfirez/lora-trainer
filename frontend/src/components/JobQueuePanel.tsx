@@ -35,7 +35,7 @@ export default function JobQueuePanel() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8 text-[var(--muted)]">
+      <div className="flex items-center justify-center py-8 text-muted">
         <Loader2 className="animate-spin mr-2" size={18} /> Loading queue…
       </div>
     );
@@ -43,35 +43,35 @@ export default function JobQueuePanel() {
 
   if (!queue?.length) {
     return (
-      <div className="text-center py-8 text-[var(--muted)] rounded-xl border border-[var(--border)]">
+      <div className="text-center py-8 text-muted rounded-xl border border-border">
         Queue is empty. Run a job from a config to add it here.
       </div>
     );
   }
 
   return (
-    <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden">
-      <div className="divide-y divide-[var(--border)]">
+    <div className="bg-surface rounded-xl border border-border overflow-hidden">
+      <div className="divide-y divide-border">
         {queue.map(({ entry, job }) => {
           const isSampling = job.job_type === "sampling";
-          const linkClass = isSampling ? "hover:text-purple-400" : "hover:text-[var(--accent)]";
+          const linkClass = isSampling ? "hover:text-sampling" : "hover:text-accent";
 
           return (
             <div key={entry.id} className="flex items-center gap-3 px-4 py-3 text-sm">
-              <span className="w-6 h-6 rounded-full bg-[var(--border)] text-[var(--muted)] text-xs flex items-center justify-center shrink-0">
+              <span className="w-6 h-6 rounded-full bg-border text-muted text-xs flex items-center justify-center shrink-0">
                 {entry.position}
               </span>
-              <Link href={`/jobs/${job.id}`} className={`text-white font-medium ${linkClass}`}>
+              <Link href={`/jobs/${job.id}`} className={`text-text font-medium ${linkClass}`}>
                 {job.name}
               </Link>
-              <span className="text-xs text-[var(--muted)]">{job.job_type}</span>
+              <span className="text-xs text-muted">{job.job_type}</span>
               <StatusBadge status={job.status} />
               <div className="ml-auto flex items-center gap-1">
                 {(job.status === "pending" || job.status === "failed" || job.status === "cancelled") && (
                   <button
                     onClick={() => void handleEnqueue(job)}
                     title="Add to queue"
-                    className="p-1.5 rounded hover:bg-white/10 text-green-400 hover:text-green-300"
+                    className="p-1.5 rounded hover:bg-white/10 text-success hover:text-success"
                   >
                     <Play size={14} />
                   </button>
@@ -80,7 +80,7 @@ export default function JobQueuePanel() {
                   <button
                     onClick={() => void handleMoveToTop(job.id)}
                     title="Move to top of queue"
-                    className="p-1.5 rounded hover:bg-white/10 text-yellow-400 hover:text-yellow-300"
+                    className="p-1.5 rounded hover:bg-white/10 text-warning hover:text-warning/80"
                   >
                     <ChevronUp size={14} />
                   </button>
@@ -89,7 +89,7 @@ export default function JobQueuePanel() {
                   <button
                     onClick={() => void handleCancel(job)}
                     title={job.status === "running" ? "Stop" : "Cancel"}
-                    className="p-1.5 rounded hover:bg-white/10 text-red-400 hover:text-red-300"
+                    className="p-1.5 rounded hover:bg-white/10 text-error hover:text-error"
                   >
                     <X size={14} />
                   </button>

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Save } from "lucide-react";
+import { inputClassName } from "@/components/ui/Input";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import { configsApi } from "@/lib/api/configs";
 import { SamplingConfig, TrainConfig } from "@/lib/defaultConfig";
@@ -114,39 +115,39 @@ export default function ConfigForm({
   return (
     <div className="flex flex-col gap-4">
       {error && (
-        <div className="rounded-lg bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 text-sm">{error}</div>
+        <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">{error}</div>
       )}
 
       <div className="flex items-center gap-4">
         <div className="flex-1">
-          <label className="block text-sm font-medium text-[var(--muted)] mb-1">Config Name</label>
+          <label className="block text-sm font-medium text-muted mb-1">Config Name</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={configType === "training" ? "my-sdxl-lora" : "my-sampling-config"}
-            className="w-full rounded-lg bg-[var(--surface)] border border-[var(--border)] px-3 py-2 text-white placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)]"
+            className={inputClassName}
           />
         </div>
         <div className="flex-1">
-          <label className="block text-sm font-medium text-[var(--muted)] mb-1">Description (optional)</label>
+          <label className="block text-sm font-medium text-muted mb-1">Description (optional)</label>
           <input
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Notes about this config"
-            className="w-full rounded-lg bg-[var(--surface)] border border-[var(--border)] px-3 py-2 text-white placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)]"
+            className={inputClassName}
           />
         </div>
         <div className="flex items-end gap-2 pb-0.5">
-          <label className="cursor-pointer text-sm text-[var(--muted)] hover:text-white transition-colors border border-[var(--border)] rounded-lg px-3 py-2">
+          <label className="cursor-pointer text-sm text-muted hover:text-text transition-colors border border-border rounded-lg px-3 py-2">
             Import YAML
             <input type="file" accept=".yaml,.yml" className="hidden" onChange={handleImport} />
           </label>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
           >
             <Save size={14} />
             {saving ? "Saving…" : "Save Config"}
@@ -154,7 +155,7 @@ export default function ConfigForm({
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-[var(--border)]">
+      <div className="flex gap-1 border-b border-border">
         {(["form", "yaml"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -162,8 +163,8 @@ export default function ConfigForm({
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
               tab === t
-                ? "text-white border border-b-[var(--bg)] border-[var(--border)] bg-[var(--bg)] -mb-px"
-                : "text-[var(--muted)] hover:text-white"
+                ? "text-text border border-b-bg border-border bg-bg -mb-px"
+                : "text-muted hover:text-text"
             }`}
           >
             {t === "form" ? "Form" : "YAML"}
@@ -178,7 +179,7 @@ export default function ConfigForm({
           <SamplingConfigForm config={config} onChange={handleConfigChange} />
         )
       ) : (
-        <div className="rounded-xl overflow-hidden border border-[var(--border)]" style={{ height: 520 }}>
+        <div className="rounded-xl overflow-hidden border border-border" style={{ height: 520 }}>
           <MonacoEditor
             height="100%"
             language="yaml"

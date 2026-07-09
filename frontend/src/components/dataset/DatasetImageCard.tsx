@@ -19,10 +19,10 @@ interface Props {
 }
 
 const STATE_LABELS: Record<ImagePreprocessState, { label: string; className: string }> = {
-  no_crop: { label: "Needs crop", className: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
-  stale: { label: "Stale", className: "bg-orange-500/20 text-orange-300 border-orange-500/30" },
-  cropped: { label: "Needs bake", className: "bg-blue-500/20 text-blue-300 border-blue-500/30" },
-  ready: { label: "Ready", className: "bg-green-500/20 text-green-300 border-green-500/30" },
+  no_crop: { label: "Needs crop", className: "bg-warning-muted text-warning border-warning/30" },
+  stale: { label: "Stale", className: "bg-accent-muted text-accent border-accent/30" },
+  cropped: { label: "Needs bake", className: "bg-running-muted text-running border-running/30" },
+  ready: { label: "Ready", className: "bg-success-muted text-success border-success/30" },
 };
 
 export default function DatasetImageCard({
@@ -90,7 +90,7 @@ export default function DatasetImageCard({
       : stateInfo?.label;
   const badgeClassName =
     preparing && preprocessState && preprocessState !== "ready"
-      ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
+      ? "bg-running-muted text-running border-running/30"
       : stateInfo?.className;
   const usePrepared = preprocessState === "ready" && !preparedFailed;
   const thumbnailSrc = usePrepared
@@ -98,12 +98,12 @@ export default function DatasetImageCard({
     : datasetImageUrl(datasetId, filename, 256, cacheKey);
 
   return (
-    <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden flex flex-col">
+    <div className="bg-surface rounded-xl border border-border overflow-hidden flex flex-col">
       <button
         type="button"
         onClick={canCrop ? onCropClick : undefined}
         disabled={!canCrop}
-        className={`aspect-square bg-[var(--bg)] relative w-full text-left ${canCrop ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
+        className={`aspect-square bg-bg relative w-full text-left ${canCrop ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
         title={canCrop ? "Edit crop" : "Set target resolution first"}
       >
         <img
@@ -125,12 +125,12 @@ export default function DatasetImageCard({
         )}
       </button>
       <div className="p-3 space-y-2 flex-1">
-        <div className="text-xs text-[var(--muted)] truncate" title={filename}>
+        <div className="text-xs text-muted truncate" title={filename}>
           {filename}
         </div>
         <TagChipEditor tags={tags} onChange={handleChange} disabled={saving} />
-        <div className="text-[10px] text-[var(--muted)] min-h-[14px]">
-          {saving ? "Saving…" : error ? <span className="text-red-400">{error}</span> : null}
+        <div className="text-[10px] text-muted min-h-[14px]">
+          {saving ? "Saving…" : error ? <span className="text-error">{error}</span> : null}
         </div>
       </div>
     </div>

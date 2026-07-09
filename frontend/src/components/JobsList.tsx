@@ -67,7 +67,7 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20 text-[var(--muted)]">
+      <div className="flex items-center justify-center py-20 text-muted">
         <Loader2 className="animate-spin mr-2" size={18} /> Loading jobs…
       </div>
     );
@@ -75,9 +75,9 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
 
   if (!jobs?.length) {
     return (
-      <div className="text-center py-20 text-[var(--muted)] rounded-xl border border-[var(--border)]">
+      <div className="text-center py-20 text-muted rounded-xl border border-border">
         No jobs yet.{" "}
-        <Link href="/configs" className="text-[var(--accent)] hover:underline">
+        <Link href="/configs" className="text-accent hover:underline">
           Create a config and run a job
         </Link>
       </div>
@@ -85,19 +85,19 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+    <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full text-sm">
-        <thead className="bg-[var(--surface)]">
+        <thead className="bg-surface">
           <tr>
-            <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Name</th>
-            <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Type</th>
-            <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Status</th>
-            <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Progress</th>
-            <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Created</th>
-            <th className="px-4 py-3 text-right text-[var(--muted)] font-medium">Actions</th>
+            <th className="px-4 py-3 text-left text-muted font-medium">Name</th>
+            <th className="px-4 py-3 text-left text-muted font-medium">Type</th>
+            <th className="px-4 py-3 text-left text-muted font-medium">Status</th>
+            <th className="px-4 py-3 text-left text-muted font-medium">Progress</th>
+            <th className="px-4 py-3 text-left text-muted font-medium">Created</th>
+            <th className="px-4 py-3 text-right text-muted font-medium">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[var(--border)]">
+        <tbody className="divide-y divide-border">
           {jobs.map((job) => {
             const progress =
               job.progress_step != null && job.progress_total != null && job.progress_total > 0
@@ -105,17 +105,17 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                 : null;
             const inQueue = queuedIds.has(job.id);
             const isSampling = job.job_type === "sampling";
-            const linkClass = isSampling ? "hover:text-purple-400" : "hover:text-[var(--accent)]";
-            const barClass = isSampling ? "bg-purple-500" : "bg-[var(--accent)]";
+            const linkClass = isSampling ? "hover:text-sampling" : "hover:text-accent";
+            const barClass = isSampling ? "bg-sampling" : "bg-accent";
 
             return (
               <tr key={job.id} className="hover:bg-white/[0.02] transition-colors">
                 <td className="px-4 py-3">
-                  <Link href={`/jobs/${job.id}`} className={`text-white font-medium ${linkClass}`}>
+                  <Link href={`/jobs/${job.id}`} className={`text-text font-medium ${linkClass}`}>
                     {job.name}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-[var(--muted)] capitalize">{job.job_type}</td>
+                <td className="px-4 py-3 text-muted capitalize">{job.job_type}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={job.status} />
                 </td>
@@ -123,21 +123,21 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                   {job.status === "running" && progress != null ? (
                     <div className="space-y-1">
                       {isSampling && job.sampling?.progress_status && (
-                        <div className="text-xs text-[var(--muted)] truncate max-w-[200px]">
+                        <div className="text-xs text-muted truncate max-w-[200px]">
                           {job.sampling.progress_status}
                         </div>
                       )}
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-[var(--border)] rounded-full h-1.5 w-24">
+                        <div className="flex-1 bg-border rounded-full h-1.5 w-24">
                           <div
                             className={`${barClass} h-1.5 rounded-full transition-all`}
                             style={{ width: `${progress}%` }}
                           />
                         </div>
-                        <span className="text-[var(--muted)] text-xs">{progress}%</span>
+                        <span className="text-muted text-xs">{progress}%</span>
                       </div>
                       {!isSampling && job.training?.progress_avr_loss != null && (
-                        <div className="text-[var(--muted)] text-xs">
+                        <div className="text-muted text-xs">
                           loss {job.training.progress_avr_loss.toFixed(4)}
                         </div>
                       )}
@@ -149,10 +149,10 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                       />
                     </div>
                   ) : (
-                    <span className="text-[var(--muted)]">—</span>
+                    <span className="text-muted">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-[var(--muted)]">
+                <td className="px-4 py-3 text-muted">
                   {new Date(job.created_at).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3">
@@ -161,7 +161,7 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                       <button
                         onClick={() => void handleEnqueue(job)}
                         title="Add to queue"
-                        className="p-1.5 rounded hover:bg-white/10 text-green-400 hover:text-green-300"
+                        className="p-1.5 rounded hover:bg-white/10 text-success hover:text-success"
                       >
                         <Play size={14} />
                       </button>
@@ -170,7 +170,7 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                       <button
                         onClick={() => void handleResume(job)}
                         title="Resume from latest checkpoint"
-                        className="p-1.5 rounded hover:bg-white/10 text-blue-400 hover:text-blue-300"
+                        className="p-1.5 rounded hover:bg-white/10 text-running hover:text-running"
                       >
                         <Play size={14} />
                       </button>
@@ -179,7 +179,7 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                       <button
                         onClick={() => void handleMoveToTop(job.id)}
                         title="Move to top of queue"
-                        className="p-1.5 rounded hover:bg-white/10 text-yellow-400 hover:text-yellow-300"
+                        className="p-1.5 rounded hover:bg-white/10 text-warning hover:text-warning/80"
                       >
                         <ChevronUp size={14} />
                       </button>
@@ -188,7 +188,7 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                       <button
                         onClick={() => void handleCancel(job)}
                         title={job.status === "running" ? "Stop" : "Cancel"}
-                        className="p-1.5 rounded hover:bg-white/10 text-red-400 hover:text-red-300"
+                        className="p-1.5 rounded hover:bg-white/10 text-error hover:text-error"
                       >
                         <X size={14} />
                       </button>
@@ -197,7 +197,7 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                       <button
                         onClick={() => void handleDelete(job)}
                         title="Delete"
-                        className="p-1.5 rounded hover:bg-white/10 text-red-400 hover:text-red-300"
+                        className="p-1.5 rounded hover:bg-white/10 text-error hover:text-error"
                       >
                         <Trash2 size={14} />
                       </button>

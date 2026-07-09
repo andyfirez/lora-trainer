@@ -35,33 +35,33 @@ export default function TaggingJobPanel({ job }: TaggingJobPanelProps) {
           total={job.progress_total}
           percent={percent ?? (job.status === "completed" ? 100 : 0)}
           active={isRunning}
-          barClassName="bg-[var(--accent)]"
+          barClassName="bg-accent"
           showSpinner={isRunning}
           showBar={percent != null || job.status === "completed"}
           headerRight={
             percent != null ? (
-              <span className="text-[var(--muted)]">
+              <span className="text-muted">
                 {job.progress_step} / {job.progress_total} ({percent}%)
               </span>
             ) : (
-              <span className="text-[var(--muted)] capitalize">{job.status}</span>
+              <span className="text-muted capitalize">{job.status}</span>
             )
           }
         />
       )}
 
       {job.status === "failed" && job.error_message && (
-        <div className="rounded-lg bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 text-sm">
+        <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">
           <strong>Error:</strong> {job.error_message}
         </div>
       )}
 
       {job.tagging?.dataset_id != null && (
-        <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4">
-          <div className="text-xs text-[var(--muted)] mb-1">Dataset</div>
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <div className="text-xs text-muted mb-1">Dataset</div>
           <Link
             href={`/datasets/${job.tagging.dataset_id}`}
-            className="text-[var(--accent)] text-sm hover:underline"
+            className="text-accent text-sm hover:underline"
           >
             Open dataset #{job.tagging.dataset_id}
           </Link>

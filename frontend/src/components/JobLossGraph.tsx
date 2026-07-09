@@ -89,14 +89,14 @@ function hashToIndex(str: string, mod: number) {
 }
 
 const PALETTE = [
-  "rgba(96,165,250,1)",
-  "rgba(52,211,153,1)",
-  "rgba(167,139,250,1)",
-  "rgba(251,191,36,1)",
-  "rgba(244,114,182,1)",
-  "rgba(248,113,113,1)",
-  "rgba(34,211,238,1)",
-  "rgba(129,140,248,1)",
+  "rgba(217, 119, 6, 1)",
+  "rgba(245, 158, 11, 1)",
+  "rgba(234, 88, 12, 1)",
+  "rgba(180, 83, 9, 1)",
+  "rgba(251, 191, 36, 1)",
+  "rgba(196, 120, 70, 1)",
+  "rgba(239, 68, 68, 1)",
+  "rgba(212, 165, 116, 1)",
 ];
 
 function strokeForKey(key: string) {
@@ -134,8 +134,8 @@ function ToggleButton({ checked, onClick, label }: { checked: boolean; onClick: 
       className={[
         "px-3 py-1 rounded-md text-xs border transition-colors",
         checked
-          ? "bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/15"
-          : "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)] hover:bg-white/5",
+          ? "bg-accent-muted text-accent border-accent/30 hover:bg-accent/20"
+          : "bg-surface text-muted border-border hover:bg-white/5",
       ].join(" ")}
       aria-pressed={checked}
     >
@@ -443,12 +443,12 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
   const totalPoints = built.data[0]?.length ?? 0;
 
   return (
-    <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden flex flex-col">
-      <div className="px-4 py-3 flex items-center justify-between border-b border-[var(--border)]">
+    <div className="bg-surface rounded-xl border border-border overflow-hidden flex flex-col">
+      <div className="px-4 py-3 flex items-center justify-between border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-blue-400" />
-          <h2 className="text-sm font-medium text-white">Loss Graph</h2>
-          <span className="text-xs text-[var(--muted)]">
+          <div className="h-2 w-2 rounded-full bg-accent" />
+          <h2 className="text-sm font-medium text-text">Loss Graph</h2>
+          <span className="text-xs text-muted">
             {status === "loading" && "Loading…"}
             {status === "refreshing" && "Refreshing…"}
             {status === "error" && "Error"}
@@ -459,7 +459,7 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
         <button
           type="button"
           onClick={() => void refreshLoss()}
-          className="px-3 py-1 rounded-md text-xs bg-white/5 hover:bg-white/10 text-[var(--muted)] hover:text-white border border-[var(--border)]"
+          className="px-3 py-1 rounded-md text-xs bg-white/5 hover:bg-white/10 text-muted hover:text-text border border-border"
         >
           Refresh
         </button>
@@ -467,11 +467,11 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
 
       <div className="px-4 pt-4 pb-4 flex flex-col">
         <div
-          className="bg-black/30 rounded-lg border border-[var(--border)] relative select-none"
+          className="bg-black/30 rounded-lg border border-border relative select-none"
           style={{ minHeight: 280, height: 320 }}
         >
           {!hasData ? (
-            <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--muted)]">
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">
               {status === "error" ? "Failed to load loss logs." : "Waiting for loss points…"}
             </div>
           ) : (
@@ -480,7 +480,7 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
                 <button
                   type="button"
                   onClick={handleResetZoom}
-                  className="absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs bg-blue-600/80 hover:bg-blue-600 text-white border border-blue-500/50"
+                  className="absolute top-2 right-2 z-10 px-2 py-1 rounded text-xs bg-accent/80 hover:bg-accent text-white border border-accent/50"
                 >
                   Reset zoom
                 </button>
@@ -494,8 +494,8 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
       </div>
 
       <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="bg-black/20 border border-[var(--border)] rounded-lg p-3">
-          <label className="block text-xs text-[var(--muted)] mb-2">Display</label>
+        <div className="bg-black/20 border border-border rounded-lg p-3">
+          <label className="block text-xs text-muted mb-2">Display</label>
           <div className="flex flex-wrap gap-2">
             <ToggleButton checked={showTrend} onClick={() => setShowTrend((v) => !v)} label="Trend" />
             <ToggleButton checked={useLogScale} onClick={() => setUseLogScale((v) => !v)} label="Log Y" />
@@ -503,10 +503,10 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
           </div>
         </div>
 
-        <div className="bg-black/20 border border-[var(--border)] rounded-lg p-3">
-          <label className="block text-xs text-[var(--muted)] mb-2">Series</label>
+        <div className="bg-black/20 border border-border rounded-lg p-3">
+          <label className="block text-xs text-muted mb-2">Series</label>
           {lossKeys.length === 0 ? (
-            <div className="text-sm text-[var(--muted)]">No loss keys found yet.</div>
+            <div className="text-sm text-muted">No loss keys found yet.</div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {lossKeys.map((k) => (
@@ -517,8 +517,8 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
                   className={[
                     "px-3 py-1 rounded-md text-xs border transition-colors",
                     enabled[k] === false
-                      ? "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)]"
-                      : "bg-[var(--surface)] text-white border-[var(--border)] hover:bg-white/5",
+                      ? "bg-surface text-muted border-border"
+                      : "bg-surface text-text border-border hover:bg-white/5",
                   ].join(" ")}
                   aria-pressed={enabled[k] !== false}
                 >
@@ -530,10 +530,10 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
           )}
         </div>
 
-        <div className="bg-black/20 border border-[var(--border)] rounded-lg p-3">
+        <div className="bg-black/20 border border-border rounded-lg p-3">
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs text-[var(--muted)]">Smoothing</label>
-            <span className="text-xs text-white">{smoothing}%</span>
+            <label className="block text-xs text-muted">Smoothing</label>
+            <span className="text-xs text-text">{smoothing}%</span>
           </div>
           <input
             type="range"
@@ -541,14 +541,14 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
             max={100}
             value={smoothing}
             onChange={(e) => setSmoothing(Number(e.target.value))}
-            className="w-full accent-blue-500"
+            className="w-full accent-accent"
           />
         </div>
 
-        <div className="bg-black/20 border border-[var(--border)] rounded-lg p-3">
+        <div className="bg-black/20 border border-border rounded-lg p-3">
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs text-[var(--muted)]">Plot stride</label>
-            <span className="text-xs text-white">every {plotStride} pt</span>
+            <label className="block text-xs text-muted">Plot stride</label>
+            <span className="text-xs text-text">every {plotStride} pt</span>
           </div>
           <input
             type="range"
@@ -556,7 +556,7 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
             max={20}
             value={plotStride}
             onChange={(e) => setPlotStride(Number(e.target.value))}
-            className="w-full accent-blue-500"
+            className="w-full accent-accent"
           />
         </div>
       </div>
@@ -576,8 +576,8 @@ export default function JobLossGraph({ jobId, isActive, resetKey }: Props) {
           color: rgba(255, 255, 255, 0.85);
         }
         .uplot .u-select {
-          background: rgba(59, 130, 246, 0.15);
-          border: 1px solid rgba(59, 130, 246, 0.4);
+          background: rgba(217, 119, 6, 0.15);
+          border: 1px solid rgba(217, 119, 6, 0.4);
         }
       `}</style>
     </div>

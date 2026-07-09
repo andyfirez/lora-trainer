@@ -3,10 +3,8 @@
 import { useState } from "react";
 import { FolderOpen, Loader2 } from "lucide-react";
 import FieldHint from "@/components/FieldHint";
+import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { filesApi, type PickKind } from "@/lib/api/files";
-
-const inputClass =
-  "w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)]";
 
 interface PathInputProps {
   label: string;
@@ -52,13 +50,13 @@ export default function PathInput({
   return (
     <div>
       <div className="flex items-center mb-1">
-        <label className="block text-xs font-medium text-[var(--muted)]">{label}</label>
+        <label className={labelClassName}>{label}</label>
         {hint && <FieldHint hint={hint} hintAnchor={hintAnchor} />}
       </div>
       <div className="flex gap-2">
         <input
           type="text"
-          className={inputClass}
+          className={inputClassName}
           value={value ?? ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -68,12 +66,12 @@ export default function PathInput({
           onClick={() => void handleBrowse()}
           disabled={picking}
           title="Browse"
-          className="shrink-0 rounded-lg border border-[var(--border)] px-3 py-1.5 text-[var(--muted)] hover:bg-white/5 hover:text-white disabled:opacity-50"
+          className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-muted hover:bg-white/5 hover:text-text disabled:opacity-50"
         >
           {picking ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
         </button>
       </div>
-      {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+      {error && <p className="mt-1 text-xs text-error">{error}</p>}
     </div>
   );
 }
