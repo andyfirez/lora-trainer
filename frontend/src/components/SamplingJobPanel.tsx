@@ -32,14 +32,14 @@ function JobSamples({ jobId, status }: { jobId: number; status: string }) {
 
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-medium text-[var(--muted)]">Samples</h2>
+      <h2 className="text-sm font-medium text-muted">Samples</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {data.samples.map((sample) => (
           <a key={sample.path} href={`${API_BASE_URL}${sample.url}`} target="_blank" rel="noreferrer">
             <img
               src={`${API_BASE_URL}${sample.url}`}
               alt={sample.filename}
-              className="rounded-lg border border-[var(--border)] object-cover aspect-square"
+              className="rounded-lg border border-border object-cover aspect-square"
             />
           </a>
         ))}
@@ -65,12 +65,12 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
           total={job.progress_total}
           percent={percent ?? 0}
           active={isRunning}
-          barClassName="bg-purple-500"
+          barClassName="bg-sampling"
           showSpinner={isRunning}
           showBar={percent != null}
           headerRight={
             percent != null ? (
-              <span className="text-[var(--muted)]">
+              <span className="text-muted">
                 step {job.progress_step} / {job.progress_total} ({percent}%)
               </span>
             ) : undefined
@@ -79,13 +79,13 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
       )}
 
       {job.status === "failed" && job.error_message && (
-        <div className="rounded-lg bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 text-sm">
+        <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">
           <strong>Error:</strong> {job.error_message}
         </div>
       )}
 
-      <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4 space-y-3">
-        <div className="text-xs text-[var(--muted)]">
+      <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
+        <div className="text-xs text-muted">
           {(sampling?.lora_paths.length ?? 0) > 0
             ? `LoRA files (${sampling?.lora_paths.length})`
             : "Base model only"}
@@ -94,23 +94,23 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
           <ul className="space-y-1">
             {sampling?.lora_paths.map((path) => (
               <li key={path}>
-                <code className="text-green-400 text-sm break-all">{path}</code>
+                <code className="text-success text-sm break-all">{path}</code>
               </li>
             ))}
           </ul>
         )}
         {sampling?.source_job_id != null && (
           <div>
-            <div className="text-xs text-[var(--muted)] mb-1">Source Job</div>
-            <Link href={`/jobs/${sampling.source_job_id}`} className="text-purple-400 text-sm hover:underline">
+            <div className="text-xs text-muted mb-1">Source Job</div>
+            <Link href={`/jobs/${sampling.source_job_id}`} className="text-sampling text-sm hover:underline">
               Job #{sampling.source_job_id}
             </Link>
           </div>
         )}
         {job.output_path && (
           <div>
-            <div className="text-xs text-[var(--muted)] mb-1">Output</div>
-            <code className="text-green-400 text-sm break-all">{job.output_path}</code>
+            <div className="text-xs text-muted mb-1">Output</div>
+            <code className="text-success text-sm break-all">{job.output_path}</code>
           </div>
         )}
       </div>

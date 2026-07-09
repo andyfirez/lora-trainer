@@ -45,10 +45,10 @@ export default function LiveLogsPanel({
 
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-medium text-[var(--muted)]">{title}</h2>
+      <h2 className="text-sm font-medium text-muted">{title}</h2>
       <pre
         ref={logRef}
-        className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4 text-xs text-green-300 font-mono overflow-auto whitespace-pre-wrap break-words"
+        className="bg-surface rounded-xl border border-border p-4 text-xs text-success font-mono overflow-auto whitespace-pre-wrap break-words"
         style={{ height: 320 }}
       >
         {text || "No logs yet…"}

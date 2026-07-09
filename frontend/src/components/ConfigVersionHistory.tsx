@@ -41,7 +41,7 @@ export default function ConfigVersionHistory({ configId, activeVersion }: Config
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-[var(--muted)] text-sm py-4">
+      <div className="flex items-center gap-2 text-muted text-sm py-4">
         <Loader2 className="animate-spin" size={16} /> Loading version history…
       </div>
     );
@@ -53,18 +53,18 @@ export default function ConfigVersionHistory({ configId, activeVersion }: Config
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-white">Version History</h2>
-      <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+      <h2 className="text-lg font-semibold text-text font-display">Version History</h2>
+      <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-sm">
-          <thead className="bg-[var(--surface)]">
+          <thead className="bg-surface">
             <tr>
-              <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Version</th>
-              <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">LoRA Name</th>
-              <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Output Files</th>
-              <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Created</th>
+              <th className="px-4 py-3 text-left text-muted font-medium">Version</th>
+              <th className="px-4 py-3 text-left text-muted font-medium">LoRA Name</th>
+              <th className="px-4 py-3 text-left text-muted font-medium">Output Files</th>
+              <th className="px-4 py-3 text-left text-muted font-medium">Created</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[var(--border)]">
+          <tbody className="divide-y divide-border">
             {versions.map((entry: JobConfigVersionSummary) => (
               <tr
                 key={entry.version}
@@ -73,19 +73,19 @@ export default function ConfigVersionHistory({ configId, activeVersion }: Config
                   selectedVersion === entry.version ? "bg-white/[0.04]" : ""
                 }`}
               >
-                <td className="px-4 py-3 text-white">
+                <td className="px-4 py-3 text-text">
                   v{entry.version}
                   {entry.version === activeVersion && (
-                    <span className="ml-2 text-xs rounded-full bg-[var(--accent)]/20 text-[var(--accent)] px-2 py-0.5">
+                    <span className="ml-2 text-xs rounded-full bg-accent-muted text-accent px-2 py-0.5">
                       active
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-[var(--muted)]">{entry.lora_name ?? "—"}</td>
-                <td className="px-4 py-3 text-[var(--muted)]">
+                <td className="px-4 py-3 text-muted">{entry.lora_name ?? "—"}</td>
+                <td className="px-4 py-3 text-muted">
                   {entry.lora_name ? `${entry.lora_name}_v${entry.version}` : "—"}
                 </td>
-                <td className="px-4 py-3 text-[var(--muted)]">
+                <td className="px-4 py-3 text-muted">
                   {new Date(entry.created_at).toLocaleString()}
                 </td>
               </tr>
@@ -95,13 +95,13 @@ export default function ConfigVersionHistory({ configId, activeVersion }: Config
       </div>
       {selectedVersion !== null && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-white">Version {selectedVersion} YAML</h3>
+          <h3 className="text-sm font-medium text-text">Version {selectedVersion} YAML</h3>
           {loadingPreview ? (
-            <div className="flex items-center gap-2 text-[var(--muted)] text-sm py-8 justify-center">
+            <div className="flex items-center gap-2 text-muted text-sm py-8 justify-center">
               <Loader2 className="animate-spin" size={16} /> Loading…
             </div>
           ) : (
-            <div className="rounded-xl overflow-hidden border border-[var(--border)]" style={{ height: 360 }}>
+            <div className="rounded-xl overflow-hidden border border-border" style={{ height: 360 }}>
               <MonacoEditor
                 height="100%"
                 language="yaml"

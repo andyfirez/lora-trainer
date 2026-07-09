@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import PathInput from "@/components/PathInput";
+import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
+import Button from "@/components/ui/Button";
+import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { datasetsApi } from "@/lib/api/datasets";
 
 interface Props {
@@ -25,8 +28,6 @@ export default function EditDatasetModal({ open, dataset, onClose, onSaved }: Pr
     }
   }, [open, dataset.name, dataset.image_dir]);
 
-  if (!open) return null;
-
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name || !imageDir) {
@@ -47,46 +48,35 @@ export default function EditDatasetModal({ open, dataset, onClose, onSaved }: Pr
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-md space-y-4">
-        <h2 className="text-lg font-semibold text-white">Edit Dataset</h2>
-        {error && <div className="text-red-400 text-sm">{error}</div>}
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block text-xs text-[var(--muted)] mb-1">Name</label>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="my-dataset"
-              className="w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-2 text-white text-sm placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)]"
-            />
-          </div>
-          <PathInput
-            label="Image Directory"
-            value={imageDir}
-            onChange={setImageDir}
-            placeholder="/path/to/images"
-            pickerTitle="Select Image Directory"
-            kind="directory"
+    <Modal open={open} onClose={onClose} title="Edit Dataset">
+      {error && <ModalError>{error}</ModalError>}
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className={labelClassName}>Name</label>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="my-dataset"
+            className={inputClassName}
           />
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 border border-[var(--border)] rounded-lg py-2 text-[var(--muted)] hover:text-white text-sm"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg py-2 text-sm font-medium disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <PathInput
+          label="Image Directory"
+          value={imageDir}
+          onChange={setImageDir}
+          placeholder="/path/to/images"
+          pickerTitle="Select Image Directory"
+          kind="directory"
+        />
+        <ModalFooter>
+          <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
+            Cancel
+          </Button>
+          <Button type="submit" disabled={saving} className="flex-1">
+            {saving ? "Saving…" : "Save Changes"}
+          </Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }

@@ -96,9 +96,9 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
   const ready = status?.preprocess_ready ?? dataset.preprocess_ready;
 
   return (
-    <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-4 space-y-3">
-      <div className="text-sm font-medium text-white">Preprocessing</div>
-      <p className="text-xs text-[var(--muted)]">
+    <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
+      <div className="text-sm font-medium text-text">Preprocessing</div>
+      <p className="text-xs text-muted">
         {enableBucket
           ? "Aspect-ratio bucketing preserves image proportions. Click any image to adjust crop."
           : "Images are center-cropped to square. Click any image to adjust crop."}
@@ -106,7 +106,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
 
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-xs text-[var(--muted)] mb-1">Target resolution</label>
+          <label className="block text-xs text-muted mb-1">Target resolution</label>
           <input
             type="number"
             min={MIN_RESOLUTION}
@@ -114,18 +114,18 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
             step={64}
             value={resolution}
             onChange={(e) => handleResolutionChange(Number(e.target.value))}
-            className="w-32 rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white"
+            className="w-32 rounded-lg bg-bg border border-border px-3 py-1.5 text-sm text-text"
           />
         </div>
         {(saving || preparing) && (
-          <span className="text-xs text-[var(--muted)] pb-1.5">
+          <span className="text-xs text-muted pb-1.5">
             {saving ? "Saving…" : "Preparing images…"}
           </span>
         )}
       </div>
 
       <div className="flex flex-wrap items-center gap-4 text-sm">
-        <label className="flex items-center gap-2 text-white cursor-pointer">
+        <label className="flex items-center gap-2 text-text cursor-pointer">
           <input
             type="checkbox"
             checked={enableBucket}
@@ -137,7 +137,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
         {enableBucket && (
           <>
             <div>
-              <label className="block text-xs text-[var(--muted)] mb-1">Bucket steps</label>
+              <label className="block text-xs text-muted mb-1">Bucket steps</label>
               <input
                 type="number"
                 min={8}
@@ -145,10 +145,10 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
                 step={8}
                 value={bucketSteps}
                 onChange={(e) => handleBucketStepsChange(Number(e.target.value))}
-                className="w-24 rounded-lg bg-[var(--bg)] border border-[var(--border)] px-2 py-1 text-sm text-white"
+                className="w-24 rounded-lg bg-bg border border-border px-2 py-1 text-sm text-text"
               />
             </div>
-            <label className="flex items-center gap-2 text-white cursor-pointer">
+            <label className="flex items-center gap-2 text-text cursor-pointer">
               <input
                 type="checkbox"
                 checked={bucketNoUpscale}
@@ -166,26 +166,26 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
           <span
             className={`px-2 py-0.5 rounded-full border ${
               ready
-                ? "border-green-500/40 text-green-300 bg-green-500/10"
-                : "border-amber-500/40 text-amber-300 bg-amber-500/10"
+                ? "border-success/40 text-success bg-success-muted"
+                : "border-warning/40 text-warning bg-warning-muted"
             }`}
           >
             {ready ? "Ready for training" : preparing ? "Preparing…" : "Not ready"}
           </span>
-          <span className="text-[var(--muted)]">{status.ready}/{status.total} baked</span>
+          <span className="text-muted">{status.ready}/{status.total} baked</span>
           {!preparing && status.no_crop > 0 && (
-            <span className="text-[var(--muted)]">{status.no_crop} need crop</span>
+            <span className="text-muted">{status.no_crop} need crop</span>
           )}
           {!preparing && status.stale > 0 && (
-            <span className="text-amber-400">{status.stale} stale</span>
+            <span className="text-warning">{status.stale} stale</span>
           )}
           {!preparing && status.cropped > 0 && (
-            <span className="text-[var(--muted)]">{status.cropped} need bake</span>
+            <span className="text-muted">{status.cropped} need bake</span>
           )}
         </div>
       )}
 
-      {error && <div className="text-sm text-red-400">{error}</div>}
+      {error && <div className="text-sm text-error">{error}</div>}
     </div>
   );
 }

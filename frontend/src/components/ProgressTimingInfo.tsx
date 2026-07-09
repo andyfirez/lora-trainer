@@ -22,7 +22,7 @@ export default function ProgressTimingInfo({
 
   if (compact) {
     return (
-      <div className={`text-[var(--muted)] text-xs ${className}`}>
+      <div className={`text-muted text-xs ${className}`}>
         {formatIterationSeconds(timing.secondsPerIteration)}/step · {formatDuration(timing.elapsedSeconds)} elapsed
         {timing.etaSeconds != null && <> · ~{formatDuration(timing.etaSeconds)} left</>}
       </div>
@@ -30,15 +30,15 @@ export default function ProgressTimingInfo({
   }
 
   return (
-    <div className={`flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--muted)] ${className}`}>
+    <div className={`flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted ${className}`}>
       <span>
-        per step: <span className="text-white">{formatIterationSeconds(timing.secondsPerIteration)}</span>
+        per step: <span className="text-text">{formatIterationSeconds(timing.secondsPerIteration)}</span>
       </span>
       <span>
-        elapsed: <span className="text-white">{formatDuration(timing.elapsedSeconds)}</span>
+        elapsed: <span className="text-text">{formatDuration(timing.elapsedSeconds)}</span>
       </span>
       <span>
-        ETA: <span className="text-white">{formatDuration(timing.etaSeconds)}</span>
+        ETA: <span className="text-text">{formatDuration(timing.etaSeconds)}</span>
       </span>
     </div>
   );

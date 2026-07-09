@@ -7,6 +7,12 @@ import { useRouter } from "next/navigation";
 import { PlusCircle, Loader2, Trash2, Copy } from "lucide-react";
 import { configsApi } from "@/lib/api/configs";
 import type { ConfigType } from "@/types";
+import PageHeader from "@/components/ui/PageHeader";
+import Button from "@/components/ui/Button";
+import Tabs from "@/components/ui/Tabs";
+import Badge from "@/components/ui/Badge";
+import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "@/components/ui/Table";
+import Card from "@/components/ui/Card";
 
 export default function ConfigsPage() {
   const router = useRouter();
@@ -37,114 +43,102 @@ export default function ConfigsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Configs</h1>
-          <p className="text-[var(--muted)] mt-1">Reusable training and sampling configurations</p>
-        </div>
-        <Link
-          href={`/configs/new?type=${tab}`}
-          className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-        >
-          <PlusCircle size={15} />
-          New Config
-        </Link>
-      </div>
-
-      <div className="flex gap-1 border-b border-[var(--border)]">
-        {(["training", "sampling"] as ConfigType[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors capitalize ${
-              tab === t
-                ? "text-white border border-b-[var(--bg)] border-[var(--border)] bg-[var(--bg)] -mb-px"
-                : "text-[var(--muted)] hover:text-white"
-            }`}
+      <PageHeader
+        title="Configs"
+        description="Reusable training and sampling configurations"
+        actions={
+          <Link
+            href={`/configs/new?type=${tab}`}
+            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           >
-            {t}
-          </button>
-        ))}
-      </div>
+            <PlusCircle size={15} />
+            New Config
+          </Link>
+        }
+      />
+
+      <Tabs
+        tabs={[
+          { value: "training", label: "training" },
+          { value: "sampling", label: "sampling" },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20 text-[var(--muted)]">
+        <div className="flex items-center justify-center py-20 text-muted">
           <Loader2 className="animate-spin mr-2" size={18} /> Loading configs…
         </div>
       ) : !configs?.length ? (
-        <div className="text-center py-20 text-[var(--muted)] rounded-xl border border-[var(--border)]">
+        <Card className="text-center py-20 text-muted">
           No {tab} configs yet.{" "}
-          <Link href={`/configs/new?type=${tab}`} className="text-[var(--accent)] hover:underline">
+          <Link href={`/configs/new?type=${tab}`} className="text-accent hover:underline">
             Create one
           </Link>
-        </div>
+        </Card>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--surface)]">
-              <tr>
-                <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Name</th>
+        <Table>
+          <TableHead>
+            <tr>
+              <TableHeader>Name</TableHeader>
+              {tab === "training" && <TableHeader>Version</TableHeader>}
+              <TableHeader>Description</TableHeader>
+              <TableHeader>Updated</TableHeader>
+              <TableHeader className="text-right">Actions</TableHeader>
+            </tr>
+          </TableHead>
+          <TableBody>
+            {configs.map((config) => (
+              <TableRow key={config.id}>
+                <TableCell>
+                  <Link href={`/configs/${config.id}`} className="text-text hover:text-accent font-medium">
+                    {config.name}
+                  </Link>
+                </TableCell>
                 {tab === "training" && (
-                  <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Version</th>
+                  <TableCell>
+                    <Badge variant="accent">v{config.active_version ?? 1}</Badge>
+                  </TableCell>
                 )}
-                <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Description</th>
-                <th className="px-4 py-3 text-left text-[var(--muted)] font-medium">Updated</th>
-                <th className="px-4 py-3 text-right text-[var(--muted)] font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border)]">
-              {configs.map((config) => (
-                <tr key={config.id} className="hover:bg-white/[0.02] transition-colors">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/configs/${config.id}`}
-                      className="text-white hover:text-[var(--accent)] font-medium"
+                <TableCell className="text-muted max-w-xs truncate">
+                  {config.description || "—"}
+                </TableCell>
+                <TableCell className="text-muted">
+                  {new Date(config.updated_at).toLocaleDateString()}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => void handleClone(config.id)}
+                      disabled={cloningId === config.id}
+                      title="Duplicate"
+                      aria-label="Duplicate config"
                     >
-                      {config.name}
-                    </Link>
-                  </td>
-                  {tab === "training" && (
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center rounded-full bg-[var(--accent)]/15 text-[var(--accent)] px-2.5 py-0.5 text-xs font-medium">
-                        v{config.active_version ?? 1}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-4 py-3 text-[var(--muted)] max-w-xs truncate">
-                    {config.description || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--muted)]">
-                    {new Date(config.updated_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => void handleClone(config.id)}
-                        disabled={cloningId === config.id}
-                        title="Duplicate"
-                        className="p-1.5 rounded hover:bg-white/10 text-[var(--muted)] hover:text-white disabled:opacity-50"
-                      >
-                        {cloningId === config.id ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => void handleDelete(config.id, config.name)}
-                        title="Delete"
-                        className="p-1.5 rounded hover:bg-white/10 text-red-400 hover:text-red-300"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      {cloningId === config.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Copy size={14} />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => void handleDelete(config.id, config.name)}
+                      title="Delete"
+                      aria-label="Delete config"
+                      className="text-error hover:text-error"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

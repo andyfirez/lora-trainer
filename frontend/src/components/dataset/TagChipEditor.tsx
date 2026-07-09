@@ -54,12 +54,12 @@ export default function TagChipEditor({ tags, onChange, disabled = false }: Prop
             onKeyDown={handleKeyDown}
             onBlur={() => addTag(input)}
             placeholder="Add tag…"
-            className="flex-1 rounded-md bg-[var(--bg)] border border-[var(--border)] px-2 py-1 text-xs text-white placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)]"
+            className="flex-1 rounded-md bg-bg border border-border px-2 py-1 text-xs text-text placeholder-muted focus:outline-none focus:border-accent"
           />
           <button
             type="button"
             onClick={() => addTag(input)}
-            className="rounded-md border border-[var(--border)] px-2 text-[var(--muted)] hover:text-white"
+            className="rounded-md border border-border px-2 text-muted hover:text-text"
           >
             <Plus size={14} />
           </button>

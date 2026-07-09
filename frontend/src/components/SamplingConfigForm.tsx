@@ -3,6 +3,8 @@
 import { Plus, X } from "lucide-react";
 import PathInput from "@/components/PathInput";
 import SampleSamplerFields from "@/components/SampleSamplerFields";
+import { inputClassName, labelClassName } from "@/components/ui/Input";
+import { selectClassName } from "@/components/ui/Select";
 
 type Config = Record<string, unknown>;
 
@@ -11,18 +13,13 @@ interface SamplingConfigFormProps {
   onChange: (config: Config) => void;
 }
 
-const inputClass =
-  "w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)]";
-const selectClass =
-  "w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]";
-const labelClass = "block text-xs font-medium text-[var(--muted)] mb-1";
-const sectionClass = "bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5 space-y-4";
-const sectionTitleClass = "text-sm font-semibold text-white mb-3";
+const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
+const sectionTitleClass = "text-sm font-semibold text-text mb-3 font-display";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className={labelClass}>{label}</label>
+      <label className={labelClassName}>{label}</label>
       {children}
     </div>
   );
@@ -49,7 +46,7 @@ function NumberInput({
     <Field label={label}>
       <input
         type="number"
-        className={inputClass}
+        className={inputClassName}
         value={value ?? ""}
         min={min}
         max={max}
@@ -77,7 +74,7 @@ function SelectInput({
 }) {
   return (
     <Field label={label}>
-      <select className={selectClass} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+      <select className={selectClassName} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -101,11 +98,11 @@ function CheckboxInput({
     <label className="flex items-center gap-2 cursor-pointer">
       <input
         type="checkbox"
-        className="w-4 h-4 rounded accent-[var(--accent)]"
+        className="w-4 h-4 rounded accent-accent"
         checked={!!checked}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <span className="text-sm text-white">{label}</span>
+      <span className="text-sm text-text">{label}</span>
     </label>
   );
 }
@@ -160,7 +157,7 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
           <Field label="Sample Steps">
             <input
               type="number"
-              className={inputClass}
+              className={inputClassName}
               value={(config.sample_steps as number) ?? 30}
               min={1}
               onChange={(e) => set("sample_steps", Number(e.target.value))}
@@ -169,7 +166,7 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
           <Field label="CFG Scale">
             <input
               type="number"
-              className={inputClass}
+              className={inputClassName}
               value={(config.sample_cfg_scale as number) ?? 7.5}
               min={0}
               step={0.5}
@@ -238,19 +235,19 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
         <Field label="Negative Prompt">
           <input
             type="text"
-            className={inputClass}
+            className={inputClassName}
             value={(config.sample_negative_prompt as string) ?? ""}
             onChange={(e) => set("sample_negative_prompt", e.target.value)}
             placeholder="low quality, blurry, ..."
           />
         </Field>
         <div className="space-y-2">
-          <div className="text-xs font-medium text-[var(--muted)]">Prompts</div>
+          <div className="text-xs font-medium text-muted">Prompts</div>
           {samplePrompts.map((prompt, i) => (
             <div key={i} className="flex items-center gap-2">
               <input
                 type="text"
-                className={inputClass}
+                className={inputClassName}
                 value={prompt}
                 onChange={(e) => updatePrompt(i, e.target.value)}
                 placeholder={`Prompt ${i + 1}`}
@@ -258,7 +255,7 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
               <button
                 type="button"
                 onClick={() => removePrompt(i)}
-                className="p-1.5 rounded hover:bg-white/10 text-[var(--muted)] hover:text-red-400 shrink-0"
+                className="p-1.5 rounded hover:bg-white/10 text-muted hover:text-error shrink-0"
               >
                 <X size={13} />
               </button>
@@ -267,7 +264,7 @@ export default function SamplingConfigForm({ config, onChange }: SamplingConfigF
           <button
             type="button"
             onClick={addPrompt}
-            className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-white border border-dashed border-[var(--border)] hover:border-white/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
+            className="flex items-center gap-1.5 text-sm text-muted hover:text-text border border-dashed border-border hover:border-text/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
           >
             <Plus size={13} /> Add Prompt
           </button>

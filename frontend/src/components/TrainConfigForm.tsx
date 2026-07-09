@@ -7,6 +7,8 @@ import { Plus, X } from "lucide-react";
 import { parse as yamlParse } from "yaml";
 import PathInput from "@/components/PathInput";
 import FieldHint from "@/components/FieldHint";
+import { inputClassName, labelClassName } from "@/components/ui/Input";
+import { selectClassName } from "@/components/ui/Select";
 import { configsApi } from "@/lib/api/configs";
 import { datasetsApi } from "@/lib/api/datasets";
 import { trainHint } from "@/lib/trainParameterMetadata";
@@ -28,13 +30,8 @@ interface TrainConfigFormProps {
   onChange: (config: Config) => void;
 }
 
-const inputClass =
-  "w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[var(--accent)]";
-const selectClass =
-  "w-full rounded-lg bg-[var(--bg)] border border-[var(--border)] px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[var(--accent)]";
-const labelClass = "block text-xs font-medium text-[var(--muted)] mb-1";
-const sectionClass = "bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5 space-y-4";
-const sectionTitleClass = "text-sm font-semibold text-white mb-3";
+const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
+const sectionTitleClass = "text-sm font-semibold text-text mb-3 font-display";
 
 function Field({
   label,
@@ -50,7 +47,7 @@ function Field({
   return (
     <div>
       <div className="flex items-center mb-1">
-        <label className={`${labelClass} mb-0`}>{label}</label>
+        <label className={`${labelClassName} mb-0`}>{label}</label>
         {hint && <FieldHint hint={hint} hintAnchor={hintAnchor} />}
       </div>
       {children}
@@ -76,7 +73,7 @@ function TextInput({
     <Field label={label} hint={hints.hint} hintAnchor={hints.hintAnchor}>
       <input
         type="text"
-        className={inputClass}
+        className={inputClassName}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -111,7 +108,7 @@ function NumberInput({
     <Field label={label} hint={hints.hint} hintAnchor={hints.hintAnchor}>
       <input
         type="number"
-        className={inputClass}
+        className={inputClassName}
         value={value ?? ""}
         min={min}
         max={max}
@@ -143,7 +140,7 @@ function SelectInput({
   const hints = paramKey ? trainHint(paramKey) : {};
   return (
     <Field label={label} hint={hints.hint} hintAnchor={hints.hintAnchor}>
-      <select className={selectClass} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+      <select className={selectClassName} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => (
           <option key={o.value} value={o.value} disabled={o.disabled}>
             {o.label}
@@ -172,12 +169,12 @@ function CheckboxInput({
     <label className={`flex items-center gap-2 ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
       <input
         type="checkbox"
-        className="w-4 h-4 rounded accent-[var(--accent)]"
+        className="w-4 h-4 rounded accent-accent"
         checked={!!checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <span className="text-sm text-white flex items-center">
+      <span className="text-sm text-text flex items-center">
         {label}
         {hints.hint && <FieldHint hint={hints.hint} hintAnchor={hints.hintAnchor} />}
       </span>
@@ -445,8 +442,8 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           placeholder="my_lora"
           paramKey="lora_name"
         />
-        <p className="text-xs text-[var(--muted)] -mt-2">
-          Version suffix <code className="text-[var(--muted)]">_vN</code> is added to output files automatically when training starts.
+        <p className="text-xs text-muted -mt-2">
+          Version suffix <code className="text-muted">_vN</code> is added to output files automatically when training starts.
         </p>
         <SelectInput
           label="Output Format"
@@ -501,7 +498,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-[var(--muted)]">
+              <tr className="text-left text-muted">
                 <th className="pb-2 font-medium">Component</th>
                 <th className="pb-2 font-medium">Train</th>
                 <th className="pb-2 font-medium">Weight Dtype</th>
@@ -512,13 +509,13 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 const trainHints = trainHint(`${part}.train`);
                 const dtypeHints = trainHint(`${part}.weight_dtype`);
                 return (
-                <tr key={part} className="border-t border-[var(--border)]">
-                  <td className="py-2 pr-4 text-white font-mono text-xs">{part}</td>
+                <tr key={part} className="border-t border-border">
+                  <td className="py-2 pr-4 text-text font-mono text-xs">{part}</td>
                   <td className="py-2 pr-4">
                     <div className="flex items-center gap-1">
                       <input
                         type="checkbox"
-                        className="w-4 h-4 accent-[var(--accent)]"
+                        className="w-4 h-4 accent-accent"
                         checked={!!(config[part]?.train ?? (part === "unet"))}
                         onChange={(e) => setNested(part, "train", e.target.checked)}
                       />
@@ -530,7 +527,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                   <td className="py-2">
                     <div className="flex items-center gap-1">
                       <select
-                        className="rounded-lg bg-[var(--bg)] border border-[var(--border)] px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--accent)]"
+                        className="rounded-lg bg-bg border border-border px-2 py-1 text-xs text-text focus:outline-none focus:border-accent"
                         value={config[part]?.weight_dtype ?? "float16"}
                         onChange={(e) => setNested(part, "weight_dtype", e.target.value)}
                       >
@@ -551,7 +548,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             </tbody>
           </table>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-[var(--border)]">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-border">
           <NumberInput
             label="CLIP Skip"
             value={config.clip_skip ?? 2}
@@ -562,7 +559,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             paramKey="clip_skip"
           />
         </div>
-        <p className="text-xs text-[var(--muted)]">
+        <p className="text-xs text-muted">
           CLIP hidden layer used for text encoding during training and sampling. Default 2 matches Kohya.
         </p>
       </section>
@@ -748,7 +745,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           placeholder="1024"
           paramKey="resolution"
         />
-        <label className="flex items-center gap-2 text-sm text-white mt-2 cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-text mt-2 cursor-pointer">
           <input
             type="checkbox"
             checked={trainEnableBucket}
@@ -763,17 +760,17 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           </span>
         </label>
         <div className="space-y-3 mt-2">
-          <div className="text-xs font-medium text-[var(--muted)]">Concepts</div>
+          <div className="text-xs font-medium text-muted">Concepts</div>
           {datasetsLoading ? (
-            <div className="text-sm text-[var(--muted)]">Loading datasets…</div>
+            <div className="text-sm text-muted">Loading datasets…</div>
           ) : !datasets?.length ? (
-            <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center space-y-3">
-              <p className="text-sm text-[var(--muted)]">
+            <div className="rounded-lg border border-dashed border-border p-6 text-center space-y-3">
+              <p className="text-sm text-muted">
                 No datasets yet. Create a dataset to specify training data.
               </p>
               <Link
                 href="/datasets"
-                className="inline-flex items-center gap-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium"
+                className="inline-flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium"
               >
                 Create Dataset
               </Link>
@@ -783,15 +780,15 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
               {concepts.map((concept, i) => {
                 const selectedDataset = datasetById(concept.dataset_id);
                 return (
-                  <div key={i} className="relative rounded-lg border border-[var(--border)] p-4 bg-[var(--bg)]">
+                  <div key={i} className="relative rounded-lg border border-border p-4 bg-bg">
                     <button
                       type="button"
                       onClick={() => removeConcept(i)}
-                      className="absolute top-2 right-2 p-1 rounded hover:bg-white/10 text-[var(--muted)] hover:text-red-400"
+                      className="absolute top-2 right-2 p-1 rounded hover:bg-white/10 text-muted hover:text-error"
                     >
                       <X size={13} />
                     </button>
-                    <div className="text-xs text-[var(--muted)] mb-3">Concept {i + 1}</div>
+                    <div className="text-xs text-muted mb-3">Concept {i + 1}</div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="md:col-span-1">
                         <SelectInput
@@ -802,25 +799,25 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                           paramKey="concepts.dataset_id"
                         />
                         {selectedDataset && (
-                          <p className="text-xs text-[var(--muted)] mt-1 break-all">{selectedDataset.image_dir}</p>
+                          <p className="text-xs text-muted mt-1 break-all">{selectedDataset.image_dir}</p>
                         )}
                         {selectedDataset && !isDatasetCompatible(selectedDataset) && (
-                          <p className="text-xs text-amber-400 mt-1">
+                          <p className="text-xs text-warning mt-1">
                             Dataset must be prepared at {trainResolution}px. Open the dataset page to crop and bake
                             images.
                           </p>
                         )}
                         {concept.dataset_id == null && (
-                          <p className="text-xs text-red-400 mt-1">Select a dataset</p>
+                          <p className="text-xs text-error mt-1">Select a dataset</p>
                         )}
                         {concept.dataset_id != null && !selectedDataset && (
-                          <p className="text-xs text-red-400 mt-1">Dataset not found</p>
+                          <p className="text-xs text-error mt-1">Dataset not found</p>
                         )}
                       </div>
                       <Field label="Trigger Words" {...trainHint("concepts.trigger_words")}>
                         <input
                           type="text"
-                          className={inputClass}
+                          className={inputClassName}
                           value={(concept.trigger_words ?? []).join(", ")}
                           onChange={(e) =>
                             updateConcept(
@@ -838,7 +835,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                       <Field label="Caption Extension" {...trainHint("concepts.caption_extension")}>
                         <input
                           type="text"
-                          className={inputClass}
+                          className={inputClassName}
                           value={concept.caption_extension ?? ".txt"}
                           onChange={(e) => updateConcept(i, "caption_extension", e.target.value)}
                           placeholder=".txt"
@@ -847,7 +844,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                       <Field label="Repeats" {...trainHint("concepts.repeats")}>
                         <input
                           type="number"
-                          className={inputClass}
+                          className={inputClassName}
                           value={concept.repeats ?? 1}
                           min={1}
                           onChange={(e) => updateConcept(i, "repeats", Number(e.target.value))}
@@ -860,7 +857,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
               <button
                 type="button"
                 onClick={addConcept}
-                className="flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-white border border-dashed border-[var(--border)] hover:border-white/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
+                className="flex items-center gap-1.5 text-sm text-muted hover:text-text border border-dashed border-border hover:border-text/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
               >
                 <Plus size={13} /> Add Concept
               </button>
@@ -905,7 +902,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
 
         {/* Caching */}
         <div className="space-y-2">
-          <div className="text-xs font-medium text-[var(--muted)]">Caching</div>
+          <div className="text-xs font-medium text-muted">Caching</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
             <CheckboxInput
               label="Cache Latents (RAM)"
@@ -928,7 +925,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 paramKey="cache_latents_to_disk"
               />
               {!cacheLatentsEnabled && (
-                <p className="text-xs text-[var(--muted)]">Requires RAM caching to be enabled.</p>
+                <p className="text-xs text-muted">Requires RAM caching to be enabled.</p>
               )}
             </div>
             <div className="space-y-1">
@@ -940,12 +937,12 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 paramKey="cache_text_encoder_outputs_to_disk"
               />
               {!cacheTextEncoderEnabled && (
-                <p className="text-xs text-[var(--muted)]">Requires RAM caching to be enabled.</p>
+                <p className="text-xs text-muted">Requires RAM caching to be enabled.</p>
               )}
             </div>
           </div>
           {cacheTextEncoderEnabled && (config.unet?.train === false) && (config.text_encoder_1?.train || config.text_encoder_2?.train) && (
-            <p className="text-xs text-red-400 mt-1">
+            <p className="text-xs text-error mt-1">
               Cache Text Encoder Outputs is incompatible with training text encoders. Disable one of them.
             </p>
           )}
@@ -1035,21 +1032,21 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             paramKey="sampling_enabled"
           />
           {!checkpointingEnabled && (
-            <p className="text-xs text-[var(--muted)]">Sampling requires checkpointing to be enabled.</p>
+            <p className="text-xs text-muted">Sampling requires checkpointing to be enabled.</p>
           )}
           {checkpointingEnabled && samplingEnabled && (
             <div className="space-y-3">
-              <div className="text-xs font-medium text-[var(--muted)]">Sampling Config</div>
+              <div className="text-xs font-medium text-muted">Sampling Config</div>
               {samplingConfigsLoading ? (
-                <div className="text-sm text-[var(--muted)]">Loading sampling configs…</div>
+                <div className="text-sm text-muted">Loading sampling configs…</div>
               ) : !samplingConfigs?.length ? (
-                <div className="rounded-lg border border-dashed border-[var(--border)] p-6 text-center space-y-3">
-                  <p className="text-sm text-[var(--muted)]">
+                <div className="rounded-lg border border-dashed border-border p-6 text-center space-y-3">
+                  <p className="text-sm text-muted">
                     No sampling configs yet. Create one to configure preview prompts and sampler settings.
                   </p>
                   <Link
                     href="/configs/new?type=sampling"
-                    className="inline-flex items-center gap-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium"
+                    className="inline-flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium"
                   >
                     Create Sampling Config
                   </Link>
@@ -1064,16 +1061,16 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                     paramKey="sampling_config_id"
                   />
                   {samplingEnabled && selectedSamplingPreview && (
-                    <p className="text-xs text-[var(--muted)]">
+                    <p className="text-xs text-muted">
                       {selectedSamplingPreview.promptCount} prompt(s), {selectedSamplingPreview.steps} steps,{" "}
                       {selectedSamplingPreview.scheduler} scheduler
                     </p>
                   )}
                   {samplingEnabled && config.sampling_config_id != null && !selectedSamplingConfig && (
-                    <p className="text-xs text-red-400">Sampling config not found</p>
+                    <p className="text-xs text-error">Sampling config not found</p>
                   )}
                   {samplingConfigRequired && config.sampling_config_id == null && (
-                    <p className="text-xs text-red-400">Select a sampling config when sampling is enabled</p>
+                    <p className="text-xs text-error">Select a sampling config when sampling is enabled</p>
                   )}
                 </>
               )}
