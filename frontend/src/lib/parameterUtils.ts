@@ -7,6 +7,7 @@ export type ParameterMeta = {
   defaultValue?: string;
   constraints?: string;
   yamlOnly?: boolean;
+  deprecated?: boolean;
 };
 
 export const TRAIN_SECTION_ORDER = [

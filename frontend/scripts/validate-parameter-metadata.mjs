@@ -77,6 +77,20 @@ const requiredYamlOnlyKeys = [
   "vae_dtype",
   "resume_from_checkpoint",
   "logging.use_ui_logger",
+  "sample_prompts",
+  "sample_negative_prompt",
+  "sample_steps",
+  "sample_cfg_scale",
+  "sample_width",
+  "sample_height",
+  "sample_scheduler",
+  "sample_vae_tiling",
+  "sample_vae_fp32",
+  "sample_offload_unet_before_decode",
+  "post_training_sampling_config_id",
+  "sample_after_training",
+  "concepts.image_dir",
+  "concepts.prepared_dir",
 ];
 
 for (const key of requiredYamlOnlyKeys) {

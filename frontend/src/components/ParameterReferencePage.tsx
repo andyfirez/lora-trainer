@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { TRAIN_PARAMETER_METADATA } from "@/lib/trainParameterMetadata";
 import { TRAIN_SECTION_ORDER, groupBySection, parameterAnchor } from "@/lib/parameterUtils";
@@ -17,6 +17,11 @@ function ParameterEntry({ entry }: { entry: (typeof TRAIN_PARAMETER_METADATA)[nu
         {entry.yamlOnly && (
           <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
             YAML only
+          </span>
+        )}
+        {entry.deprecated && (
+          <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-400">
+            Deprecated
           </span>
         )}
       </div>
@@ -44,19 +49,19 @@ function ParameterEntry({ entry }: { entry: (typeof TRAIN_PARAMETER_METADATA)[nu
 function SectionBlock({
   section,
   items,
-  defaultOpen,
+  open,
+  onToggle,
 }: {
   section: string;
   items: (typeof TRAIN_PARAMETER_METADATA)[number][];
-  defaultOpen: boolean;
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-
   return (
     <section className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={onToggle}
         className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
       >
         <div>
@@ -80,17 +85,60 @@ function SectionBlock({
   );
 }
 
+function sectionForAnchor(
+  sections: { section: string; items: (typeof TRAIN_PARAMETER_METADATA)[number][] }[],
+  anchor: string,
+): string | undefined {
+  return sections.find((group) =>
+    group.items.some((entry) => parameterAnchor(entry.key) === anchor),
+  )?.section;
+}
+
 export default function ParameterReferencePage() {
-  const sections = groupBySection(TRAIN_PARAMETER_METADATA, TRAIN_SECTION_ORDER);
+  const sections = useMemo(
+    () => groupBySection(TRAIN_PARAMETER_METADATA, TRAIN_SECTION_ORDER),
+    [],
+  );
+
+  const [hash, setHash] = useState("");
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    sections.forEach((group, index) => {
+      initial[group.section] = index < 3;
+    });
+    return initial;
+  });
+
+  const readHash = useCallback(() => {
+    if (typeof window === "undefined") return;
+    setHash(window.location.hash.slice(1));
+  }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.location.hash) return;
-    const id = window.location.hash.slice(1);
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    readHash();
+    window.addEventListener("hashchange", readHash);
+    return () => window.removeEventListener("hashchange", readHash);
+  }, [readHash]);
+
+  useEffect(() => {
+    if (!hash) return;
+    const targetSection = sectionForAnchor(sections, hash);
+    if (targetSection) {
+      setOpenSections((prev) => ({ ...prev, [targetSection]: true }));
     }
-  }, []);
+  }, [hash, sections]);
+
+  useEffect(() => {
+    if (!hash) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [hash, openSections]);
+
+  const toggleSection = (section: string) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -102,8 +150,14 @@ export default function ParameterReferencePage() {
         </p>
       </div>
       <div className="space-y-4">
-        {sections.map(({ section, items }, index) => (
-          <SectionBlock key={section} section={section} items={items} defaultOpen={index < 3} />
+        {sections.map((group) => (
+          <SectionBlock
+            key={group.section}
+            section={group.section}
+            items={group.items}
+            open={openSections[group.section] ?? false}
+            onToggle={() => toggleSection(group.section)}
+          />
         ))}
       </div>
     </div>

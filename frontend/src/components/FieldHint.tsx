@@ -43,17 +43,19 @@ export default function FieldHint({ hint, hintAnchor }: FieldHintProps) {
         <CircleHelp size={13} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 shadow-lg text-xs text-[var(--muted)] leading-relaxed">
-          <p>{hint}</p>
-          {anchor && (
-            <Link
-              href={`/parameters#${anchor}`}
-              className="mt-2 inline-block text-[var(--accent)] hover:underline"
-              onClick={() => setOpen(false)}
-            >
-              Learn more →
-            </Link>
-          )}
+        <div className="absolute left-0 top-full z-50 pt-1">
+          <div className="w-64 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 shadow-lg text-xs text-[var(--muted)] leading-relaxed">
+            <p>{hint}</p>
+            {anchor && (
+              <Link
+                href={`/parameters#${anchor}`}
+                className="mt-2 inline-block text-[var(--accent)] hover:underline"
+                onClick={() => setOpen(false)}
+              >
+                Learn more →
+              </Link>
+            )}
+          </div>
         </div>
       )}
     </div>

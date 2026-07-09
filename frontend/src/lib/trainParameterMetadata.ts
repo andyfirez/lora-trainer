@@ -448,6 +448,26 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: '""',
     yamlOnly: true,
   },
+  {
+    key: "concepts.image_dir",
+    label: "Image Directory",
+    section: "Data",
+    shortHint: "Deprecated — resolved automatically from dataset_id at runtime.",
+    description:
+      "Legacy field for the raw image directory path. Modern configs use concepts.dataset_id instead; the trainer resolves image_dir from the dataset record when the job starts. Do not set manually in new configs.",
+    yamlOnly: true,
+    deprecated: true,
+  },
+  {
+    key: "concepts.prepared_dir",
+    label: "Prepared Directory",
+    section: "Data",
+    shortHint: "Deprecated — resolved automatically from dataset_id at runtime.",
+    description:
+      "Legacy field for the preprocessed dataset directory. Modern configs use concepts.dataset_id instead; the trainer resolves prepared_dir from the dataset record when the job starts. Do not set manually in new configs.",
+    yamlOnly: true,
+    deprecated: true,
+  },
 
   // Optimization
   {
@@ -641,6 +661,131 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "When true, runs sampling once before training begins to capture base-model output for comparison with trained checkpoints.",
     defaultValue: "false",
     yamlOnly: true,
+  },
+  {
+    key: "sample_prompts",
+    label: "Sample Prompts",
+    section: "Sampling",
+    shortHint: "Prompts used for mid-training preview images (resolved from sampling config).",
+    description:
+      "List of text prompts for checkpoint preview generation. In the web UI these come from the linked sampling config via resolve_sampling(); inline YAML values are merged at job start. Trigger words from concepts are appended automatically.",
+    defaultValue: "[]",
+    yamlOnly: true,
+  },
+  {
+    key: "sample_negative_prompt",
+    label: "Sample Negative Prompt",
+    section: "Sampling",
+    shortHint: "Negative prompt for mid-training preview generation.",
+    description:
+      "Negative prompt text applied during checkpoint sampling. Typically resolved from the linked sampling config rather than set inline in training YAML.",
+    defaultValue: '""',
+    yamlOnly: true,
+  },
+  {
+    key: "sample_steps",
+    label: "Sample Steps",
+    section: "Sampling",
+    shortHint: "Number of denoising steps for preview images.",
+    description:
+      "Inference steps for mid-training sample generation. Higher values improve preview quality at the cost of slower sampling after each checkpoint. Resolved from the linked sampling config in normal workflows.",
+    defaultValue: "30",
+    constraints: "≥ 1",
+    yamlOnly: true,
+  },
+  {
+    key: "sample_cfg_scale",
+    label: "Sample CFG Scale",
+    section: "Sampling",
+    shortHint: "Classifier-free guidance scale for preview images.",
+    description:
+      "CFG scale controlling prompt adherence during checkpoint sampling. SDXL commonly uses 5–8. Resolved from the linked sampling config in normal workflows.",
+    defaultValue: "7.5",
+    constraints: "> 0",
+    yamlOnly: true,
+  },
+  {
+    key: "sample_width",
+    label: "Sample Width",
+    section: "Sampling",
+    shortHint: "Output width for preview images; null uses training resolution.",
+    description:
+      "Width in pixels for generated preview images. When null, the trainer uses the training resolution. Resolved from the linked sampling config in normal workflows.",
+    defaultValue: "null (uses resolution)",
+    constraints: "64–2048",
+    yamlOnly: true,
+  },
+  {
+    key: "sample_height",
+    label: "Sample Height",
+    section: "Sampling",
+    shortHint: "Output height for preview images; null uses training resolution.",
+    description:
+      "Height in pixels for generated preview images. When null, the trainer uses the training resolution. Resolved from the linked sampling config in normal workflows.",
+    defaultValue: "null (uses resolution)",
+    constraints: "64–2048",
+    yamlOnly: true,
+  },
+  {
+    key: "sample_scheduler",
+    label: "Sample Scheduler",
+    section: "Sampling",
+    shortHint: "Noise scheduler for preview image generation.",
+    description:
+      "Sampler algorithm for mid-training previews. euler is the default and matches most SDXL workflows. Resolved from the linked sampling config in normal workflows.",
+    defaultValue: "euler",
+    constraints: "euler | euler_a | ddim | dpm++",
+    yamlOnly: true,
+  },
+  {
+    key: "sample_vae_tiling",
+    label: "Sample VAE Tiling",
+    section: "Sampling",
+    shortHint: "Tile VAE decode to reduce VRAM during preview generation.",
+    description:
+      "Enables tiled VAE decoding during checkpoint sampling, trading a small speed penalty for lower peak VRAM usage when generating large preview images.",
+    defaultValue: "true",
+    yamlOnly: true,
+  },
+  {
+    key: "sample_vae_fp32",
+    label: "Sample VAE FP32",
+    section: "Sampling",
+    shortHint: "Run VAE decode in float32 for higher preview fidelity.",
+    description:
+      "Forces float32 precision during VAE decode in sampling. Can reduce color banding at the cost of extra VRAM and slower decode.",
+    defaultValue: "false",
+    yamlOnly: true,
+  },
+  {
+    key: "sample_offload_unet_before_decode",
+    label: "Sample Offload UNet Before Decode",
+    section: "Sampling",
+    shortHint: "Move UNet off GPU before VAE decode to free VRAM.",
+    description:
+      "Offloads the UNet from GPU memory before VAE decoding during checkpoint sampling. Helps avoid OOM on consumer GPUs when generating previews at full resolution.",
+    defaultValue: "true",
+    yamlOnly: true,
+  },
+  {
+    key: "post_training_sampling_config_id",
+    label: "Post-Training Sampling Config",
+    section: "Sampling",
+    shortHint: "Deprecated — use sampling_config_id with sampling_enabled instead.",
+    description:
+      "Legacy field for linking a sampling config after training completes. Rejected by config validation in favor of sampling_enabled + sampling_config_id for mid-training previews. Do not use in new configs.",
+    yamlOnly: true,
+    deprecated: true,
+  },
+  {
+    key: "sample_after_training",
+    label: "Sample After Training",
+    section: "Sampling",
+    shortHint: "Deprecated — removed; use sampling_enabled for preview generation.",
+    description:
+      "Deprecated boolean flag for post-training sampling. Config validation rejects this key. Use sampling_enabled with a linked sampling config for preview images during training.",
+    yamlOnly: true,
+    deprecated: true,
   },
 
   // Logging
