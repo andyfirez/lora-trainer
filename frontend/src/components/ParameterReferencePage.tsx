@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TRAIN_PARAMETER_METADATA } from "@/lib/trainParameterMetadata";
-import { TRAIN_SECTION_ORDER, groupBySection, parameterAnchor } from "@/lib/parameterUtils";
+import { TRAIN_TAB_GROUPS, groupByTab, parameterAnchor } from "@/lib/parameterUtils";
 import type { ParameterMeta } from "@/lib/parameterUtils";
 
 function ParameterBadges({ entry }: { entry: ParameterMeta }) {
@@ -22,88 +22,75 @@ function ParameterBadges({ entry }: { entry: ParameterMeta }) {
   );
 }
 
-function ParameterTableRow({ entry }: { entry: ParameterMeta }) {
+function ParameterCard({ entry, index }: { entry: ParameterMeta; index: number }) {
   const anchor = parameterAnchor(entry.key);
+  const recommended = entry.recommendedValue ?? entry.defaultValue;
 
   return (
-    <tr id={anchor} className="scroll-mt-24 even:bg-white/[0.02] border-b border-[var(--border)] last:border-b-0">
-      <td className="px-4 py-2.5 align-top">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-medium text-white">{entry.label}</span>
-          <ParameterBadges entry={entry} />
-        </div>
-      </td>
-      <td className="px-4 py-2.5 align-top">
-        <code className="font-mono text-xs text-[var(--muted)] whitespace-nowrap">{entry.key}</code>
-      </td>
-      <td className="px-4 py-2.5 align-top">
-        <span className="font-mono text-xs text-white/80 tabular-nums whitespace-nowrap">
-          {entry.defaultValue ?? "—"}
-        </span>
-      </td>
-      <td className="px-4 py-2.5 align-top">
-        <span className="font-mono text-xs text-[var(--muted)] whitespace-nowrap">
-          {entry.constraints ?? "—"}
-        </span>
-      </td>
-      <td className="px-4 py-2.5 align-top min-w-[16rem]">
-        <p className="text-sm text-white/70 leading-snug">{entry.description}</p>
-      </td>
-    </tr>
-  );
-}
+    <article
+      id={anchor}
+      className={`scroll-mt-24 rounded-lg border border-[var(--border)] px-4 py-3 space-y-2 ${
+        index % 2 === 0 ? "bg-[var(--surface)]" : "bg-white/[0.02]"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <h4 className="font-medium text-white">{entry.label}</h4>
+        <ParameterBadges entry={entry} />
+      </div>
 
-function ParameterTable({ items }: { items: ParameterMeta[] }) {
-  return (
-    <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-      <table className="w-full min-w-[48rem] text-left border-collapse">
-        <thead className="sticky top-0 z-10 bg-[var(--surface)] border-b border-[var(--border)]">
-          <tr>
-            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-              Label
-            </th>
-            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-              Key
-            </th>
-            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-              Default
-            </th>
-            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-              Range
-            </th>
-            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
-              Description
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((entry) => (
-            <ParameterTableRow key={entry.key} entry={entry} />
+      <p className="text-sm text-white/70 leading-snug">{entry.description}</p>
+
+      {recommended && (
+        <p className="text-sm">
+          <span className="text-white/90">Recommended: </span>
+          <span className="font-mono text-[var(--accent)]">{recommended}</span>
+        </p>
+      )}
+
+      {entry.valueOptions && entry.valueOptions.length > 0 && (
+        <ul className="text-sm text-white/60 space-y-1 list-disc list-inside">
+          {entry.valueOptions.map((option) => (
+            <li key={option.value}>
+              <span className="font-mono text-white/80">{option.value}</span>
+              {" — "}
+              {option.description}
+            </li>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </ul>
+      )}
+
+      {entry.rangeGuidance && entry.rangeGuidance.length > 0 && (
+        <ul className="text-sm text-white/60 space-y-1 list-disc list-inside">
+          {entry.rangeGuidance.map((band) => (
+            <li key={band.range}>
+              <span className="font-mono text-white/80">{band.range}</span>
+              {" — "}
+              {band.description}
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
   );
 }
 
-function sectionForAnchor(
-  sections: { section: string; items: ParameterMeta[] }[],
+function anchorForHash(
+  tabGroups: ReturnType<typeof groupByTab>,
   anchor: string,
-): { section: string; key: string } | undefined {
-  for (const group of sections) {
-    const match = group.items.find((entry) => parameterAnchor(entry.key) === anchor);
-    if (match) return { section: group.section, key: match.key };
+): { tab: string; key: string } | undefined {
+  for (const group of tabGroups) {
+    for (const section of group.sections) {
+      const match = section.items.find((entry) => parameterAnchor(entry.key) === anchor);
+      if (match) return { tab: group.tab, key: match.key };
+    }
   }
   return undefined;
 }
 
 export default function ParameterReferencePage() {
-  const sections = useMemo(
-    () => groupBySection(TRAIN_PARAMETER_METADATA, TRAIN_SECTION_ORDER),
-    [],
-  );
+  const tabGroups = useMemo(() => groupByTab(TRAIN_PARAMETER_METADATA), []);
 
-  const [activeTab, setActiveTab] = useState<string>(TRAIN_SECTION_ORDER[0]);
+  const [activeTab, setActiveTab] = useState<string>(TRAIN_TAB_GROUPS[0].tab);
   const [hash, setHash] = useState("");
 
   const readHash = useCallback(() => {
@@ -119,11 +106,11 @@ export default function ParameterReferencePage() {
 
   useEffect(() => {
     if (!hash) return;
-    const target = sectionForAnchor(sections, hash);
+    const target = anchorForHash(tabGroups, hash);
     if (target) {
-      setActiveTab(target.section);
+      setActiveTab(target.tab);
     }
-  }, [hash, sections]);
+  }, [hash, tabGroups]);
 
   useEffect(() => {
     if (!hash) return;
@@ -133,7 +120,7 @@ export default function ParameterReferencePage() {
     return () => cancelAnimationFrame(frame);
   }, [hash, activeTab]);
 
-  const activeSection = sections.find((group) => group.section === activeTab);
+  const activeGroup = tabGroups.find((group) => group.tab === activeTab);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -145,29 +132,35 @@ export default function ParameterReferencePage() {
         </p>
       </div>
 
-      <div className="flex gap-1 border-b border-[var(--border)] overflow-x-auto">
-        {sections.map((group) => (
+      <div className="flex flex-wrap gap-1 border-b border-[var(--border)]">
+        {tabGroups.map((group) => (
           <button
-            key={group.section}
+            key={group.tab}
             type="button"
-            onClick={() => setActiveTab(group.section)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap shrink-0 ${
-              activeTab === group.section
+            onClick={() => setActiveTab(group.tab)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === group.tab
                 ? "text-white border border-b-[var(--bg)] border-[var(--border)] bg-[var(--bg)] -mb-px"
                 : "text-[var(--muted)] hover:text-white"
             }`}
           >
-            {group.section}
+            {group.label}
           </button>
         ))}
       </div>
 
-      {activeSection && (
-        <div>
-          <p className="text-xs text-[var(--muted)] mb-3">
-            {activeSection.items.length} parameter(s)
-          </p>
-          <ParameterTable items={activeSection.items} />
+      {activeGroup && (
+        <div className="space-y-8">
+          {activeGroup.sections.map((section) => (
+            <section key={section.section} className="space-y-3">
+              <h3 className="text-lg font-semibold text-white">{section.section}</h3>
+              <div className="space-y-3">
+                {section.items.map((entry, index) => (
+                  <ParameterCard key={entry.key} entry={entry} index={index} />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </div>

@@ -109,6 +109,43 @@ for (const key of requiredYamlOnlyKeys) {
 
 assert.ok(yamlOnlyCount >= 8, `Expected at least 8 yamlOnly entries, found ${yamlOnlyCount}`);
 
+// Guidance field assertions
+const recommendedCount = (source.match(/recommendedValue:/g) ?? []).length;
+const defaultValueCount = (source.match(/defaultValue:/g) ?? []).length;
+assert.ok(
+  recommendedCount + defaultValueCount >= keyMatches.length,
+  `Each entry needs recommendedValue or defaultValue; found ${recommendedCount} recommended + ${defaultValueCount} default for ${keyMatches.length} keys`,
+);
+
+// Parse per-entry blocks for enum/numeric guidance
+const entryBlocks = source.split(/\n  \{/).slice(1);
+for (const block of entryBlocks) {
+  const key = block.match(/key:\s*"([^"]+)"/)?.[1];
+  const constraints = block.match(/constraints:\s*"([^"]*)"/)?.[1];
+  const hasValueOptions = /valueOptions:/.test(block);
+  const hasRangeGuidance = /rangeGuidance:/.test(block);
+  const valueOptionItems = (block.match(/value:\s*"/g) ?? []).length;
+
+  if (constraints?.includes("|")) {
+    assert.ok(
+      hasValueOptions && valueOptionItems >= 2,
+      `Enum parameter ${key} should have valueOptions with ≥ 2 items`,
+    );
+  }
+
+  if (
+    constraints &&
+    !constraints.includes("|") &&
+    /[≥>0-9(–]/.test(constraints)
+  ) {
+    const rangeItems = (block.match(/range:\s*"/g) ?? []).length;
+    assert.ok(
+      hasRangeGuidance && rangeItems >= 2,
+      `Numeric parameter ${key} should have rangeGuidance with ≥ 2 items`,
+    );
+  }
+}
+
 // Anchor slug uniqueness
 function parameterAnchor(key) {
   return key.replace(/\./g, "-").replace(/_/g, "-");

@@ -1,3 +1,13 @@
+export type ValueOption = {
+  value: string;
+  description: string;
+};
+
+export type RangeGuidance = {
+  range: string;
+  description: string;
+};
+
 export type ParameterMeta = {
   key: string;
   label: string;
@@ -10,7 +20,28 @@ export type ParameterMeta = {
   deprecated?: boolean;
   /** When false, no inline ? hint is shown on the config form. Defaults to true. */
   showInlineHint?: boolean;
+  /** Community best-practice or default value shown on the reference page. */
+  recommendedValue?: string;
+  /** Per-value guidance for enum, boolean, and select parameters. */
+  valueOptions?: ValueOption[];
+  /** Practical numeric bands with effect notes for numeric parameters. */
+  rangeGuidance?: RangeGuidance[];
 };
+
+export type TabGroup = {
+  tab: string;
+  label: string;
+  sections: readonly string[];
+};
+
+export const TRAIN_TAB_GROUPS: TabGroup[] = [
+  { tab: "setup", label: "Setup", sections: ["Model", "LoRA"] },
+  { tab: "targets", label: "Targets", sections: ["Training Targets"] },
+  { tab: "training", label: "Training", sections: ["Training", "Optimizer"] },
+  { tab: "data-memory", label: "Data & Memory", sections: ["Data", "Optimization", "Performance"] },
+  { tab: "output", label: "Output", sections: ["Checkpointing", "Sampling", "Logging"] },
+  { tab: "advanced", label: "Advanced", sections: ["Advanced"] },
+];
 
 export const TRAIN_SECTION_ORDER = [
   "Model",
@@ -55,4 +86,25 @@ export function groupBySection(
     .sort()
     .map((section) => ({ section, items: grouped.get(section)! }));
   return [...ordered, ...extra];
+}
+
+export function tabGroupForSection(section: string): string {
+  const group = TRAIN_TAB_GROUPS.find((g) => g.sections.includes(section));
+  return group?.tab ?? TRAIN_TAB_GROUPS[0].tab;
+}
+
+export function groupByTab(
+  entries: ParameterMeta[],
+  tabGroups: TabGroup[] = TRAIN_TAB_GROUPS,
+): { tab: string; label: string; sections: { section: string; items: ParameterMeta[] }[] }[] {
+  const bySection = groupBySection(entries, TRAIN_SECTION_ORDER);
+  return tabGroups
+    .map((group) => ({
+      tab: group.tab,
+      label: group.label,
+      sections: group.sections
+        .map((section) => bySection.find((s) => s.section === section))
+        .filter((s): s is { section: string; items: ParameterMeta[] } => s !== undefined),
+    }))
+    .filter((group) => group.sections.length > 0);
 }

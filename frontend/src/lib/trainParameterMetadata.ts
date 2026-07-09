@@ -12,6 +12,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Specifies the SDXL base model to fine-tune. Can be a HuggingFace repo ID (e.g. stabilityai/stable-diffusion-xl-base-1.0) or a local folder containing model weights. The model architecture must match SDXL; using a different base changes style, composition, and what the LoRA can learn.",
     defaultValue: "stabilityai/stable-diffusion-xl-base-1.0",
     showInlineHint: false,
+    recommendedValue: "stabilityai/stable-diffusion-xl-base-1.0",
   },
   {
     key: "output_dir",
@@ -22,6 +23,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Root folder for all training artifacts: intermediate checkpoints, TensorBoard logs, sample images, and the exported LoRA. Use a dedicated path with enough disk space — checkpoints and cached latents can consume several GB per run.",
     defaultValue: "output",
     showInlineHint: false,
+    recommendedValue: "output",
   },
   {
     key: "lora_name",
@@ -32,6 +34,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Human-readable name for the LoRA output file. At training start the app appends a version suffix (_v1, _v2, …) to avoid overwriting previous runs. This name appears in exported .safetensors filenames and job listings.",
     defaultValue: "lora",
     showInlineHint: false,
+    recommendedValue: "lora",
   },
   {
     key: "output_format",
@@ -43,6 +46,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "safetensors",
     constraints: "safetensors | pt",
     showInlineHint: false,
+    recommendedValue: "safetensors",
+    valueOptions: [
+      { value: "safetensors", description: "Recommended — safe tensor format compatible with Kohya, ComfyUI, and A1111." },
+      { value: "pt", description: "PyTorch pickle format; mainly for debugging or custom tooling." },
+    ],
   },
 
   // LoRA
@@ -55,6 +63,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Rank (dimension) of the low-rank adaptation matrices. Higher values increase expressiveness and VRAM usage. Typical values: 8–32 for style/subject LoRAs, 64–128 for complex concepts. Pair with lora_alpha for effective learning strength.",
     defaultValue: "32",
     constraints: "1–256",
+    recommendedValue: "32",
+    rangeGuidance: [
+      { range: "8–16", description: "Light style or simple subject LoRAs; fast training, low VRAM." },
+      { range: "32", description: "General-purpose default for most SDXL character and style LoRAs." },
+      { range: "64–128", description: "Complex concepts or fine details; higher VRAM and overfitting risk." },
+    ],
   },
   {
     key: "lora_alpha",
@@ -65,6 +79,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Alpha scales the LoRA contribution at inference time (effective scale ≈ alpha / rank). Setting alpha equal to rank is a common default. Lower alpha softens the effect; higher alpha amplifies learned features but can cause artifacts.",
     defaultValue: "32.0",
     constraints: "> 0",
+    recommendedValue: "32.0",
+    rangeGuidance: [
+      { range: "= rank", description: "Unit scaling (alpha/rank = 1); most common community default." },
+      { range: "rank × 0.5", description: "Softer LoRA effect at inference; reduces artifacts." },
+      { range: "rank × 2", description: "Stronger effect; may cause oversaturation or artifacts." },
+    ],
   },
   {
     key: "lora_dropout",
@@ -75,6 +95,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Dropout probability applied to LoRA adapter layers during training. Can reduce overfitting on small datasets. Most SDXL LoRA recipes use 0.0; try 0.05–0.1 only if you see memorization on tiny datasets.",
     defaultValue: "0.0",
     constraints: "0.0–0.999",
+    recommendedValue: "0.0",
+    rangeGuidance: [
+      { range: "0.0", description: "No dropout; standard for most SDXL LoRA recipes." },
+      { range: "0.05–0.1", description: "Mild regularization for very small datasets prone to memorization." },
+    ],
   },
 
   // Training Targets
@@ -87,6 +112,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "When enabled, LoRA adapters are attached to UNet attention and feed-forward layers — this is the primary target for visual learning. Disabling UNet training while training text encoders is a niche setup for text-only fine-tuning.",
     defaultValue: "true",
     showInlineHint: false,
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Train LoRA on UNet layers — primary target for visual learning." },
+      { value: "false", description: "Skip UNet training; niche text-only fine-tuning setup." },
+    ],
   },
   {
     key: "unet.weight_dtype",
@@ -97,6 +127,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Floating-point dtype for UNet parameters. float16 and bfloat16 reduce VRAM; bfloat16 is often more stable on Ampere+ GPUs. float32 uses the most memory but can help with numerical instability on older hardware.",
     defaultValue: "float16",
     constraints: "float32 | float16 | bfloat16",
+    recommendedValue: "float16",
+    valueOptions: [
+      { value: "float32", description: "Full precision; highest VRAM use, best numerical stability on older GPUs." },
+      { value: "float16", description: "Half precision; good balance of speed and memory on most GPUs." },
+      { value: "bfloat16", description: "Brain float; wider dynamic range than float16, preferred on Ampere+ GPUs." },
+    ],
   },
   {
     key: "text_encoder_1.train",
@@ -107,6 +143,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Enables LoRA fine-tuning on the first SDXL text encoder (CLIP ViT-L). Useful when trigger words or captions need stronger semantic binding. Incompatible with caching text encoder outputs while training TEs.",
     defaultValue: "false",
     showInlineHint: false,
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Train CLIP-L; stronger trigger-word binding, more VRAM." },
+      { value: "false", description: "Frozen text encoder 1; standard for most LoRAs." },
+    ],
   },
   {
     key: "text_encoder_1.weight_dtype",
@@ -117,6 +158,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Floating-point dtype for text encoder 1 parameters. Same trade-offs as UNet dtype — lower precision saves VRAM with minimal quality impact for most LoRA runs.",
     defaultValue: "float16",
     constraints: "float32 | float16 | bfloat16",
+    recommendedValue: "float16",
+    valueOptions: [
+      { value: "float32", description: "Full precision for text encoder 1 weights." },
+      { value: "float16", description: "Half precision; saves VRAM with minimal quality impact." },
+      { value: "bfloat16", description: "Brain float; stable on Ampere+ GPUs." },
+    ],
   },
   {
     key: "text_encoder_2.train",
@@ -127,6 +174,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Enables LoRA fine-tuning on SDXL's second text encoder (OpenCLIP-G). Typically left disabled unless you need fine-grained caption semantics. Significantly increases memory when combined with UNet training.",
     defaultValue: "false",
     showInlineHint: false,
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Train OpenCLIP-G; rare, increases memory significantly." },
+      { value: "false", description: "Frozen text encoder 2; recommended default." },
+    ],
   },
   {
     key: "text_encoder_2.weight_dtype",
@@ -137,6 +189,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Floating-point dtype for text encoder 2 parameters.",
     defaultValue: "float16",
     constraints: "float32 | float16 | bfloat16",
+    recommendedValue: "float16",
+    valueOptions: [
+      { value: "float32", description: "Full precision for text encoder 2 weights." },
+      { value: "float16", description: "Half precision; saves VRAM with minimal quality impact." },
+      { value: "bfloat16", description: "Brain float; stable on Ampere+ GPUs." },
+    ],
   },
   {
     key: "clip_skip",
@@ -147,6 +205,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Number of layers to skip from the end of the CLIP text encoder when producing embeddings. Value 2 is the Kohya SDXL default and matches most community models. Changing this alters how captions influence generation — keep consistent between training and inference.",
     defaultValue: "2",
     constraints: "≥ 1",
+    recommendedValue: "2",
+    rangeGuidance: [
+      { range: "2", description: "Kohya SDXL default; matches most community models and workflows." },
+      { range: "1", description: "No skip; different text embedding distribution, rarely used for SDXL." },
+      { range: "3+", description: "Deeper skip; alters caption influence significantly — keep consistent at inference." },
+    ],
   },
 
   // Training
@@ -160,6 +224,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "30",
     constraints: "≥ 1",
     showInlineHint: false,
+    recommendedValue: "30",
+    rangeGuidance: [
+      { range: "10–20", description: "Small datasets (10–30 images); watch for overfitting." },
+      { range: "30–50", description: "Medium datasets; common range for character LoRAs." },
+      { range: "50+", description: "Large datasets; combine with lower learning rate and monitor samples." },
+    ],
   },
   {
     key: "batch_size",
@@ -171,6 +241,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "1",
     constraints: "≥ 1",
     showInlineHint: false,
+    recommendedValue: "1",
+    rangeGuidance: [
+      { range: "1", description: "Minimum VRAM; standard for 12–16 GB consumer GPUs." },
+      { range: "2–4", description: "Faster training on 24 GB+ GPUs; smoother gradient estimates." },
+    ],
   },
   {
     key: "gradient_accumulation_steps",
@@ -181,6 +256,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Runs N forward/backward passes before each optimizer step, averaging gradients. Lets you simulate a larger batch size without proportional VRAM increase. Useful when batch_size must stay at 1 due to memory limits.",
     defaultValue: "1",
     constraints: "≥ 1",
+    recommendedValue: "1",
+    rangeGuidance: [
+      { range: "1", description: "No accumulation; each step updates weights immediately." },
+      { range: "2–8", description: "Simulates larger batch without extra VRAM; useful when batch_size must stay at 1." },
+    ],
   },
   {
     key: "learning_rate",
@@ -191,6 +271,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Base learning rate for the optimizer. Typical SDXL LoRA range: 1e-5 to 1e-4 for AdamW, higher for Prodigy. The optimizer preset may override this when switching optimizer type. Pair with LR scheduler and warmup for stable training.",
     defaultValue: "5e-5",
     constraints: "> 0",
+    recommendedValue: "5e-5",
+    rangeGuidance: [
+      { range: "1e-5", description: "Conservative; slower convergence, safer for small datasets." },
+      { range: "5e-5", description: "Common AdamW default for SDXL LoRA training." },
+      { range: "1e-4", description: "Aggressive; faster training but risk of instability or overfitting." },
+    ],
   },
   {
     key: "lr_scheduler",
@@ -201,6 +287,15 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Schedule controlling learning rate decay or warmup. constant is simplest; cosine and cosine_with_restarts are popular for LoRA. constant_with_warmup and polynomial offer fine-grained control for longer runs.",
     defaultValue: "constant",
     constraints: "constant | constant_with_warmup | linear | cosine | cosine_with_restarts | polynomial",
+    recommendedValue: "constant",
+    valueOptions: [
+      { value: "constant", description: "Fixed learning rate throughout training; simplest and reliable for short LoRA runs." },
+      { value: "constant_with_warmup", description: "Ramps LR up then holds constant; good when using warmup steps." },
+      { value: "linear", description: "Linear decay to zero; useful for fixed-length training schedules." },
+      { value: "cosine", description: "Smooth cosine decay; popular for LoRA and often improves late-stage quality." },
+      { value: "cosine_with_restarts", description: "Cosine decay with periodic restarts; helps escape plateaus on long runs." },
+      { value: "polynomial", description: "Polynomial decay curve; fine-grained control for custom schedules." },
+    ],
   },
   {
     key: "lr_warmup_steps",
@@ -211,6 +306,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Number of steps to linearly warm up the learning rate from a small value to the target LR. Helps stabilize early training, especially with large learning rates or Prodigy. Set to 0 to disable warmup.",
     defaultValue: "0",
     constraints: "≥ 0",
+    recommendedValue: "0",
+    rangeGuidance: [
+      { range: "0", description: "No warmup; fine for standard AdamW with moderate learning rates." },
+      { range: "50–200", description: "Gentle ramp for large LRs or Prodigy optimizer." },
+      { range: "5–10% of total steps", description: "Proportional warmup for long training runs." },
+    ],
   },
   {
     key: "min_snr_gamma",
@@ -221,6 +322,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Minimum SNR gamma for loss reweighting (Min-SNR weighting strategy). Reduces loss contribution from very noisy timesteps, often improving convergence. Kohya default is 5. Set to 0 to use standard uniform weighting.",
     defaultValue: "5.0",
     constraints: "≥ 0",
+    recommendedValue: "5.0",
+    rangeGuidance: [
+      { range: "0", description: "Disables Min-SNR weighting; uniform loss across timesteps." },
+      { range: "5", description: "Kohya SDXL default; often improves convergence." },
+      { range: "10+", description: "Stronger reweighting; experiment if loss plateaus early." },
+    ],
   },
   {
     key: "noise_offset",
@@ -231,6 +338,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Small constant offset added to training noise. Helps the model learn extreme brightness values (pure black/white regions). Kohya SDXL default is ~0.0357. Set to 0 to disable.",
     defaultValue: "0.0357",
     constraints: "≥ 0",
+    recommendedValue: "0.0357",
+    rangeGuidance: [
+      { range: "0", description: "Disabled; standard uniform noise distribution." },
+      { range: "0.0357", description: "Kohya SDXL default; helps learn extreme brightness values." },
+      { range: "0.05–0.1", description: "Stronger offset for datasets with very dark or bright images." },
+    ],
   },
 
   // Optimizer
@@ -243,6 +356,13 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Selects the optimizer implementation. adamw_8bit (bitsandbytes) is the default — good VRAM efficiency. adamw is full-precision AdamW. adafactor is memory-efficient for large models. prodigy adapts learning rate automatically but needs tuning.",
     defaultValue: "adamw_8bit",
     constraints: "adamw | adamw_8bit | adafactor | prodigy",
+    recommendedValue: "adamw_8bit",
+    valueOptions: [
+      { value: "adamw", description: "Full-precision AdamW; stable but uses more VRAM for optimizer states." },
+      { value: "adamw_8bit", description: "8-bit quantized AdamW via bitsandbytes; default balance of speed and memory." },
+      { value: "adafactor", description: "Memory-efficient factored optimizer; good for very large models." },
+      { value: "prodigy", description: "Adaptive LR optimizer; can eliminate manual LR tuning but needs careful monitoring." },
+    ],
   },
   {
     key: "optimizer.weight_decay",
@@ -253,6 +373,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Coefficient for weight decay (L2 penalty) applied by Adam-family and Prodigy optimizers. Typical range 0.01–0.1. Higher values increase regularization; 0 disables decay.",
     defaultValue: "0.01",
     constraints: "≥ 0",
+    recommendedValue: "0.01",
+    rangeGuidance: [
+      { range: "0", description: "No L2 regularization." },
+      { range: "0.01", description: "Light regularization; common default." },
+      { range: "0.05–0.1", description: "Stronger regularization when overfitting on small datasets." },
+    ],
   },
   {
     key: "optimizer.beta1",
@@ -263,6 +389,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Exponential decay rate for the first moment estimate in Adam/Prodigy optimizers. Standard default is 0.9. Rarely needs changing for LoRA training.",
     defaultValue: "0.9",
     constraints: "(0, 1)",
+    recommendedValue: "0.9",
+    rangeGuidance: [
+      { range: "0.9", description: "Standard Adam default; rarely needs changing." },
+      { range: "0.95", description: "Slower first-moment decay; smoother updates for noisy gradients." },
+    ],
   },
   {
     key: "optimizer.beta2",
@@ -273,6 +404,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Exponential decay rate for the second moment estimate in Adam/Prodigy optimizers. Standard default is 0.999.",
     defaultValue: "0.999",
     constraints: "(0, 1)",
+    recommendedValue: "0.999",
+    rangeGuidance: [
+      { range: "0.999", description: "Standard Adam default." },
+      { range: "0.99", description: "Faster second-moment adaptation; can help with sparse gradients." },
+    ],
   },
   {
     key: "optimizer.relative_step",
@@ -282,6 +418,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Adafactor-only flag. When true, Adafactor computes relative step sizes based on parameter magnitudes, often eliminating the need for a manual learning rate.",
     defaultValue: "false",
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Adafactor computes relative step sizes from parameter scale." },
+      { value: "false", description: "Use fixed learning rate with Adafactor." },
+    ],
   },
   {
     key: "optimizer.scale_parameter",
@@ -291,6 +432,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Adafactor-only flag. Enables factored second-moment scaling per parameter group. Usually left false unless using relative_step mode.",
     defaultValue: "false",
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Enable per-parameter factored scaling in Adafactor." },
+      { value: "false", description: "Disable factored scaling." },
+    ],
   },
   {
     key: "optimizer.warmup_init",
@@ -300,6 +446,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Adafactor-only flag. When true, uses a warmup initialization scheme for the learning rate schedule inside Adafactor.",
     defaultValue: "false",
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Use warmup initialization in Adafactor schedule." },
+      { value: "false", description: "No Adafactor warmup init." },
+    ],
   },
   {
     key: "optimizer.decouple",
@@ -309,6 +460,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Prodigy-only flag. Decoupled weight decay (AdamW-style) vs. L2 regularization coupled with gradients. True is recommended for Prodigy.",
     defaultValue: "true",
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "AdamW-style decoupled weight decay for Prodigy." },
+      { value: "false", description: "Coupled L2 regularization with gradients." },
+    ],
   },
   {
     key: "optimizer.use_bias_correction",
@@ -318,6 +474,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Prodigy-only flag. Enables bias correction for adaptive moment estimates, similar to standard Adam.",
     defaultValue: "true",
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Apply bias correction to Prodigy moment estimates." },
+      { value: "false", description: "Skip bias correction." },
+    ],
   },
   {
     key: "optimizer.safeguard_warmup",
@@ -327,6 +488,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Prodigy-only flag. Adds safeguards during warmup to prevent excessively large adaptive learning rates at the start of training.",
     defaultValue: "true",
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Protect early Prodigy steps from unstable adaptive LR." },
+      { value: "false", description: "No warmup safeguards." },
+    ],
   },
   {
     key: "optimizer.d0",
@@ -337,6 +503,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Prodigy-only hyperparameter controlling the initial value of the D estimate used for adaptive learning rate scaling. Default 1e-5 works for most LoRA runs.",
     defaultValue: "1e-5",
     constraints: "> 0",
+    recommendedValue: "1e-5",
+    rangeGuidance: [
+      { range: "1e-6", description: "Smaller initial D; more conservative adaptive LR." },
+      { range: "1e-5", description: "Prodigy default; works for most LoRA runs." },
+      { range: "1e-4", description: "Larger initial D; faster early adaptation, monitor for instability." },
+    ],
   },
   {
     key: "optimizer.d_coef",
@@ -347,6 +519,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Prodigy-only scaling coefficient for the D parameter update rule. Default 1.0; increase cautiously if training is too slow.",
     defaultValue: "1.0",
     constraints: "> 0",
+    recommendedValue: "1.0",
+    rangeGuidance: [
+      { range: "0.5", description: "Slower D updates; more stable but slower convergence." },
+      { range: "1.0", description: "Default coefficient." },
+      { range: "2.0", description: "Faster D adaptation; use cautiously." },
+    ],
   },
 
   // Data
@@ -360,6 +538,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "1024",
     constraints: "64–2048",
     showInlineHint: false,
+    recommendedValue: "1024",
+    rangeGuidance: [
+      { range: "512–768", description: "Lower resolution; faster training, less detail for SDXL." },
+      { range: "1024", description: "SDXL native resolution; recommended default." },
+      { range: "1280–1536", description: "Higher detail; significantly more VRAM per image." },
+    ],
   },
   {
     key: "enable_bucket",
@@ -370,6 +554,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "When enabled, images are assigned to resolution buckets preserving aspect ratio, reducing distortion from squashing non-square images. Dataset preprocessing must match this setting.",
     defaultValue: "false",
     showInlineHint: false,
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Preserve aspect ratios via resolution buckets." },
+      { value: "false", description: "Square crop/resize all images to resolution." },
+    ],
   },
   {
     key: "bucket_reso_steps",
@@ -381,6 +570,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "64",
     constraints: "8–512",
     yamlOnly: true,
+    recommendedValue: "64",
+    rangeGuidance: [
+      { range: "32", description: "Fine-grained buckets; better aspect-ratio matching, more buckets." },
+      { range: "64", description: "Standard step size; good balance." },
+      { range: "128", description: "Coarser buckets; fewer buckets, less precise aspect matching." },
+    ],
   },
   {
     key: "min_bucket_reso",
@@ -392,6 +587,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "512",
     constraints: "64–2048",
     yamlOnly: true,
+    recommendedValue: "512",
+    rangeGuidance: [
+      { range: "256–512", description: "Filters very small images; reduces upscaling artifacts." },
+      { range: "768", description: "Higher minimum; excludes low-res training images." },
+    ],
   },
   {
     key: "max_bucket_reso",
@@ -403,6 +603,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "2048",
     constraints: "64–2048",
     yamlOnly: true,
+    recommendedValue: "2048",
+    rangeGuidance: [
+      { range: "1024", description: "Caps VRAM for large aspect-ratio images." },
+      { range: "1536–2048", description: "Allows high-res buckets; needs more VRAM." },
+    ],
   },
   {
     key: "bucket_no_upscale",
@@ -413,6 +618,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "When true, images are not upscaled to fit a larger bucket — they stay at native resolution within bucket constraints. Reduces artifacts from upscaling small source images.",
     defaultValue: "true",
     yamlOnly: true,
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Keep native resolution; no upscaling to fit buckets." },
+      { value: "false", description: "Allow upscaling small images into larger buckets." },
+    ],
   },
   {
     key: "concepts.dataset_id",
@@ -421,6 +631,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     shortHint: "Dataset providing images and captions for this concept.",
     description:
       "References a preprocessed dataset by ID. The dataset must match training resolution and bucketing settings. Images and captions are loaded from the dataset's prepared directory at training time.",
+    recommendedValue: "your-dataset-id",
   },
   {
     key: "concepts.trigger_words",
@@ -429,6 +640,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     shortHint: "Tokens prepended to captions to activate the LoRA at inference.",
     description:
       "Comma-separated trigger words inserted into training captions and sample prompts. These tokens become associated with the learned concept — use unique, rare tokens (e.g. ohwx, sks) to avoid conflicts with base model vocabulary.",
+    recommendedValue: "ohwx, unique token",
   },
   {
     key: "concepts.caption_extension",
@@ -438,6 +650,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Extension of caption files alongside images (e.g. .txt for image.jpg → image.txt). Must match how captions were exported from your tagging workflow.",
     defaultValue: ".txt",
+    recommendedValue: ".txt",
   },
   {
     key: "concepts.repeats",
@@ -448,6 +661,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Multiplies each image's contribution per epoch. Increase repeats for small datasets to give the model more exposure without adding epochs. Schema default is 3; the form defaults new concepts to 1.",
     defaultValue: "3",
     constraints: "≥ 1",
+    recommendedValue: "3",
+    rangeGuidance: [
+      { range: "1", description: "Each image seen once per epoch; form default for new concepts." },
+      { range: "3–5", description: "Common for small datasets (10–20 images)." },
+      { range: "10+", description: "Heavy repetition for very small sets; watch for overfitting." },
+    ],
   },
   {
     key: "concepts.caption_suffix",
@@ -458,6 +677,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Optional suffix added to all captions for this concept after loading. Useful for adding consistent style tags or quality tokens across a dataset.",
     defaultValue: '""',
     yamlOnly: true,
+    recommendedValue: '""',
   },
   {
     key: "concepts.image_dir",
@@ -468,6 +688,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Legacy field for the raw image directory path. Modern configs use concepts.dataset_id instead; the trainer resolves image_dir from the dataset record when the job starts. Do not set manually in new configs.",
     yamlOnly: true,
     deprecated: true,
+    recommendedValue: "do not set (use concepts.dataset_id)",
   },
   {
     key: "concepts.prepared_dir",
@@ -478,6 +699,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Legacy field for the preprocessed dataset directory. Modern configs use concepts.dataset_id instead; the trainer resolves prepared_dir from the dataset record when the job starts. Do not set manually in new configs.",
     yamlOnly: true,
     deprecated: true,
+    recommendedValue: "do not set (use concepts.dataset_id)",
   },
 
   // Optimization
@@ -490,6 +712,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Global mixed precision mode for training computations. float16 is widely supported; bfloat16 offers better numerical range on Ampere+ GPUs. Affects speed and memory across UNet and optimizer states.",
     defaultValue: "float16",
     constraints: "float32 | float16 | bfloat16",
+    recommendedValue: "float16",
+    valueOptions: [
+      { value: "float32", description: "No mixed precision; highest memory use, maximum numerical precision." },
+      { value: "float16", description: "Standard half-precision training; widely supported and VRAM-efficient." },
+      { value: "bfloat16", description: "Brain float mixed precision; better range than float16 on Ampere+ GPUs." },
+    ],
   },
   {
     key: "seed",
@@ -500,6 +728,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Fixes random number generation for dataset shuffling, noise sampling, and weight initialization. Set a specific integer to reproduce a training run. Omit or leave empty for a random seed each run.",
     defaultValue: "random",
     showInlineHint: false,
+    recommendedValue: "random",
   },
   {
     key: "gradient_checkpointing",
@@ -510,6 +739,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Recomputes intermediate activations during backprop instead of storing them, significantly reducing VRAM at the cost of ~20–30% slower training. Strongly recommended for SDXL LoRA on consumer GPUs.",
     defaultValue: "true",
     showInlineHint: false,
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Trade ~20–30% speed for significant VRAM savings." },
+      { value: "false", description: "Store all activations; faster but uses more VRAM." },
+    ],
   },
 
   // Performance
@@ -521,6 +755,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Encodes all training images to VAE latents once and keeps them in RAM, skipping VAE encoding each step. Dramatically speeds training but requires sufficient system RAM proportional to dataset size.",
     defaultValue: "true",
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Pre-encode to RAM; major speedup, needs system memory." },
+      { value: "false", description: "Encode images each step; slower but lower RAM use." },
+    ],
   },
   {
     key: "cache_latents_to_disk",
@@ -530,6 +769,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Saves encoded latents to disk (.npz) so subsequent runs skip VAE encoding entirely. Requires cache_latents enabled. Useful for iterative hyperparameter tuning on the same dataset.",
     defaultValue: "false",
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Persist latents to disk for reuse across runs." },
+      { value: "false", description: "RAM-only latent cache." },
+    ],
   },
   {
     key: "cache_text_encoder_outputs",
@@ -539,6 +783,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Caches CLIP text encoder outputs for all captions in RAM, skipping text encoding each step. Cannot be used while training text encoders (text_encoder_1.train or text_encoder_2.train is true).",
     defaultValue: "true",
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Pre-compute text embeddings in RAM; incompatible with TE training." },
+      { value: "false", description: "Encode captions each step." },
+    ],
   },
   {
     key: "cache_text_encoder_outputs_to_disk",
@@ -548,6 +797,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Saves text encoder outputs to disk for reuse across runs. Requires cache_text_encoder_outputs enabled.",
     defaultValue: "false",
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Persist text embeddings to disk." },
+      { value: "false", description: "RAM-only TE output cache." },
+    ],
   },
   {
     key: "attention_mechanism",
@@ -558,6 +812,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Selects the attention implementation. sdpa uses PyTorch scaled dot-product attention (fast, no extra deps). xformers can be faster on some GPUs but requires the xformers package. default uses diffusers' built-in attention.",
     defaultValue: "sdpa",
     constraints: "default | sdpa | xformers",
+    recommendedValue: "sdpa",
+    valueOptions: [
+      { value: "default", description: "Diffusers built-in attention; no extra dependencies." },
+      { value: "sdpa", description: "PyTorch scaled dot-product attention; fast default on PyTorch 2.x." },
+      { value: "xformers", description: "xFormers memory-efficient attention; can be faster on some GPUs." },
+    ],
   },
   {
     key: "vae_dtype",
@@ -569,6 +829,13 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "auto",
     constraints: "auto | float32 | float16 | bfloat16",
     yamlOnly: true,
+    recommendedValue: "auto",
+    valueOptions: [
+      { value: "auto", description: "Automatically select based on GPU capability." },
+      { value: "float32", description: "Full precision VAE; highest fidelity, most VRAM." },
+      { value: "float16", description: "Half precision VAE; saves VRAM during encode/decode." },
+      { value: "bfloat16", description: "Brain float VAE; good range on Ampere+ GPUs." },
+    ],
   },
   {
     key: "tf32",
@@ -578,6 +845,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Enables TF32 mode for matrix multiplications on NVIDIA Ampere and newer GPUs. Provides a free speed boost with negligible quality impact for most LoRA training.",
     defaultValue: "true",
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Free speed boost on Ampere+ GPUs with negligible quality impact." },
+      { value: "false", description: "Disable TF32 matmul acceleration." },
+    ],
   },
   {
     key: "torch_compile",
@@ -587,6 +859,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Applies PyTorch 2.x torch.compile to the training model. First epoch is significantly slower due to compilation; subsequent steps can be faster. Experimental — disable if you hit compatibility issues.",
     defaultValue: "false",
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "JIT-compile model; slow first epoch, potentially faster after." },
+      { value: "false", description: "Standard eager execution; more compatible." },
+    ],
   },
   {
     key: "num_dataloader_workers",
@@ -597,6 +874,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Number of worker processes for the PyTorch DataLoader. Values > 0 can overlap data loading with GPU compute. On Windows, keep at 0 unless you've verified multiprocessing stability.",
     defaultValue: "0",
     constraints: "≥ 0",
+    recommendedValue: "0",
+    rangeGuidance: [
+      { range: "0", description: "Main-thread loading; safe default, especially on Windows." },
+      { range: "2–4", description: "Background loading on Linux; overlaps I/O with GPU compute." },
+    ],
   },
   {
     key: "dataloader_pin_memory",
@@ -606,6 +888,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Pins DataLoader memory in page-locked RAM for faster async CPU→GPU transfers. Only effective when num_dataloader_workers > 0.",
     defaultValue: "true",
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Faster CPU→GPU transfers when workers > 0." },
+      { value: "false", description: "Standard pageable memory." },
+    ],
   },
 
   // Checkpointing
@@ -618,6 +905,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "When enabled, saves LoRA checkpoints at regular epoch intervals. Required for mid-training sampling and resume. Disabling also disables sampling during training.",
     defaultValue: "true",
     showInlineHint: false,
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Save intermediate weights; required for sampling and resume." },
+      { value: "false", description: "Only save final LoRA; disables mid-training sampling." },
+    ],
   },
   {
     key: "save_every_n_epochs",
@@ -628,6 +920,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Interval between checkpoint saves. Set to 1 to save every epoch. Larger values reduce disk usage but give fewer restore points and sample images.",
     defaultValue: "1",
     constraints: "≥ 1",
+    recommendedValue: "1",
+    rangeGuidance: [
+      { range: "1", description: "Save every epoch; most restore points and sample images." },
+      { range: "5–10", description: "Less disk usage; fewer checkpoints to compare." },
+    ],
   },
   {
     key: "resume_from_checkpoint",
@@ -637,6 +934,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Filesystem path to an existing checkpoint directory. Training resumes optimizer state, epoch counter, and LoRA weights from this checkpoint. Set via YAML for resume workflows.",
     yamlOnly: true,
+    recommendedValue: "path/to/checkpoint",
   },
 
   // Sampling
@@ -649,6 +947,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Runs image generation after checkpoint saves using prompts from the linked sampling config. Helps monitor training quality without manual inference. Requires checkpointing enabled.",
     defaultValue: "false",
     showInlineHint: false,
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Generate preview images at checkpoints." },
+      { value: "false", description: "No mid-training previews." },
+    ],
   },
   {
     key: "sampling_config_id",
@@ -657,6 +960,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     shortHint: "Reference to a saved sampling config with prompts and sampler settings.",
     description:
       "ID of a sampling configuration stored in the app database. Its prompts, steps, CFG, and scheduler settings are used for mid-training preview generation.",
+    recommendedValue: "linked sampling config",
   },
   {
     key: "sample_every_n_epochs",
@@ -666,6 +970,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "If set, controls sampling frequency independently of save_every_n_epochs. When null, sampling runs on every checkpoint save.",
     yamlOnly: true,
+    recommendedValue: "null (uses save_every_n_epochs)",
   },
   {
     key: "sample_before_training",
@@ -676,6 +981,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "When true, runs sampling once before training begins to capture base-model output for comparison with trained checkpoints.",
     defaultValue: "false",
     yamlOnly: true,
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Capture base-model baseline before training." },
+      { value: "false", description: "Skip pre-training preview." },
+    ],
   },
   {
     key: "sample_prompts",
@@ -686,6 +996,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "List of text prompts for checkpoint preview generation. In the web UI these come from the linked sampling config via resolve_sampling(); inline YAML values are merged at job start. Trigger words from concepts are appended automatically.",
     defaultValue: "[]",
     yamlOnly: true,
+    recommendedValue: "[]",
   },
   {
     key: "sample_negative_prompt",
@@ -696,6 +1007,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Negative prompt text applied during checkpoint sampling. Typically resolved from the linked sampling config rather than set inline in training YAML.",
     defaultValue: '""',
     yamlOnly: true,
+    recommendedValue: '""',
   },
   {
     key: "sample_steps",
@@ -707,6 +1019,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "30",
     constraints: "≥ 1",
     yamlOnly: true,
+    recommendedValue: "30",
+    rangeGuidance: [
+      { range: "15–20", description: "Fast previews; lower quality but quick feedback." },
+      { range: "30", description: "Balanced preview quality and speed." },
+      { range: "40–50", description: "Higher quality previews; slower after each checkpoint." },
+    ],
   },
   {
     key: "sample_cfg_scale",
@@ -718,6 +1036,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "7.5",
     constraints: "> 0",
     yamlOnly: true,
+    recommendedValue: "7.5",
+    rangeGuidance: [
+      { range: "5–6", description: "Softer prompt adherence; more natural previews." },
+      { range: "7–8", description: "SDXL common range; good default for previews." },
+      { range: "10+", description: "Strong guidance; may look oversaturated or artifact-heavy." },
+    ],
   },
   {
     key: "sample_width",
@@ -729,6 +1053,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "null (uses resolution)",
     constraints: "64–2048",
     yamlOnly: true,
+    recommendedValue: "null (uses resolution)",
+    rangeGuidance: [
+      { range: "null", description: "Uses training resolution; simplest and consistent." },
+      { range: "1024", description: "Standard SDXL preview width." },
+      { range: "1280–1536", description: "Wider previews; more VRAM during sampling." },
+    ],
   },
   {
     key: "sample_height",
@@ -740,6 +1070,12 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "null (uses resolution)",
     constraints: "64–2048",
     yamlOnly: true,
+    recommendedValue: "null (uses resolution)",
+    rangeGuidance: [
+      { range: "null", description: "Uses training resolution; simplest and consistent." },
+      { range: "1024", description: "Standard SDXL preview height." },
+      { range: "1280–1536", description: "Taller previews; more VRAM during sampling." },
+    ],
   },
   {
     key: "sample_scheduler",
@@ -751,6 +1087,13 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "euler",
     constraints: "euler | euler_a | ddim | dpm++",
     yamlOnly: true,
+    recommendedValue: "euler",
+    valueOptions: [
+      { value: "euler", description: "Euler sampler; fast and matches most SDXL workflows." },
+      { value: "euler_a", description: "Euler ancestral; adds stochasticity for more varied previews." },
+      { value: "ddim", description: "DDIM deterministic sampler; reproducible previews." },
+      { value: "dpm++", description: "DPM++ solver; higher quality previews at the cost of slower sampling." },
+    ],
   },
   {
     key: "sample_vae_tiling",
@@ -761,6 +1104,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Enables tiled VAE decoding during checkpoint sampling, trading a small speed penalty for lower peak VRAM usage when generating large preview images.",
     defaultValue: "true",
     yamlOnly: true,
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Tile VAE decode to reduce peak VRAM." },
+      { value: "false", description: "Full VAE decode; faster but more VRAM." },
+    ],
   },
   {
     key: "sample_vae_fp32",
@@ -771,6 +1119,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Forces float32 precision during VAE decode in sampling. Can reduce color banding at the cost of extra VRAM and slower decode.",
     defaultValue: "false",
     yamlOnly: true,
+    recommendedValue: "false",
+    valueOptions: [
+      { value: "true", description: "Higher fidelity decode; more VRAM and slower." },
+      { value: "false", description: "Use configured VAE precision." },
+    ],
   },
   {
     key: "sample_offload_unet_before_decode",
@@ -781,6 +1134,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Offloads the UNet from GPU memory before VAE decoding during checkpoint sampling. Helps avoid OOM on consumer GPUs when generating previews at full resolution.",
     defaultValue: "true",
     yamlOnly: true,
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Free GPU memory before VAE decode; helps avoid OOM." },
+      { value: "false", description: "Keep UNet on GPU during decode." },
+    ],
   },
   {
     key: "post_training_sampling_config_id",
@@ -791,6 +1149,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Legacy field for linking a sampling config after training completes. Rejected by config validation in favor of sampling_enabled + sampling_config_id for mid-training previews. Do not use in new configs.",
     yamlOnly: true,
     deprecated: true,
+    recommendedValue: "do not use (use sampling_config_id + sampling_enabled)",
   },
   {
     key: "sample_after_training",
@@ -801,6 +1160,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Deprecated boolean flag for post-training sampling. Config validation rejects this key. Use sampling_enabled with a linked sampling config for preview images during training.",
     yamlOnly: true,
     deprecated: true,
+    recommendedValue: "do not use (use sampling_enabled)",
   },
 
   // Logging
@@ -813,6 +1173,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Enables the built-in UI logger that pushes loss and progress metrics to the job detail page in real time.",
     defaultValue: "true",
     yamlOnly: true,
+    recommendedValue: "true",
+    valueOptions: [
+      { value: "true", description: "Stream metrics to the web UI job page." },
+      { value: "false", description: "File-only logging." },
+    ],
   },
   {
     key: "logging.log_every",
@@ -824,6 +1189,11 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     defaultValue: "1",
     constraints: "≥ 1",
     yamlOnly: true,
+    recommendedValue: "1",
+    rangeGuidance: [
+      { range: "1", description: "Log every step; smoothest UI charts." },
+      { range: "10–50", description: "Reduced I/O for long runs with many steps per epoch." },
+    ],
   },
   {
     key: "logging.log_dir",
@@ -833,6 +1203,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Optional override for log output directory. When null, logs are written under output_dir.",
     yamlOnly: true,
+    recommendedValue: "null (uses output_dir)",
   },
 ];
 
