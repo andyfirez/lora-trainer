@@ -8,6 +8,8 @@ export type ParameterMeta = {
   constraints?: string;
   yamlOnly?: boolean;
   deprecated?: boolean;
+  /** When false, no inline ? hint is shown on the config form. Defaults to true. */
+  showInlineHint?: boolean;
 };
 
 export const TRAIN_SECTION_ORDER = [

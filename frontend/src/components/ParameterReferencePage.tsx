@@ -4,45 +4,78 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { TRAIN_PARAMETER_METADATA } from "@/lib/trainParameterMetadata";
 import { TRAIN_SECTION_ORDER, groupBySection, parameterAnchor } from "@/lib/parameterUtils";
+import type { ParameterMeta } from "@/lib/parameterUtils";
 
-function ParameterEntry({ entry }: { entry: (typeof TRAIN_PARAMETER_METADATA)[number] }) {
+function ParameterRow({
+  entry,
+  expanded,
+  onToggle,
+}: {
+  entry: ParameterMeta;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const anchor = parameterAnchor(entry.key);
+
   return (
-    <article
-      id={anchor}
-      className="scroll-mt-24 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-4 space-y-2"
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold text-white">{entry.label}</h3>
-        {entry.yamlOnly && (
-          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
-            YAML only
-          </span>
+    <div id={anchor} className="scroll-mt-24 border-b border-[var(--border)] last:border-b-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
+      >
+        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-sm font-medium text-white shrink-0">{entry.label}</span>
+          {entry.yamlOnly && (
+            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
+              YAML only
+            </span>
+          )}
+          {entry.deprecated && (
+            <span className="rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-400">
+              Deprecated
+            </span>
+          )}
+          <code className="text-xs text-[var(--muted)] font-mono truncate">{entry.key}</code>
+        </div>
+        <div className="hidden sm:flex items-center gap-4 shrink-0 text-xs text-[var(--muted)]">
+          {entry.defaultValue != null && (
+            <span className="font-mono text-white/80 max-w-[8rem] truncate" title={entry.defaultValue}>
+              {entry.defaultValue}
+            </span>
+          )}
+          {entry.constraints != null && (
+            <span className="font-mono max-w-[10rem] truncate" title={entry.constraints}>
+              {entry.constraints}
+            </span>
+          )}
+        </div>
+        {expanded ? (
+          <ChevronDown size={14} className="text-[var(--muted)] shrink-0" />
+        ) : (
+          <ChevronRight size={14} className="text-[var(--muted)] shrink-0" />
         )}
-        {entry.deprecated && (
-          <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-400">
-            Deprecated
-          </span>
-        )}
-      </div>
-      <code className="block text-xs text-[var(--muted)] font-mono">{entry.key}</code>
-      <p className="text-xs text-[var(--muted)] leading-relaxed">{entry.shortHint}</p>
-      <p className="text-sm text-white/90 leading-relaxed">{entry.description}</p>
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
-        {entry.defaultValue != null && (
-          <div>
-            <dt className="text-[var(--muted)]">Default</dt>
-            <dd className="text-white font-mono mt-0.5">{entry.defaultValue}</dd>
-          </div>
-        )}
-        {entry.constraints != null && (
-          <div>
-            <dt className="text-[var(--muted)]">Valid range</dt>
-            <dd className="text-white font-mono mt-0.5">{entry.constraints}</dd>
-          </div>
-        )}
-      </dl>
-    </article>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-3 pt-0">
+          <p className="text-sm text-white/90 leading-relaxed">{entry.description}</p>
+          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs sm:hidden">
+            {entry.defaultValue != null && (
+              <div>
+                <dt className="text-[var(--muted)] inline">Default: </dt>
+                <dd className="text-white font-mono inline">{entry.defaultValue}</dd>
+              </div>
+            )}
+            {entry.constraints != null && (
+              <div>
+                <dt className="text-[var(--muted)] inline">Range: </dt>
+                <dd className="text-white font-mono inline">{entry.constraints}</dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -51,18 +84,22 @@ function SectionBlock({
   items,
   open,
   onToggle,
+  expandedRows,
+  onToggleRow,
 }: {
   section: string;
-  items: (typeof TRAIN_PARAMETER_METADATA)[number][];
+  items: ParameterMeta[];
   open: boolean;
   onToggle: () => void;
+  expandedRows: Record<string, boolean>;
+  onToggleRow: (key: string) => void;
 }) {
   return (
-    <section className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden">
+    <section id={`section-${parameterAnchor(section)}`} className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden scroll-mt-24">
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-white/5 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/5 transition-colors"
       >
         <div>
           <h2 className="text-base font-semibold text-white">{section}</h2>
@@ -75,9 +112,14 @@ function SectionBlock({
         )}
       </button>
       {open && (
-        <div className="px-5 pb-5 space-y-3 border-t border-[var(--border)] pt-4">
+        <div className="border-t border-[var(--border)]">
           {items.map((entry) => (
-            <ParameterEntry key={entry.key} entry={entry} />
+            <ParameterRow
+              key={entry.key}
+              entry={entry}
+              expanded={expandedRows[entry.key] ?? false}
+              onToggle={() => onToggleRow(entry.key)}
+            />
           ))}
         </div>
       )}
@@ -86,12 +128,14 @@ function SectionBlock({
 }
 
 function sectionForAnchor(
-  sections: { section: string; items: (typeof TRAIN_PARAMETER_METADATA)[number][] }[],
+  sections: { section: string; items: ParameterMeta[] }[],
   anchor: string,
-): string | undefined {
-  return sections.find((group) =>
-    group.items.some((entry) => parameterAnchor(entry.key) === anchor),
-  )?.section;
+): { section: string; key: string } | undefined {
+  for (const group of sections) {
+    const match = group.items.find((entry) => parameterAnchor(entry.key) === anchor);
+    if (match) return { section: group.section, key: match.key };
+  }
+  return undefined;
 }
 
 export default function ParameterReferencePage() {
@@ -108,6 +152,7 @@ export default function ParameterReferencePage() {
     });
     return initial;
   });
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   const readHash = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -122,9 +167,10 @@ export default function ParameterReferencePage() {
 
   useEffect(() => {
     if (!hash) return;
-    const targetSection = sectionForAnchor(sections, hash);
-    if (targetSection) {
-      setOpenSections((prev) => ({ ...prev, [targetSection]: true }));
+    const target = sectionForAnchor(sections, hash);
+    if (target) {
+      setOpenSections((prev) => ({ ...prev, [target.section]: true }));
+      setExpandedRows((prev) => ({ ...prev, [target.key]: true }));
     }
   }, [hash, sections]);
 
@@ -134,10 +180,22 @@ export default function ParameterReferencePage() {
       document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [hash, openSections]);
+  }, [hash, openSections, expandedRows]);
 
   const toggleSection = (section: string) => {
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const toggleRow = (key: string) => {
+    setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const scrollToSection = (section: string) => {
+    const sectionId = `section-${parameterAnchor(section)}`;
+    setOpenSections((prev) => ({ ...prev, [section]: true }));
+    requestAnimationFrame(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   return (
@@ -149,7 +207,21 @@ export default function ParameterReferencePage() {
           speed, and VRAM usage.
         </p>
       </div>
-      <div className="space-y-4">
+      <nav className="flex flex-wrap gap-x-1 gap-y-1 text-xs text-[var(--muted)]">
+        {sections.map((group, index) => (
+          <span key={group.section} className="inline-flex items-center">
+            {index > 0 && <span className="mx-1">·</span>}
+            <button
+              type="button"
+              onClick={() => scrollToSection(group.section)}
+              className="hover:text-white transition-colors"
+            >
+              {group.section}
+            </button>
+          </span>
+        ))}
+      </nav>
+      <div className="space-y-3">
         {sections.map((group) => (
           <SectionBlock
             key={group.section}
@@ -157,6 +229,8 @@ export default function ParameterReferencePage() {
             items={group.items}
             open={openSections[group.section] ?? false}
             onToggle={() => toggleSection(group.section)}
+            expandedRows={expandedRows}
+            onToggleRow={toggleRow}
           />
         ))}
       </div>

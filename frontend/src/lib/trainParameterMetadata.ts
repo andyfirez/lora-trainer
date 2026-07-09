@@ -11,6 +11,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Specifies the SDXL base model to fine-tune. Can be a HuggingFace repo ID (e.g. stabilityai/stable-diffusion-xl-base-1.0) or a local folder containing model weights. The model architecture must match SDXL; using a different base changes style, composition, and what the LoRA can learn.",
     defaultValue: "stabilityai/stable-diffusion-xl-base-1.0",
+    showInlineHint: false,
   },
   {
     key: "output_dir",
@@ -20,6 +21,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Root folder for all training artifacts: intermediate checkpoints, TensorBoard logs, sample images, and the exported LoRA. Use a dedicated path with enough disk space — checkpoints and cached latents can consume several GB per run.",
     defaultValue: "output",
+    showInlineHint: false,
   },
   {
     key: "lora_name",
@@ -29,6 +31,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Human-readable name for the LoRA output file. At training start the app appends a version suffix (_v1, _v2, …) to avoid overwriting previous runs. This name appears in exported .safetensors filenames and job listings.",
     defaultValue: "lora",
+    showInlineHint: false,
   },
   {
     key: "output_format",
@@ -39,6 +42,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Controls the serialization format of the trained LoRA. safetensors is recommended for Kohya/ComfyUI/A1111 compatibility and safe loading. pt (PyTorch) is mainly useful for debugging or custom tooling.",
     defaultValue: "safetensors",
     constraints: "safetensors | pt",
+    showInlineHint: false,
   },
 
   // LoRA
@@ -82,6 +86,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "When enabled, LoRA adapters are attached to UNet attention and feed-forward layers — this is the primary target for visual learning. Disabling UNet training while training text encoders is a niche setup for text-only fine-tuning.",
     defaultValue: "true",
+    showInlineHint: false,
   },
   {
     key: "unet.weight_dtype",
@@ -101,6 +106,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Enables LoRA fine-tuning on the first SDXL text encoder (CLIP ViT-L). Useful when trigger words or captions need stronger semantic binding. Incompatible with caching text encoder outputs while training TEs.",
     defaultValue: "false",
+    showInlineHint: false,
   },
   {
     key: "text_encoder_1.weight_dtype",
@@ -120,6 +126,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Enables LoRA fine-tuning on SDXL's second text encoder (OpenCLIP-G). Typically left disabled unless you need fine-grained caption semantics. Significantly increases memory when combined with UNet training.",
     defaultValue: "false",
+    showInlineHint: false,
   },
   {
     key: "text_encoder_2.weight_dtype",
@@ -152,6 +159,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Total training epochs. More epochs improve learning on larger datasets but risk overfitting on small sets. Combine with repeats per concept and batch size to estimate total steps. Monitor loss and sample images to decide when to stop early.",
     defaultValue: "30",
     constraints: "≥ 1",
+    showInlineHint: false,
   },
   {
     key: "batch_size",
@@ -162,6 +170,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Number of training samples per forward/backward pass. SDXL LoRA training typically uses 1–4 depending on GPU VRAM. Effective batch size = batch_size × gradient_accumulation_steps.",
     defaultValue: "1",
     constraints: "≥ 1",
+    showInlineHint: false,
   },
   {
     key: "gradient_accumulation_steps",
@@ -350,6 +359,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Target resolution for training images. SDXL is trained at 1024×1024; datasets should be preprocessed to match. With bucketing enabled, images are grouped into aspect-ratio buckets near this resolution.",
     defaultValue: "1024",
     constraints: "64–2048",
+    showInlineHint: false,
   },
   {
     key: "enable_bucket",
@@ -359,6 +369,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "When enabled, images are assigned to resolution buckets preserving aspect ratio, reducing distortion from squashing non-square images. Dataset preprocessing must match this setting.",
     defaultValue: "false",
+    showInlineHint: false,
   },
   {
     key: "bucket_reso_steps",
@@ -488,6 +499,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Fixes random number generation for dataset shuffling, noise sampling, and weight initialization. Set a specific integer to reproduce a training run. Omit or leave empty for a random seed each run.",
     defaultValue: "random",
+    showInlineHint: false,
   },
   {
     key: "gradient_checkpointing",
@@ -497,6 +509,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Recomputes intermediate activations during backprop instead of storing them, significantly reducing VRAM at the cost of ~20–30% slower training. Strongly recommended for SDXL LoRA on consumer GPUs.",
     defaultValue: "true",
+    showInlineHint: false,
   },
 
   // Performance
@@ -604,6 +617,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "When enabled, saves LoRA checkpoints at regular epoch intervals. Required for mid-training sampling and resume. Disabling also disables sampling during training.",
     defaultValue: "true",
+    showInlineHint: false,
   },
   {
     key: "save_every_n_epochs",
@@ -634,6 +648,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Runs image generation after checkpoint saves using prompts from the linked sampling config. Helps monitor training quality without manual inference. Requires checkpointing enabled.",
     defaultValue: "false",
+    showInlineHint: false,
   },
   {
     key: "sampling_config_id",
@@ -829,6 +844,6 @@ export function getTrainParameterMeta(key: string): ParameterMeta | undefined {
 
 export function trainHint(key: string): { hint?: string; hintAnchor?: string } {
   const meta = getTrainParameterMeta(key);
-  if (!meta) return {};
+  if (!meta || meta.showInlineHint === false) return {};
   return { hint: meta.shortHint, hintAnchor: meta.key };
 }

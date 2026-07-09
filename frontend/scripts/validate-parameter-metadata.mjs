@@ -15,8 +15,18 @@ const source = readFileSync(metadataPath, "utf8");
 // Extract keys from the metadata array (simple regex parse — no TS compile needed)
 const keyMatches = [...source.matchAll(/key:\s*"([^"]+)"/g)].map((m) => m[1]);
 const yamlOnlyCount = (source.match(/yamlOnly:\s*true/g) ?? []).length;
+const noInlineHintCount = (source.match(/showInlineHint:\s*false/g) ?? []).length;
+const inlineHintCount = keyMatches.length - noInlineHintCount;
 
 assert.ok(keyMatches.length >= 50, `Expected at least 50 parameters, found ${keyMatches.length}`);
+assert.ok(
+  noInlineHintCount >= 15,
+  `Expected at least 15 showInlineHint: false entries, found ${noInlineHintCount}`,
+);
+assert.ok(
+  inlineHintCount >= 25 && inlineHintCount <= 70,
+  `Expected 25–70 fields with inline hints, found ${inlineHintCount}`,
+);
 
 const uniqueKeys = new Set(keyMatches);
 assert.equal(uniqueKeys.size, keyMatches.length, "Duplicate parameter keys found");
@@ -107,4 +117,6 @@ const anchors = keyMatches.map(parameterAnchor);
 const uniqueAnchors = new Set(anchors);
 assert.equal(uniqueAnchors.size, anchors.length, "Duplicate parameter anchors found");
 
-console.log(`OK: ${keyMatches.length} parameters validated (${yamlOnlyCount} YAML-only)`);
+console.log(
+  `OK: ${keyMatches.length} parameters validated (${yamlOnlyCount} YAML-only, ${inlineHintCount} with inline hints)`,
+);
