@@ -40,14 +40,19 @@
   --sidebar-collapsed: 4rem;
 }
 
+html {
+  --font-display: var(--font-inter);
+  --font-body: var(--font-inter);
+}
+
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body), "Inter", system-ui, -apple-system, sans-serif;
 }
 
 h1, h2, h3, .font-display {
-  font-family: var(--font-display), system-ui, sans-serif;
+  font-family: var(--font-display), "Inter", system-ui, sans-serif;
 }
 
 /* Atmospheric background */

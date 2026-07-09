@@ -14,19 +14,21 @@ Next.js 15, React 19, TypeScript, Tailwind CSS 3.4. No external UI component lib
 
 ## Typography
 
+Single-family stack via `next/font/google` **Inter** (weights 400, 500, 600, 700). Both `--font-display` and `--font-body` map to Inter for a conventional, readable UI.
+
 | Role | Family | Usage |
 |------|--------|-------|
-| Display | Syne | Page titles, section headings, brand |
-| Body | IBM Plex Sans | UI copy, forms, tables, data |
-| Mono | IBM Plex Sans (tabular) | Logs, paths, metrics |
+| Display | Inter (600–700) | Page titles, section headings, brand |
+| Body | Inter (400–500) | UI copy, forms, tables, data |
+| Mono | System `font-mono` or Inter + `tabular-nums` | Logs, paths, metrics |
 
 ### Type scale
 
 - `text-xs` (12px) — labels, captions, badges
 - `text-sm` (14px) — body, table cells, form inputs
 - `text-base` (16px) — default body
-- `text-lg` (18px) — section titles
-- `text-2xl` (24px) — page titles (font-display)
+- `text-lg` (18px) — section titles (`font-semibold`)
+- `text-2xl` (24px) — page titles (`font-bold font-display`)
 
 ## Palette
 
