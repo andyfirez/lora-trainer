@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ListOrdered, Database, FileCog } from "lucide-react";
+import { LayoutDashboard, ListOrdered, Database, FileCog, BookOpen } from "lucide-react";
 import classNames from "classnames";
 
 const NAV = [
@@ -10,6 +10,7 @@ const NAV = [
   { href: "/configs", label: "Configs", icon: FileCog },
   { href: "/jobs", label: "Jobs", icon: ListOrdered },
   { href: "/datasets", label: "Datasets", icon: Database },
+  { href: "/parameters", label: "Parameters", icon: BookOpen },
 ];
 
 export default function Sidebar() {

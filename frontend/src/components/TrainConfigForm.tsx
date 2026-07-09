@@ -6,8 +6,10 @@ import Link from "next/link";
 import { Plus, X } from "lucide-react";
 import { parse as yamlParse } from "yaml";
 import PathInput from "@/components/PathInput";
+import FieldHint from "@/components/FieldHint";
 import { configsApi } from "@/lib/api/configs";
 import { datasetsApi } from "@/lib/api/datasets";
+import { trainHint } from "@/lib/trainParameterMetadata";
 import {
   applyOptimizerPreset,
   optimizerOptions,
@@ -34,10 +36,23 @@ const labelClass = "block text-xs font-medium text-[var(--muted)] mb-1";
 const sectionClass = "bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5 space-y-4";
 const sectionTitleClass = "text-sm font-semibold text-white mb-3";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  hint,
+  hintAnchor,
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+  hintAnchor?: string;
+}) {
   return (
     <div>
-      <label className={labelClass}>{label}</label>
+      <div className="flex items-center mb-1">
+        <label className={`${labelClass} mb-0`}>{label}</label>
+        {hint && <FieldHint hint={hint} hintAnchor={hintAnchor} />}
+      </div>
       {children}
     </div>
   );
@@ -48,14 +63,17 @@ function TextInput({
   value,
   onChange,
   placeholder,
+  paramKey,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  paramKey?: string;
 }) {
+  const hints = paramKey ? trainHint(paramKey) : {};
   return (
-    <Field label={label}>
+    <Field label={label} hint={hints.hint} hintAnchor={hints.hintAnchor}>
       <input
         type="text"
         className={inputClass}
@@ -76,6 +94,7 @@ function NumberInput({
   step,
   placeholder,
   disabled,
+  paramKey,
 }: {
   label: string;
   value: number | null | undefined;
@@ -85,9 +104,11 @@ function NumberInput({
   step?: number;
   placeholder?: string;
   disabled?: boolean;
+  paramKey?: string;
 }) {
+  const hints = paramKey ? trainHint(paramKey) : {};
   return (
-    <Field label={label}>
+    <Field label={label} hint={hints.hint} hintAnchor={hints.hintAnchor}>
       <input
         type="number"
         className={inputClass}
@@ -111,14 +132,17 @@ function SelectInput({
   value,
   onChange,
   options,
+  paramKey,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string; disabled?: boolean }[];
+  paramKey?: string;
 }) {
+  const hints = paramKey ? trainHint(paramKey) : {};
   return (
-    <Field label={label}>
+    <Field label={label} hint={hints.hint} hintAnchor={hints.hintAnchor}>
       <select className={selectClass} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => (
           <option key={o.value} value={o.value} disabled={o.disabled}>
@@ -135,12 +159,15 @@ function CheckboxInput({
   checked,
   onChange,
   disabled,
+  paramKey,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
+  paramKey?: string;
 }) {
+  const hints = paramKey ? trainHint(paramKey) : {};
   return (
     <label className={`flex items-center gap-2 ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
       <input
@@ -150,7 +177,10 @@ function CheckboxInput({
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <span className="text-sm text-white">{label}</span>
+      <span className="text-sm text-white flex items-center">
+        {label}
+        {hints.hint && <FieldHint hint={hints.hint} hintAnchor={hints.hintAnchor} />}
+      </span>
     </label>
   );
 }
@@ -396,6 +426,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             placeholder="stabilityai/stable-diffusion-xl-base-1.0 or D:\models\sdxl"
             pickerTitle="Select Base Model"
             kind="model"
+            {...trainHint("base_model_name")}
           />
           <PathInput
             label="Output Folder"
@@ -404,6 +435,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             placeholder="D:\loras\output"
             pickerTitle="Select Output Folder"
             kind="directory"
+            {...trainHint("output_dir")}
           />
         </div>
         <TextInput
@@ -411,6 +443,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           value={stripLoraVersionSuffix(config.lora_name ?? "")}
           onChange={(v) => set("lora_name", v)}
           placeholder="my_lora"
+          paramKey="lora_name"
         />
         <p className="text-xs text-[var(--muted)] -mt-2">
           Version suffix <code className="text-[var(--muted)]">_vN</code> is added to output files automatically when training starts.
@@ -419,6 +452,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           label="Output Format"
           value={config.output_format ?? "safetensors"}
           onChange={(v) => set("output_format", v)}
+          paramKey="output_format"
           options={[
             { value: "safetensors", label: "safetensors" },
             { value: "pt", label: "pt" },
@@ -437,6 +471,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={1}
             max={256}
             placeholder="32"
+            paramKey="lora_rank"
           />
           <NumberInput
             label="Alpha"
@@ -445,6 +480,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={0}
             step={0.1}
             placeholder="32.0"
+            paramKey="lora_alpha"
           />
           <NumberInput
             label="Dropout"
@@ -454,6 +490,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             max={0.999}
             step={0.01}
             placeholder="0.0"
+            paramKey="lora_dropout"
           />
         </div>
       </section>
@@ -471,32 +508,46 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
               </tr>
             </thead>
             <tbody className="space-y-2">
-              {(["unet", "text_encoder_1", "text_encoder_2"] as const).map((part) => (
+              {(["unet", "text_encoder_1", "text_encoder_2"] as const).map((part) => {
+                const trainHints = trainHint(`${part}.train`);
+                const dtypeHints = trainHint(`${part}.weight_dtype`);
+                return (
                 <tr key={part} className="border-t border-[var(--border)]">
                   <td className="py-2 pr-4 text-white font-mono text-xs">{part}</td>
                   <td className="py-2 pr-4">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4 accent-[var(--accent)]"
-                      checked={!!(config[part]?.train ?? (part === "unet"))}
-                      onChange={(e) => setNested(part, "train", e.target.checked)}
-                    />
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-[var(--accent)]"
+                        checked={!!(config[part]?.train ?? (part === "unet"))}
+                        onChange={(e) => setNested(part, "train", e.target.checked)}
+                      />
+                      {trainHints.hint && (
+                        <FieldHint hint={trainHints.hint} hintAnchor={trainHints.hintAnchor} />
+                      )}
+                    </div>
                   </td>
                   <td className="py-2">
-                    <select
-                      className="rounded-lg bg-[var(--bg)] border border-[var(--border)] px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--accent)]"
-                      value={config[part]?.weight_dtype ?? "float16"}
-                      onChange={(e) => setNested(part, "weight_dtype", e.target.value)}
-                    >
-                      {weightDtypeOptions.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-1">
+                      <select
+                        className="rounded-lg bg-[var(--bg)] border border-[var(--border)] px-2 py-1 text-xs text-white focus:outline-none focus:border-[var(--accent)]"
+                        value={config[part]?.weight_dtype ?? "float16"}
+                        onChange={(e) => setNested(part, "weight_dtype", e.target.value)}
+                      >
+                        {weightDtypeOptions.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      {dtypeHints.hint && (
+                        <FieldHint hint={dtypeHints.hint} hintAnchor={dtypeHints.hintAnchor} />
+                      )}
+                    </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
@@ -508,6 +559,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={1}
             step={1}
             placeholder="2"
+            paramKey="clip_skip"
           />
         </div>
         <p className="text-xs text-[var(--muted)]">
@@ -519,14 +571,15 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
       <section className={sectionClass}>
         <div className={sectionTitleClass}>Training</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <NumberInput label="Epochs" value={config.epochs} onChange={(v) => set("epochs", v)} min={1} placeholder="30" />
-          <NumberInput label="Batch Size" value={config.batch_size} onChange={(v) => set("batch_size", v)} min={1} placeholder="1" />
+          <NumberInput label="Epochs" value={config.epochs} onChange={(v) => set("epochs", v)} min={1} placeholder="30" paramKey="epochs" />
+          <NumberInput label="Batch Size" value={config.batch_size} onChange={(v) => set("batch_size", v)} min={1} placeholder="1" paramKey="batch_size" />
           <NumberInput
             label="Grad Accumulation Steps"
             value={config.gradient_accumulation_steps}
             onChange={(v) => set("gradient_accumulation_steps", v)}
             min={1}
             placeholder="1"
+            paramKey="gradient_accumulation_steps"
           />
           <NumberInput
             label="Learning Rate"
@@ -535,12 +588,14 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={0}
             step={0.00001}
             placeholder="0.00005"
+            paramKey="learning_rate"
           />
           <SelectInput
             label="LR Scheduler"
             value={config.lr_scheduler ?? "constant"}
             onChange={(v) => set("lr_scheduler", v)}
             options={lrSchedulerOptions}
+            paramKey="lr_scheduler"
           />
           <NumberInput
             label="LR Warmup Steps"
@@ -548,6 +603,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             onChange={(v) => set("lr_warmup_steps", v)}
             min={0}
             placeholder="0"
+            paramKey="lr_warmup_steps"
           />
           <NumberInput
             label="Min SNR Gamma"
@@ -556,6 +612,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={0}
             step={0.5}
             placeholder="5"
+            paramKey="min_snr_gamma"
           />
           <NumberInput
             label="Noise Offset"
@@ -564,6 +621,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={0}
             step={0.001}
             placeholder="0.0357"
+            paramKey="noise_offset"
           />
         </div>
       </section>
@@ -577,6 +635,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             value={optimizerType}
             onChange={(v) => setOptimizerType(v as OptimizerType)}
             options={[...optimizerOptions]}
+            paramKey="optimizer.type"
           />
           {(isAdamFamily || isProdigy) && (
             <>
@@ -587,6 +646,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 min={0}
                 step={0.01}
                 placeholder="0.01"
+                paramKey="optimizer.weight_decay"
               />
               <NumberInput
                 label="Beta 1"
@@ -596,6 +656,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 max={0.999}
                 step={0.01}
                 placeholder="0.9"
+                paramKey="optimizer.beta1"
               />
               <NumberInput
                 label="Beta 2"
@@ -605,6 +666,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 max={0.999}
                 step={0.001}
                 placeholder="0.999"
+                paramKey="optimizer.beta2"
               />
             </>
           )}
@@ -614,16 +676,19 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 label="Relative Step"
                 checked={config.optimizer?.relative_step ?? false}
                 onChange={(v) => setNested("optimizer", "relative_step", v)}
+                paramKey="optimizer.relative_step"
               />
               <CheckboxInput
                 label="Scale Parameter"
                 checked={config.optimizer?.scale_parameter ?? false}
                 onChange={(v) => setNested("optimizer", "scale_parameter", v)}
+                paramKey="optimizer.scale_parameter"
               />
               <CheckboxInput
                 label="Warmup Init"
                 checked={config.optimizer?.warmup_init ?? false}
                 onChange={(v) => setNested("optimizer", "warmup_init", v)}
+                paramKey="optimizer.warmup_init"
               />
             </>
           )}
@@ -633,16 +698,19 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 label="Decouple"
                 checked={config.optimizer?.decouple ?? true}
                 onChange={(v) => setNested("optimizer", "decouple", v)}
+                paramKey="optimizer.decouple"
               />
               <CheckboxInput
                 label="Use Bias Correction"
                 checked={config.optimizer?.use_bias_correction ?? true}
                 onChange={(v) => setNested("optimizer", "use_bias_correction", v)}
+                paramKey="optimizer.use_bias_correction"
               />
               <CheckboxInput
                 label="Safeguard Warmup"
                 checked={config.optimizer?.safeguard_warmup ?? true}
                 onChange={(v) => setNested("optimizer", "safeguard_warmup", v)}
+                paramKey="optimizer.safeguard_warmup"
               />
               <NumberInput
                 label="d0"
@@ -651,6 +719,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 min={0}
                 step={0.00001}
                 placeholder="0.00001"
+                paramKey="optimizer.d0"
               />
               <NumberInput
                 label="d Coef"
@@ -659,6 +728,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 min={0}
                 step={0.1}
                 placeholder="1.0"
+                paramKey="optimizer.d_coef"
               />
             </>
           )}
@@ -676,6 +746,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           max={2048}
           step={64}
           placeholder="1024"
+          paramKey="resolution"
         />
         <label className="flex items-center gap-2 text-sm text-white mt-2 cursor-pointer">
           <input
@@ -684,7 +755,12 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             onChange={(e) => set("enable_bucket", e.target.checked)}
             className="rounded"
           />
-          Enable aspect-ratio bucketing
+          <span className="flex items-center">
+            Enable aspect-ratio bucketing
+            {trainHint("enable_bucket").hint && (
+              <FieldHint hint={trainHint("enable_bucket").hint!} hintAnchor="enable_bucket" />
+            )}
+          </span>
         </label>
         <div className="space-y-3 mt-2">
           <div className="text-xs font-medium text-[var(--muted)]">Concepts</div>
@@ -723,6 +799,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                           value={concept.dataset_id != null ? String(concept.dataset_id) : ""}
                           onChange={(v) => updateConcept(i, "dataset_id", Number(v))}
                           options={[{ value: "", label: "Select dataset…" }, ...datasetOptions]}
+                          paramKey="concepts.dataset_id"
                         />
                         {selectedDataset && (
                           <p className="text-xs text-[var(--muted)] mt-1 break-all">{selectedDataset.image_dir}</p>
@@ -740,7 +817,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                           <p className="text-xs text-red-400 mt-1">Dataset not found</p>
                         )}
                       </div>
-                      <Field label="Trigger Words">
+                      <Field label="Trigger Words" {...trainHint("concepts.trigger_words")}>
                         <input
                           type="text"
                           className={inputClass}
@@ -758,7 +835,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                           placeholder="ohwx, person"
                         />
                       </Field>
-                      <Field label="Caption Extension">
+                      <Field label="Caption Extension" {...trainHint("concepts.caption_extension")}>
                         <input
                           type="text"
                           className={inputClass}
@@ -767,7 +844,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                           placeholder=".txt"
                         />
                       </Field>
-                      <Field label="Repeats">
+                      <Field label="Repeats" {...trainHint("concepts.repeats")}>
                         <input
                           type="number"
                           className={inputClass}
@@ -801,6 +878,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             value={config.mixed_precision ?? "bfloat16"}
             onChange={(v) => set("mixed_precision", v)}
             options={weightDtypeOptions}
+            paramKey="mixed_precision"
           />
           <NumberInput
             label="Seed (optional)"
@@ -808,12 +886,14 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             onChange={(v) => set("seed", v)}
             min={0}
             placeholder="random"
+            paramKey="seed"
           />
           <div className="flex items-center pb-1">
             <CheckboxInput
               label="Gradient Checkpointing"
               checked={config.gradient_checkpointing ?? true}
               onChange={(v) => set("gradient_checkpointing", v)}
+              paramKey="gradient_checkpointing"
             />
           </div>
         </div>
@@ -831,11 +911,13 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
               label="Cache Latents (RAM)"
               checked={cacheLatentsEnabled}
               onChange={(v) => set("cache_latents", v)}
+              paramKey="cache_latents"
             />
             <CheckboxInput
               label="Cache Text Encoder Outputs (RAM)"
               checked={cacheTextEncoderEnabled}
               onChange={(v) => set("cache_text_encoder_outputs", v)}
+              paramKey="cache_text_encoder_outputs"
             />
             <div className="space-y-1">
               <CheckboxInput
@@ -843,6 +925,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 checked={config.cache_latents_to_disk ?? false}
                 onChange={(v) => set("cache_latents_to_disk", v)}
                 disabled={!cacheLatentsEnabled}
+                paramKey="cache_latents_to_disk"
               />
               {!cacheLatentsEnabled && (
                 <p className="text-xs text-[var(--muted)]">Requires RAM caching to be enabled.</p>
@@ -854,6 +937,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 checked={config.cache_text_encoder_outputs_to_disk ?? false}
                 onChange={(v) => set("cache_text_encoder_outputs_to_disk", v)}
                 disabled={!cacheTextEncoderEnabled}
+                paramKey="cache_text_encoder_outputs_to_disk"
               />
               {!cacheTextEncoderEnabled && (
                 <p className="text-xs text-[var(--muted)]">Requires RAM caching to be enabled.</p>
@@ -873,6 +957,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             label="Attention Mechanism"
             value={config.attention_mechanism ?? "sdpa"}
             onChange={(v) => set("attention_mechanism", v)}
+            paramKey="attention_mechanism"
             options={[
               { value: "sdpa", label: "SDPA (default, PyTorch 2.x)" },
               { value: "xformers", label: "xformers" },
@@ -884,11 +969,13 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
               label="TF32 (Ampere+ GPUs)"
               checked={config.tf32 ?? true}
               onChange={(v) => set("tf32", v)}
+              paramKey="tf32"
             />
             <CheckboxInput
               label="torch.compile (slower start)"
               checked={config.torch_compile ?? false}
               onChange={(v) => set("torch_compile", v)}
+              paramKey="torch_compile"
             />
           </div>
         </div>
@@ -901,12 +988,14 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             onChange={(v) => set("num_dataloader_workers", v ?? 0)}
             min={0}
             placeholder="0"
+            paramKey="num_dataloader_workers"
           />
           <div className="flex items-end pb-1">
             <CheckboxInput
               label="Pin Memory (requires workers > 0)"
               checked={config.dataloader_pin_memory ?? true}
               onChange={(v) => set("dataloader_pin_memory", v)}
+              paramKey="dataloader_pin_memory"
             />
           </div>
         </div>
@@ -920,6 +1009,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             label="Enable intermediate checkpoints"
             checked={checkpointingEnabled}
             onChange={(v) => set("checkpointing_enabled", v)}
+            paramKey="checkpointing_enabled"
           />
           <NumberInput
             label="Save Every N Epochs"
@@ -928,6 +1018,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={1}
             placeholder="1"
             disabled={!checkpointingEnabled}
+            paramKey="save_every_n_epochs"
           />
         </div>
       </section>
@@ -941,6 +1032,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             checked={samplingEnabled}
             onChange={(v) => set("sampling_enabled", v)}
             disabled={!checkpointingEnabled}
+            paramKey="sampling_enabled"
           />
           {!checkpointingEnabled && (
             <p className="text-xs text-[var(--muted)]">Sampling requires checkpointing to be enabled.</p>
@@ -969,6 +1061,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                     value={config.sampling_config_id != null ? String(config.sampling_config_id) : ""}
                     onChange={(v) => set("sampling_config_id", v ? Number(v) : null)}
                     options={[{ value: "", label: "None" }, ...samplingConfigOptions]}
+                    paramKey="sampling_config_id"
                   />
                   {samplingEnabled && selectedSamplingPreview && (
                     <p className="text-xs text-[var(--muted)]">

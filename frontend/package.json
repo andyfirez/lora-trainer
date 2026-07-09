@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:unit": "node scripts/validate-parameter-metadata.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

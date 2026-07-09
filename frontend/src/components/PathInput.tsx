@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FolderOpen, Loader2 } from "lucide-react";
+import FieldHint from "@/components/FieldHint";
 import { filesApi, type PickKind } from "@/lib/api/files";
 
 const inputClass =
@@ -14,6 +15,8 @@ interface PathInputProps {
   pickerTitle: string;
   kind?: PickKind;
   placeholder?: string;
+  hint?: string;
+  hintAnchor?: string;
 }
 
 export default function PathInput({
@@ -23,6 +26,8 @@ export default function PathInput({
   pickerTitle,
   kind = "file",
   placeholder,
+  hint,
+  hintAnchor,
 }: PathInputProps) {
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +51,10 @@ export default function PathInput({
 
   return (
     <div>
-      <label className="block text-xs font-medium text-[var(--muted)] mb-1">{label}</label>
+      <div className="flex items-center mb-1">
+        <label className="block text-xs font-medium text-[var(--muted)]">{label}</label>
+        {hint && <FieldHint hint={hint} hintAnchor={hintAnchor} />}
+      </div>
       <div className="flex gap-2">
         <input
           type="text"
