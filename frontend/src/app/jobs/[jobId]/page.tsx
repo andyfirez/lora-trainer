@@ -13,6 +13,9 @@ import StatusBadge from "@/components/StatusBadge";
 import TrainingJobPanel from "@/components/TrainingJobPanel";
 import SamplingJobPanel from "@/components/SamplingJobPanel";
 import TaggingJobPanel from "@/components/TaggingJobPanel";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import { ModalError } from "@/components/ui/Modal";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -36,9 +39,7 @@ export default function JobDetailPage({ params }: Props) {
   const prevJobStatusRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!job) {
-      return;
-    }
+    if (!job) return;
     const prevStatus = prevJobStatusRef.current;
     if (
       job.job_type === "training" &&
@@ -53,12 +54,12 @@ export default function JobDetailPage({ params }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-[var(--muted)] py-20">
+      <div className="flex items-center gap-2 text-muted py-20">
         <Loader2 className="animate-spin" size={18} /> Loading…
       </div>
     );
   }
-  if (!job) return <div className="text-red-400">Job not found</div>;
+  if (!job) return <div className="text-error">Job not found</div>;
 
   const isTraining = job.job_type === "training";
   const isTagging = job.job_type === "tagging";
@@ -94,9 +95,7 @@ export default function JobDetailPage({ params }: Props) {
   };
   const handleRunSampling = async () => {
     const samplingConfigId = job.training?.sampling_config_id;
-    if (samplingConfigId == null) {
-      return;
-    }
+    if (samplingConfigId == null) return;
     setSamplingError(null);
     setSamplingLoading(true);
     try {
@@ -118,54 +117,41 @@ export default function JobDetailPage({ params }: Props) {
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <Link href="/jobs" className="p-2 rounded-lg hover:bg-white/5 text-[var(--muted)] hover:text-white">
+        <Link href="/jobs" className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-text" aria-label="Back to jobs">
           <ArrowLeft size={18} />
         </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">{job.name}</h1>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold text-text font-display">{job.name}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <StatusBadge status={job.status} />
-            <span className="text-xs text-[var(--muted)] capitalize">{job.job_type}</span>
-            {job.pid && <span className="text-xs text-[var(--muted)]">PID {job.pid}</span>}
+            <span className="text-xs text-muted capitalize">{job.job_type}</span>
+            {job.pid && <span className="text-xs text-muted">PID {job.pid}</span>}
             {job.config_id != null && (
-              <Link href={`/configs/${job.config_id}`} className="text-xs text-[var(--accent)] hover:underline">
+              <Link href={`/configs/${job.config_id}`} className="text-xs text-accent hover:underline">
                 Config #{job.config_id}
               </Link>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           {showRunSampling && (
-            <button
-              onClick={() => void handleRunSampling()}
-              disabled={samplingLoading}
-              className="flex items-center gap-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-60 text-white rounded-lg px-3 py-1.5 text-sm"
-            >
+            <Button variant="sampling" size="sm" onClick={() => void handleRunSampling()} disabled={samplingLoading}>
               {samplingLoading ? <Loader2 size={13} className="animate-spin" /> : <Images size={13} />}
               Run Sampling
-            </button>
+            </Button>
           )}
           {(job.status === "pending" || job.status === "failed" || job.status === "cancelled") && (
-            <button
-              onClick={() => void handleEnqueue()}
-              className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg px-3 py-1.5 text-sm"
-            >
+            <Button variant="success" size="sm" onClick={() => void handleEnqueue()}>
               <Play size={13} /> Enqueue
-            </button>
+            </Button>
           )}
           {(job.status === "failed" || job.status === "cancelled") && job.can_resume && isTraining && (
-            <button
-              onClick={() => void handleResume()}
-              className="flex items-center gap-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-lg px-3 py-1.5 text-sm"
-            >
+            <Button variant="primary" size="sm" onClick={() => void handleResume()} className="bg-running hover:bg-running/90">
               <Play size={13} /> Resume
-            </button>
+            </Button>
           )}
           {(job.status === "queued" || job.status === "pending" || job.status === "running") && (
-            <button
-              onClick={() => void handleCancel()}
-              className="flex items-center gap-1.5 bg-red-700 hover:bg-red-600 text-white rounded-lg px-3 py-1.5 text-sm"
-            >
+            <Button variant="danger" size="sm" onClick={() => void handleCancel()}>
               <Square size={13} />{" "}
               {job.status === "running"
                 ? isTraining
@@ -174,22 +160,15 @@ export default function JobDetailPage({ params }: Props) {
                     ? "Stop Tagging"
                     : "Stop Sampling"
                 : "Cancel"}
-            </button>
+            </Button>
           )}
-          <button
-            onClick={handleDownloadYaml}
-            className="flex items-center gap-1.5 border border-[var(--border)] hover:bg-white/5 text-[var(--muted)] hover:text-white rounded-lg px-3 py-1.5 text-sm"
-          >
+          <Button variant="secondary" size="sm" onClick={handleDownloadYaml}>
             <Download size={13} /> YAML
-          </button>
+          </Button>
         </div>
       </div>
 
-      {samplingError && (
-        <div className="rounded-lg bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 text-sm">
-          {samplingError}
-        </div>
-      )}
+      {samplingError && <ModalError>{samplingError}</ModalError>}
 
       {isTraining ? (
         <TrainingJobPanel job={job} lossGraphRunKey={lossGraphRunKey} />
@@ -200,8 +179,8 @@ export default function JobDetailPage({ params }: Props) {
       )}
 
       <div className="space-y-2">
-        <h2 className="text-sm font-medium text-[var(--muted)]">Config YAML</h2>
-        <div className="rounded-xl overflow-hidden border border-[var(--border)]" style={{ height: 400 }}>
+        <h2 className="text-sm font-medium text-muted">Config YAML</h2>
+        <Card padding="none" className="overflow-hidden" style={{ height: 400 }}>
           <MonacoEditor
             height="100%"
             language="yaml"
@@ -209,7 +188,7 @@ export default function JobDetailPage({ params }: Props) {
             value={job.config_yaml}
             options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false }}
           />
-        </div>
+        </Card>
       </div>
     </div>
   );

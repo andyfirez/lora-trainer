@@ -7,6 +7,16 @@ import { queuesApi } from "@/lib/api/queues";
 import StatusBadge from "@/components/StatusBadge";
 import ProgressTimingInfo from "@/components/ProgressTimingInfo";
 import { ListOrdered } from "lucide-react";
+import PageHeader from "@/components/ui/PageHeader";
+import Card, { CardTitle } from "@/components/ui/Card";
+import { cn } from "@/lib/cn";
+
+const STAT_CARDS = [
+  { label: "Running", key: "running" as const, color: "text-running", delay: "" },
+  { label: "Queued", key: "queued" as const, color: "text-warning", delay: "animate-fade-up-delay-1" },
+  { label: "Completed", key: "completed" as const, color: "text-success", delay: "animate-fade-up-delay-2" },
+  { label: "Failed", key: "failed" as const, color: "text-error", delay: "animate-fade-up-delay-3" },
+];
 
 export default function DashboardPage() {
   const { data: jobs } = useSWR("/jobs", () => jobsApi.list(), {
@@ -14,61 +24,59 @@ export default function DashboardPage() {
   });
   const { data: queue } = useSWR("/queues", () => queuesApi.list(), { refreshInterval: 5000 });
 
+  const counts = {
+    running: jobs?.filter((j) => j.status === "running").length ?? 0,
+    queued: jobs?.filter((j) => j.status === "queued").length ?? 0,
+    completed: jobs?.filter((j) => j.status === "completed").length ?? 0,
+    failed: jobs?.filter((j) => j.status === "failed").length ?? 0,
+  };
   const runningJobs = jobs?.filter((j) => j.status === "running") ?? [];
-  const queued = jobs?.filter((j) => j.status === "queued") ?? [];
-  const completed = jobs?.filter((j) => j.status === "completed") ?? [];
-  const failed = jobs?.filter((j) => j.status === "failed") ?? [];
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-[var(--muted)] mt-1">Overview of training and sampling jobs</p>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        description="Overview of training and sampling jobs"
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Running", value: runningJobs.length, color: "text-blue-400" },
-          { label: "Queued", value: queued.length, color: "text-yellow-400" },
-          { label: "Completed", value: completed.length, color: "text-green-400" },
-          { label: "Failed", value: failed.length, color: "text-red-400" },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5">
-            <div className={`text-3xl font-bold ${color}`}>{value}</div>
-            <div className="text-[var(--muted)] text-sm mt-1">{label}</div>
-          </div>
+        {STAT_CARDS.map(({ label, key, color, delay }) => (
+          <Card key={label} className={cn("animate-fade-up", delay)}>
+            <div className={cn("text-3xl font-bold font-display", color)}>{counts[key]}</div>
+            <div className="text-muted text-sm mt-1">{label}</div>
+          </Card>
         ))}
       </div>
 
       {runningJobs.length > 0 && (
-        <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-6 space-y-6">
-          <h2 className="text-lg font-semibold text-white">Active Jobs</h2>
+        <Card padding="lg" className="space-y-6">
+          <CardTitle>Active Jobs</CardTitle>
           {runningJobs.map((job) => {
             const pct =
               job.progress_step != null && job.progress_total != null && job.progress_total > 0
                 ? Math.round((job.progress_step / job.progress_total) * 100)
                 : null;
             const isSampling = job.job_type === "sampling";
-            const barClass = isSampling ? "bg-purple-500" : "bg-[var(--accent)]";
-            const linkClass = isSampling ? "hover:text-purple-400" : "hover:text-[var(--accent)]";
+            const barClass = isSampling ? "bg-sampling" : "bg-accent";
+            const linkClass = isSampling ? "hover:text-sampling" : "hover:text-accent";
 
             return (
               <div key={job.id} className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Link href={`/jobs/${job.id}`} className={`font-medium text-white ${linkClass}`}>
+                  <Link href={`/jobs/${job.id}`} className={cn("font-medium text-text", linkClass)}>
                     {job.name}
                   </Link>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-[var(--muted)] capitalize">{job.job_type}</span>
+                    <span className="text-xs text-muted capitalize">{job.job_type}</span>
                     <StatusBadge status={job.status} />
                   </div>
                 </div>
                 {isSampling && job.sampling?.progress_status && (
-                  <div className="text-xs text-[var(--muted)]">{job.sampling.progress_status}</div>
+                  <div className="text-xs text-muted">{job.sampling.progress_status}</div>
                 )}
                 {pct != null && (
                   <div>
-                    <div className="flex justify-between text-xs text-[var(--muted)] mb-1">
+                    <div className="flex justify-between text-xs text-muted mb-1">
                       <span>
                         {!isSampling &&
                           job.training?.progress_epoch != null &&
@@ -79,9 +87,9 @@ export default function DashboardPage() {
                       </span>
                       <span>{pct}%</span>
                     </div>
-                    <div className="bg-[var(--border)] rounded-full h-2">
+                    <div className="bg-border rounded-full h-2">
                       <div
-                        className={`${barClass} h-2 rounded-full transition-all duration-500`}
+                        className={cn(barClass, "h-2 rounded-full transition-all duration-500")}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -93,7 +101,7 @@ export default function DashboardPage() {
                       className="mt-1"
                     />
                     {!isSampling && job.training?.progress_avr_loss != null && (
-                      <div className="text-xs text-[var(--muted)] mt-1">
+                      <div className="text-xs text-muted mt-1">
                         avr_loss {job.training.progress_avr_loss.toFixed(4)}
                       </div>
                     )}
@@ -102,42 +110,42 @@ export default function DashboardPage() {
               </div>
             );
           })}
-        </div>
+        </Card>
       )}
 
       {(queue?.length ?? 0) > 0 && (
-        <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-6">
+        <Card padding="lg">
           <div className="flex items-center gap-2 mb-4">
-            <ListOrdered size={18} className="text-[var(--muted)]" />
-            <h2 className="text-lg font-semibold text-white">Queue</h2>
-            <span className="ml-auto text-xs text-[var(--muted)]">{queue?.length} item(s)</span>
+            <ListOrdered size={18} className="text-muted" />
+            <CardTitle className="mb-0">Queue</CardTitle>
+            <span className="ml-auto text-xs text-muted">{queue?.length} item(s)</span>
           </div>
           <div className="space-y-2">
             {queue?.map(({ entry, job }) => {
               const isSampling = job.job_type === "sampling";
-              const linkClass = isSampling ? "hover:text-purple-400" : "hover:text-[var(--accent)]";
+              const linkClass = isSampling ? "hover:text-sampling" : "hover:text-accent";
 
               return (
                 <div key={entry.id} className="flex items-center gap-3 text-sm">
-                  <span className="w-6 h-6 rounded-full bg-[var(--border)] text-[var(--muted)] text-xs flex items-center justify-center shrink-0">
+                  <span className="w-6 h-6 rounded-full bg-border text-muted text-xs flex items-center justify-center shrink-0">
                     {entry.position}
                   </span>
-                  <Link href={`/jobs/${job.id}`} className={`text-white ${linkClass}`}>
+                  <Link href={`/jobs/${job.id}`} className={cn("text-text", linkClass)}>
                     {job.name}
                   </Link>
-                  <span className="text-xs text-[var(--muted)] capitalize">{job.job_type}</span>
+                  <span className="text-xs text-muted capitalize">{job.job_type}</span>
                   <StatusBadge status={job.status} />
                 </div>
               );
             })}
           </div>
-        </div>
+        </Card>
       )}
 
       {runningJobs.length === 0 && (queue?.length ?? 0) === 0 && (
-        <div className="text-center py-16 text-[var(--muted)]">
+        <div className="text-center py-16 text-muted">
           No active jobs.{" "}
-          <Link href="/configs" className="text-[var(--accent)] hover:underline">
+          <Link href="/configs" className="text-accent hover:underline">
             Create a config and run a job
           </Link>
         </div>

@@ -11,6 +11,7 @@ import DatasetImageCard from "@/components/dataset/DatasetImageCard";
 import ImageCropModal from "@/components/dataset/ImageCropModal";
 import PreprocessPanel from "@/components/dataset/PreprocessPanel";
 import TagFrequencyPanel from "@/components/dataset/TagFrequencyPanel";
+import Button from "@/components/ui/Button";
 import { datasetsApi } from "@/lib/api/datasets";
 import { jobsApi } from "@/lib/api/jobs";
 import type { DatasetItem, ImagePreprocessState, Job, TaggingMode } from "@/types";
@@ -209,11 +210,11 @@ export default function DatasetDetailPage() {
   })();
 
   if (datasetError) {
-    return <div className="text-red-400">Failed to load dataset</div>;
+    return <div className="text-error">Failed to load dataset</div>;
   }
 
   if (!dataset) {
-    return <div className="text-[var(--muted)]">Loading dataset…</div>;
+    return <div className="text-muted">Loading dataset…</div>;
   }
 
   return (
@@ -222,33 +223,25 @@ export default function DatasetDetailPage() {
         <div className="flex items-center gap-3 min-w-0">
           <Link
             href="/datasets"
-            className="p-2 rounded-lg border border-[var(--border)] text-[var(--muted)] hover:text-white hover:bg-white/5"
+            className="p-2 rounded-lg border border-border text-muted hover:text-text hover:bg-white/5"
+            aria-label="Back to datasets"
           >
             <ArrowLeft size={16} />
           </Link>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-white truncate">{dataset.name}</h1>
-            <p className="text-xs text-[var(--muted)] truncate">{dataset.image_dir}</p>
+            <h1 className="text-2xl font-bold text-text font-display truncate">{dataset.name}</h1>
+            <p className="text-xs text-muted truncate">{dataset.image_dir}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowEdit(true)}
-            className="flex items-center gap-2 border border-[var(--border)] hover:bg-white/5 text-white rounded-lg px-4 py-2 text-sm font-medium"
-          >
+          <Button variant="secondary" onClick={() => setShowEdit(true)}>
             <Pencil size={15} />
             Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowAutoTag(true)}
-            disabled={taggingActive}
-            className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
+          </Button>
+          <Button onClick={() => setShowAutoTag(true)} disabled={taggingActive}>
             <Sparkles size={15} />
             Auto-tag
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -256,16 +249,16 @@ export default function DatasetDetailPage() {
         <div
           className={`rounded-xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3 ${
             taggingJob?.status === "failed"
-              ? "border-red-400/30 bg-red-400/10"
+              ? "border-error/30 bg-error-muted"
               : taggingJob?.status === "completed"
-                ? "border-green-400/30 bg-green-400/10"
-                : "border-[var(--accent)]/30 bg-[var(--accent)]/10"
+                ? "border-success/30 bg-success-muted"
+                : "border-accent/30 bg-accent-muted"
           }`}
         >
-          <span className="text-sm text-white">{taggingBannerMessage}</span>
+          <span className="text-sm text-text">{taggingBannerMessage}</span>
           <Link
             href={`/jobs/${taggingJobId}`}
-            className="shrink-0 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)]"
+            className="shrink-0 text-sm font-medium text-accent hover:text-accent-hover"
           >
             Open job →
           </Link>
@@ -287,7 +280,7 @@ export default function DatasetDetailPage() {
       />
 
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--muted)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
           <span>{filteredItems.length} images{filterIncomplete ? " (filtered)" : ""}</span>
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <input
@@ -297,38 +290,39 @@ export default function DatasetDetailPage() {
                 setFilterIncomplete(e.target.checked);
                 setPage(1);
               }}
+              className="accent-accent"
             />
             Show only incomplete
           </label>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={page <= 1}
                 onClick={() => setPage((value) => value - 1)}
-                className="px-2 py-1 rounded border border-[var(--border)] disabled:opacity-40"
               >
                 Prev
-              </button>
+              </Button>
               <span>
                 {page} / {totalPages}
               </span>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={page >= totalPages}
                 onClick={() => setPage((value) => value + 1)}
-                className="px-2 py-1 rounded border border-[var(--border)] disabled:opacity-40"
               >
                 Next
-              </button>
+              </Button>
             </div>
           )}
         </div>
 
         {itemsLoading ? (
-          <div className="text-[var(--muted)]">Loading images…</div>
+          <div className="text-muted">Loading images…</div>
         ) : filteredItems.length === 0 ? (
-          <div className="text-center py-16 text-[var(--muted)] border border-dashed border-[var(--border)] rounded-xl">
+          <div className="text-center py-16 text-muted border border-dashed border-border rounded-xl">
             {filterIncomplete ? "All images are ready." : "No images found in this directory."}
           </div>
         ) : (

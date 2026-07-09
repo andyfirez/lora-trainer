@@ -1,21 +1,23 @@
 import JobQueuePanel from "@/components/JobQueuePanel";
 import JobsList from "@/components/JobsList";
+import PageHeader from "@/components/ui/PageHeader";
+import { CardTitle } from "@/components/ui/Card";
 
 export default function JobsPage() {
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Jobs</h1>
-        <p className="text-[var(--muted)] mt-1">Training and sampling job runs</p>
-      </div>
+      <PageHeader
+        title="Jobs"
+        description="Training and sampling job runs"
+      />
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-white">Queue</h2>
+        <CardTitle>Queue</CardTitle>
         <JobQueuePanel />
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-white">All Jobs</h2>
+        <CardTitle>All Jobs</CardTitle>
         <JobsList />
       </section>
     </div>
