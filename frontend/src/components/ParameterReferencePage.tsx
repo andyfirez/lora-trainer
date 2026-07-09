@@ -1,129 +1,88 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import { TRAIN_PARAMETER_METADATA } from "@/lib/trainParameterMetadata";
 import { TRAIN_SECTION_ORDER, groupBySection, parameterAnchor } from "@/lib/parameterUtils";
 import type { ParameterMeta } from "@/lib/parameterUtils";
 
-function ParameterRow({
-  entry,
-  expanded,
-  onToggle,
-}: {
-  entry: ParameterMeta;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const anchor = parameterAnchor(entry.key);
-
+function ParameterBadges({ entry }: { entry: ParameterMeta }) {
   return (
-    <div id={anchor} className="scroll-mt-24 border-b border-[var(--border)] last:border-b-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-white/5 transition-colors"
-      >
-        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="text-sm font-medium text-white shrink-0">{entry.label}</span>
-          {entry.yamlOnly && (
-            <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
-              YAML only
-            </span>
-          )}
-          {entry.deprecated && (
-            <span className="rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-400">
-              Deprecated
-            </span>
-          )}
-          <code className="text-xs text-[var(--muted)] font-mono truncate">{entry.key}</code>
-        </div>
-        <div className="hidden sm:flex items-center gap-4 shrink-0 text-xs text-[var(--muted)]">
-          {entry.defaultValue != null && (
-            <span className="font-mono text-white/80 max-w-[8rem] truncate" title={entry.defaultValue}>
-              {entry.defaultValue}
-            </span>
-          )}
-          {entry.constraints != null && (
-            <span className="font-mono max-w-[10rem] truncate" title={entry.constraints}>
-              {entry.constraints}
-            </span>
-          )}
-        </div>
-        {expanded ? (
-          <ChevronDown size={14} className="text-[var(--muted)] shrink-0" />
-        ) : (
-          <ChevronRight size={14} className="text-[var(--muted)] shrink-0" />
-        )}
-      </button>
-      {expanded && (
-        <div className="px-4 pb-3 pt-0">
-          <p className="text-sm text-white/90 leading-relaxed">{entry.description}</p>
-          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs sm:hidden">
-            {entry.defaultValue != null && (
-              <div>
-                <dt className="text-[var(--muted)] inline">Default: </dt>
-                <dd className="text-white font-mono inline">{entry.defaultValue}</dd>
-              </div>
-            )}
-            {entry.constraints != null && (
-              <div>
-                <dt className="text-[var(--muted)] inline">Range: </dt>
-                <dd className="text-white font-mono inline">{entry.constraints}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
+    <>
+      {entry.yamlOnly && (
+        <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-400">
+          YAML only
+        </span>
       )}
-    </div>
+      {entry.deprecated && (
+        <span className="rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-400">
+          Deprecated
+        </span>
+      )}
+    </>
   );
 }
 
-function SectionBlock({
-  section,
-  items,
-  open,
-  onToggle,
-  expandedRows,
-  onToggleRow,
-}: {
-  section: string;
-  items: ParameterMeta[];
-  open: boolean;
-  onToggle: () => void;
-  expandedRows: Record<string, boolean>;
-  onToggleRow: (key: string) => void;
-}) {
+function ParameterTableRow({ entry }: { entry: ParameterMeta }) {
+  const anchor = parameterAnchor(entry.key);
+
   return (
-    <section id={`section-${parameterAnchor(section)}`} className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden scroll-mt-24">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/5 transition-colors"
-      >
-        <div>
-          <h2 className="text-base font-semibold text-white">{section}</h2>
-          <p className="text-xs text-[var(--muted)] mt-0.5">{items.length} parameter(s)</p>
+    <tr id={anchor} className="scroll-mt-24 even:bg-white/[0.02] border-b border-[var(--border)] last:border-b-0">
+      <td className="px-4 py-2.5 align-top">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-medium text-white">{entry.label}</span>
+          <ParameterBadges entry={entry} />
         </div>
-        {open ? (
-          <ChevronDown size={18} className="text-[var(--muted)] shrink-0" />
-        ) : (
-          <ChevronRight size={18} className="text-[var(--muted)] shrink-0" />
-        )}
-      </button>
-      {open && (
-        <div className="border-t border-[var(--border)]">
+      </td>
+      <td className="px-4 py-2.5 align-top">
+        <code className="font-mono text-xs text-[var(--muted)] whitespace-nowrap">{entry.key}</code>
+      </td>
+      <td className="px-4 py-2.5 align-top">
+        <span className="font-mono text-xs text-white/80 tabular-nums whitespace-nowrap">
+          {entry.defaultValue ?? "—"}
+        </span>
+      </td>
+      <td className="px-4 py-2.5 align-top">
+        <span className="font-mono text-xs text-[var(--muted)] whitespace-nowrap">
+          {entry.constraints ?? "—"}
+        </span>
+      </td>
+      <td className="px-4 py-2.5 align-top min-w-[16rem]">
+        <p className="text-sm text-white/70 leading-snug">{entry.description}</p>
+      </td>
+    </tr>
+  );
+}
+
+function ParameterTable({ items }: { items: ParameterMeta[] }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <table className="w-full min-w-[48rem] text-left border-collapse">
+        <thead className="sticky top-0 z-10 bg-[var(--surface)] border-b border-[var(--border)]">
+          <tr>
+            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
+              Label
+            </th>
+            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
+              Key
+            </th>
+            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
+              Default
+            </th>
+            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
+              Range
+            </th>
+            <th className="px-4 py-2.5 text-xs font-medium text-[var(--muted)] uppercase tracking-wide">
+              Description
+            </th>
+          </tr>
+        </thead>
+        <tbody>
           {items.map((entry) => (
-            <ParameterRow
-              key={entry.key}
-              entry={entry}
-              expanded={expandedRows[entry.key] ?? false}
-              onToggle={() => onToggleRow(entry.key)}
-            />
+            <ParameterTableRow key={entry.key} entry={entry} />
           ))}
-        </div>
-      )}
-    </section>
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -144,15 +103,8 @@ export default function ParameterReferencePage() {
     [],
   );
 
+  const [activeTab, setActiveTab] = useState<string>(TRAIN_SECTION_ORDER[0]);
   const [hash, setHash] = useState("");
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    sections.forEach((group, index) => {
-      initial[group.section] = index < 3;
-    });
-    return initial;
-  });
-  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
   const readHash = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -169,8 +121,7 @@ export default function ParameterReferencePage() {
     if (!hash) return;
     const target = sectionForAnchor(sections, hash);
     if (target) {
-      setOpenSections((prev) => ({ ...prev, [target.section]: true }));
-      setExpandedRows((prev) => ({ ...prev, [target.key]: true }));
+      setActiveTab(target.section);
     }
   }, [hash, sections]);
 
@@ -180,26 +131,12 @@ export default function ParameterReferencePage() {
       document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [hash, openSections, expandedRows]);
+  }, [hash, activeTab]);
 
-  const toggleSection = (section: string) => {
-    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
-  };
-
-  const toggleRow = (key: string) => {
-    setExpandedRows((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const scrollToSection = (section: string) => {
-    const sectionId = `section-${parameterAnchor(section)}`;
-    setOpenSections((prev) => ({ ...prev, [section]: true }));
-    requestAnimationFrame(() => {
-      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
+  const activeSection = sections.find((group) => group.section === activeTab);
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-5xl">
       <div>
         <h1 className="text-2xl font-bold text-white">Training Parameters</h1>
         <p className="text-[var(--muted)] mt-1">
@@ -207,33 +144,32 @@ export default function ParameterReferencePage() {
           speed, and VRAM usage.
         </p>
       </div>
-      <nav className="flex flex-wrap gap-x-1 gap-y-1 text-xs text-[var(--muted)]">
-        {sections.map((group, index) => (
-          <span key={group.section} className="inline-flex items-center">
-            {index > 0 && <span className="mx-1">·</span>}
-            <button
-              type="button"
-              onClick={() => scrollToSection(group.section)}
-              className="hover:text-white transition-colors"
-            >
-              {group.section}
-            </button>
-          </span>
-        ))}
-      </nav>
-      <div className="space-y-3">
+
+      <div className="flex gap-1 border-b border-[var(--border)] overflow-x-auto">
         {sections.map((group) => (
-          <SectionBlock
+          <button
             key={group.section}
-            section={group.section}
-            items={group.items}
-            open={openSections[group.section] ?? false}
-            onToggle={() => toggleSection(group.section)}
-            expandedRows={expandedRows}
-            onToggleRow={toggleRow}
-          />
+            type="button"
+            onClick={() => setActiveTab(group.section)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap shrink-0 ${
+              activeTab === group.section
+                ? "text-white border border-b-[var(--bg)] border-[var(--border)] bg-[var(--bg)] -mb-px"
+                : "text-[var(--muted)] hover:text-white"
+            }`}
+          >
+            {group.section}
+          </button>
         ))}
       </div>
+
+      {activeSection && (
+        <div>
+          <p className="text-xs text-[var(--muted)] mb-3">
+            {activeSection.items.length} parameter(s)
+          </p>
+          <ParameterTable items={activeSection.items} />
+        </div>
+      )}
     </div>
   );
 }
