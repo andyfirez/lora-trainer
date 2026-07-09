@@ -53,12 +53,12 @@ export default function JobDetailPage({ params }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-[var(--muted)] py-20">
+      <div className="flex items-center gap-2 text-text-muted py-20">
         <Loader2 className="animate-spin" size={18} /> Loading…
       </div>
     );
   }
-  if (!job) return <div className="text-red-400">Job not found</div>;
+  if (!job) return <div className="text-error">Job not found</div>;
 
   const isTraining = job.job_type === "training";
   const isTagging = job.job_type === "tagging";
@@ -118,17 +118,17 @@ export default function JobDetailPage({ params }: Props) {
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <Link href="/jobs" className="p-2 rounded-lg hover:bg-white/5 text-[var(--muted)] hover:text-white">
+        <Link href="/jobs" className="p-2 rounded-lg hover:bg-white/5 text-text-muted hover:text-text">
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">{job.name}</h1>
+          <h1 className="text-2xl font-bold text-text">{job.name}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <StatusBadge status={job.status} />
-            <span className="text-xs text-[var(--muted)] capitalize">{job.job_type}</span>
-            {job.pid && <span className="text-xs text-[var(--muted)]">PID {job.pid}</span>}
+            <span className="text-xs text-text-muted capitalize">{job.job_type}</span>
+            {job.pid && <span className="text-xs text-text-muted">PID {job.pid}</span>}
             {job.config_id != null && (
-              <Link href={`/configs/${job.config_id}`} className="text-xs text-[var(--accent)] hover:underline">
+              <Link href={`/configs/${job.config_id}`} className="text-xs text-accent hover:underline">
                 Config #{job.config_id}
               </Link>
             )}
@@ -139,7 +139,7 @@ export default function JobDetailPage({ params }: Props) {
             <button
               onClick={() => void handleRunSampling()}
               disabled={samplingLoading}
-              className="flex items-center gap-1.5 bg-purple-700 hover:bg-purple-600 disabled:opacity-60 text-white rounded-lg px-3 py-1.5 text-sm"
+              className="flex items-center gap-1.5 bg-sampling hover:bg-sampling/90 disabled:opacity-60 text-bg rounded-lg px-3 py-1.5 text-sm"
             >
               {samplingLoading ? <Loader2 size={13} className="animate-spin" /> : <Images size={13} />}
               Run Sampling
@@ -148,7 +148,7 @@ export default function JobDetailPage({ params }: Props) {
           {(job.status === "pending" || job.status === "failed" || job.status === "cancelled") && (
             <button
               onClick={() => void handleEnqueue()}
-              className="flex items-center gap-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg px-3 py-1.5 text-sm"
+              className="flex items-center gap-1.5 bg-success/20 hover:bg-success/30 text-success border border-success/30 rounded-lg px-3 py-1.5 text-sm"
             >
               <Play size={13} /> Enqueue
             </button>
@@ -156,7 +156,7 @@ export default function JobDetailPage({ params }: Props) {
           {(job.status === "failed" || job.status === "cancelled") && job.can_resume && isTraining && (
             <button
               onClick={() => void handleResume()}
-              className="flex items-center gap-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-lg px-3 py-1.5 text-sm"
+              className="flex items-center gap-1.5 bg-running/20 hover:bg-running/30 text-running border border-running/30 rounded-lg px-3 py-1.5 text-sm"
             >
               <Play size={13} /> Resume
             </button>
@@ -164,7 +164,7 @@ export default function JobDetailPage({ params }: Props) {
           {(job.status === "queued" || job.status === "pending" || job.status === "running") && (
             <button
               onClick={() => void handleCancel()}
-              className="flex items-center gap-1.5 bg-red-700 hover:bg-red-600 text-white rounded-lg px-3 py-1.5 text-sm"
+              className="flex items-center gap-1.5 bg-error/20 hover:bg-error/30 text-error border border-error/30 rounded-lg px-3 py-1.5 text-sm"
             >
               <Square size={13} />{" "}
               {job.status === "running"
@@ -178,7 +178,7 @@ export default function JobDetailPage({ params }: Props) {
           )}
           <button
             onClick={handleDownloadYaml}
-            className="flex items-center gap-1.5 border border-[var(--border)] hover:bg-white/5 text-[var(--muted)] hover:text-white rounded-lg px-3 py-1.5 text-sm"
+            className="flex items-center gap-1.5 border border-border hover:bg-white/5 text-text-muted hover:text-text rounded-lg px-3 py-1.5 text-sm"
           >
             <Download size={13} /> YAML
           </button>
@@ -186,7 +186,7 @@ export default function JobDetailPage({ params }: Props) {
       </div>
 
       {samplingError && (
-        <div className="rounded-lg bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 text-sm">
+        <div className="rounded-lg bg-error/10 border border-error/30 text-error px-4 py-3 text-sm">
           {samplingError}
         </div>
       )}
@@ -200,8 +200,8 @@ export default function JobDetailPage({ params }: Props) {
       )}
 
       <div className="space-y-2">
-        <h2 className="text-sm font-medium text-[var(--muted)]">Config YAML</h2>
-        <div className="rounded-xl overflow-hidden border border-[var(--border)]" style={{ height: 400 }}>
+        <h2 className="text-sm font-medium text-text-muted">Config YAML</h2>
+        <div className="rounded-xl overflow-hidden border border-border" style={{ height: 400 }}>
           <MonacoEditor
             height="100%"
             language="yaml"

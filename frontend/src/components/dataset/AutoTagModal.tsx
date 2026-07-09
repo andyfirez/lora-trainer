@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
-import Button from "@/components/ui/Button";
-import { labelClassName } from "@/components/ui/Input";
-import { selectClassName } from "@/components/ui/Select";
+import { Modal, ModalFooter, Button } from "@/components/ui";
+import { inputClass, labelClass } from "@/components/ui/Input";
 import type { TaggingMode } from "@/types";
 
 interface Props {
@@ -47,16 +45,14 @@ export default function AutoTagModal({ open, onClose, onSubmit }: Props) {
   };
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Auto-tag with WD14"
-      description="Runs in the background via the job queue. Uses SmilingWolf booru tagger (ONNX)."
-    >
-      {error && <ModalError>{error}</ModalError>}
+    <Modal open={open} onClose={onClose} title="Auto-tag with WD14" size="md">
+      <p className="text-sm text-text-muted mb-4">
+        Runs in the background via the job queue. Uses SmilingWolf booru tagger (ONNX).
+      </p>
+      {error && <div className="text-error text-sm mb-4">{error}</div>}
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
         <div>
-          <label className={`${labelClassName} mb-2`}>Mode</label>
+          <label className={labelClass}>Mode</label>
           <div className="space-y-2">
             {MODES.map((item) => (
               <label key={item.value} className="flex items-start gap-2 cursor-pointer">
@@ -70,7 +66,7 @@ export default function AutoTagModal({ open, onClose, onSubmit }: Props) {
                 />
                 <span>
                   <span className="text-sm text-text block">{item.label}</span>
-                  <span className="text-xs text-muted">{item.description}</span>
+                  <span className="text-xs text-text-muted">{item.description}</span>
                 </span>
               </label>
             ))}
@@ -78,7 +74,7 @@ export default function AutoTagModal({ open, onClose, onSubmit }: Props) {
         </div>
 
         <div>
-          <label className={labelClassName}>
+          <label className={labelClass}>
             Confidence threshold: {threshold.toFixed(2)}
           </label>
           <input
@@ -93,11 +89,11 @@ export default function AutoTagModal({ open, onClose, onSubmit }: Props) {
         </div>
 
         <div>
-          <label className={labelClassName}>Model</label>
+          <label className={labelClass}>Model</label>
           <select
             value={model}
             onChange={(event) => setModel(event.target.value)}
-            className={selectClassName}
+            className={inputClass}
           >
             <option value="wd-v1-4-convnextv2-tagger-v2">WD v1.4 ConvNeXt v2</option>
             <option value="wd-v1-4-vit-tagger-v2">WD v1.4 ViT v2</option>
@@ -115,7 +111,7 @@ export default function AutoTagModal({ open, onClose, onSubmit }: Props) {
           Strip rating tags (rating:*)
         </label>
 
-        <ModalFooter>
+        <ModalFooter className="justify-stretch">
           <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
             Cancel
           </Button>

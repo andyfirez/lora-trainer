@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { FolderOpen, Loader2 } from "lucide-react";
 import FieldHint from "@/components/FieldHint";
-import { inputClassName, labelClassName } from "@/components/ui/Input";
+import { inputClass } from "@/components/ui/Input";
 import { filesApi, type PickKind } from "@/lib/api/files";
 
 interface PathInputProps {
@@ -50,13 +50,13 @@ export default function PathInput({
   return (
     <div>
       <div className="flex items-center mb-1">
-        <label className={labelClassName}>{label}</label>
+        <label className="block text-xs font-medium text-text-muted">{label}</label>
         {hint && <FieldHint hint={hint} hintAnchor={hintAnchor} />}
       </div>
       <div className="flex gap-2">
         <input
           type="text"
-          className={inputClassName}
+          className={inputClass}
           value={value ?? ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -66,7 +66,7 @@ export default function PathInput({
           onClick={() => void handleBrowse()}
           disabled={picking}
           title="Browse"
-          className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-muted hover:bg-white/5 hover:text-text disabled:opacity-50"
+          className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-text-muted hover:bg-white/5 hover:text-text disabled:opacity-50"
         >
           {picking ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
         </button>

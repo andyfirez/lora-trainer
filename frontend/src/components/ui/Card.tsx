@@ -1,31 +1,26 @@
+import { type HTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import type { HTMLAttributes } from "react";
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  raised?: boolean;
+  children: ReactNode;
   padding?: "none" | "sm" | "md" | "lg";
+  hover?: boolean;
 }
 
-const paddingMap = {
+const paddingClasses = {
   none: "",
   sm: "p-4",
   md: "p-5",
   lg: "p-6",
 };
 
-export default function Card({
-  className,
-  raised = false,
-  padding = "md",
-  children,
-  ...props
-}: CardProps) {
+export function Card({ children, padding = "md", hover = false, className, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-surface shadow-sm",
-        raised && "bg-surface-raised shadow-md",
-        paddingMap[padding],
+        "rounded-xl border border-border bg-surface",
+        paddingClasses[padding],
+        hover && "transition-colors hover:border-accent/40",
         className,
       )}
       {...props}
@@ -35,17 +30,17 @@ export default function Card({
   );
 }
 
-export function CardHeader({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function CardHeader({ children, className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("mb-4", className)} {...props}>
+    <div className={cn("flex items-center gap-2 mb-4", className)} {...props}>
       {children}
     </div>
   );
 }
 
-export function CardTitle({ className, children, ...props }: HTMLAttributes<HTMLHeadingElement>) {
+export function CardTitle({ children, className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h2 className={cn("text-lg font-semibold text-text font-display", className)} {...props}>
+    <h2 className={cn("text-heading font-display font-semibold text-text", className)} {...props}>
       {children}
     </h2>
   );

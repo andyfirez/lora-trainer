@@ -32,7 +32,7 @@ function JobSamples({ jobId, status }: { jobId: number; status: string }) {
 
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-medium text-muted">Samples</h2>
+      <h2 className="text-sm font-medium text-text-muted">Samples</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {data.samples.map((sample) => (
           <a key={sample.path} href={`${API_BASE_URL}${sample.url}`} target="_blank" rel="noreferrer">
@@ -70,7 +70,7 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
           showBar={percent != null}
           headerRight={
             percent != null ? (
-              <span className="text-muted">
+              <span className="text-text-muted">
                 step {job.progress_step} / {job.progress_total} ({percent}%)
               </span>
             ) : undefined
@@ -79,13 +79,13 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
       )}
 
       {job.status === "failed" && job.error_message && (
-        <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">
+        <div className="rounded-lg bg-error/10 border border-error/30 text-error px-4 py-3 text-sm">
           <strong>Error:</strong> {job.error_message}
         </div>
       )}
 
       <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
-        <div className="text-xs text-muted">
+        <div className="text-xs text-text-muted">
           {(sampling?.lora_paths.length ?? 0) > 0
             ? `LoRA files (${sampling?.lora_paths.length})`
             : "Base model only"}
@@ -101,7 +101,7 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
         )}
         {sampling?.source_job_id != null && (
           <div>
-            <div className="text-xs text-muted mb-1">Source Job</div>
+            <div className="text-xs text-text-muted mb-1">Source Job</div>
             <Link href={`/jobs/${sampling.source_job_id}`} className="text-sampling text-sm hover:underline">
               Job #{sampling.source_job_id}
             </Link>
@@ -109,7 +109,7 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
         )}
         {job.output_path && (
           <div>
-            <div className="text-xs text-muted mb-1">Output</div>
+            <div className="text-xs text-text-muted mb-1">Output</div>
             <code className="text-success text-sm break-all">{job.output_path}</code>
           </div>
         )}

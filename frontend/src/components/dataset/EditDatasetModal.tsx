@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PathInput from "@/components/PathInput";
-import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
-import Button from "@/components/ui/Button";
-import { inputClassName, labelClassName } from "@/components/ui/Input";
+import { Modal, ModalFooter, Button, Input } from "@/components/ui";
 import { datasetsApi } from "@/lib/api/datasets";
 
 interface Props {
@@ -48,18 +46,15 @@ export default function EditDatasetModal({ open, dataset, onClose, onSaved }: Pr
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit Dataset">
-      {error && <ModalError>{error}</ModalError>}
+    <Modal open={open} onClose={onClose} title="Edit Dataset" size="md">
+      {error && <div className="text-error text-sm mb-4">{error}</div>}
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div>
-          <label className={labelClassName}>Name</label>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="my-dataset"
-            className={inputClassName}
-          />
-        </div>
+        <Input
+          label="Name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="my-dataset"
+        />
         <PathInput
           label="Image Directory"
           value={imageDir}
@@ -68,7 +63,7 @@ export default function EditDatasetModal({ open, dataset, onClose, onSaved }: Pr
           pickerTitle="Select Image Directory"
           kind="directory"
         />
-        <ModalFooter>
+        <ModalFooter className="justify-stretch">
           <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
             Cancel
           </Button>

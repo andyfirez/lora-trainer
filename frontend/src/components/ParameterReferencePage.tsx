@@ -9,12 +9,12 @@ function ParameterBadges({ entry }: { entry: ParameterMeta }) {
   return (
     <>
       {entry.yamlOnly && (
-        <span className="rounded-full bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning">
+        <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning">
           YAML only
         </span>
       )}
       {entry.deprecated && (
-        <span className="rounded-full bg-error-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-error">
+        <span className="rounded-full bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-error">
           Deprecated
         </span>
       )}
@@ -38,20 +38,20 @@ function ParameterCard({ entry, index }: { entry: ParameterMeta; index: number }
         <ParameterBadges entry={entry} />
       </div>
 
-      <p className="text-sm text-text-secondary leading-snug">{entry.description}</p>
+      <p className="text-sm text-text/70 leading-snug">{entry.description}</p>
 
       {recommended && (
         <p className="text-sm">
-          <span className="text-text">Recommended: </span>
+          <span className="text-text/90">Recommended: </span>
           <span className="font-mono text-accent">{recommended}</span>
         </p>
       )}
 
       {entry.valueOptions && entry.valueOptions.length > 0 && (
-        <ul className="text-sm text-text-secondary space-y-1 list-disc list-inside">
+        <ul className="text-sm text-text/60 space-y-1 list-disc list-inside">
           {entry.valueOptions.map((option) => (
             <li key={option.value}>
-              <span className="font-mono text-text">{option.value}</span>
+              <span className="font-mono text-text/80">{option.value}</span>
               {" — "}
               {option.description}
             </li>
@@ -60,10 +60,10 @@ function ParameterCard({ entry, index }: { entry: ParameterMeta; index: number }
       )}
 
       {entry.rangeGuidance && entry.rangeGuidance.length > 0 && (
-        <ul className="text-sm text-text-secondary space-y-1 list-disc list-inside">
+        <ul className="text-sm text-text/60 space-y-1 list-disc list-inside">
           {entry.rangeGuidance.map((band) => (
             <li key={band.range}>
-              <span className="font-mono text-text">{band.range}</span>
+              <span className="font-mono text-text/80">{band.range}</span>
               {" — "}
               {band.description}
             </li>
@@ -125,8 +125,8 @@ export default function ParameterReferencePage() {
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="text-2xl font-bold text-text font-display">Training Parameters</h1>
-        <p className="text-muted mt-1">
+        <h1 className="text-2xl font-bold text-text">Training Parameters</h1>
+        <p className="text-text-muted mt-1">
           Reference for every LoRA training config field — what it does and how it affects quality,
           speed, and VRAM usage.
         </p>
@@ -141,7 +141,7 @@ export default function ParameterReferencePage() {
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
               activeTab === group.tab
                 ? "text-text border border-b-bg border-border bg-bg -mb-px"
-                : "text-muted hover:text-text"
+                : "text-text-muted hover:text-text"
             }`}
           >
             {group.label}
@@ -153,7 +153,7 @@ export default function ParameterReferencePage() {
         <div className="space-y-8">
           {activeGroup.sections.map((section) => (
             <section key={section.section} className="space-y-3">
-              <h3 className="text-lg font-semibold text-text font-display">{section.section}</h3>
+              <h3 className="text-lg font-semibold text-text">{section.section}</h3>
               <div className="space-y-3">
                 {section.items.map((entry, index) => (
                   <ParameterCard key={entry.key} entry={entry} index={index} />

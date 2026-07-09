@@ -3,31 +3,139 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0f1117;
-  --surface: #1a1d27;
-  --border: #2d3148;
-  --text: #e2e8f0;
-  --muted: #6b7280;
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --running: #3b82f6;
+  /* Surfaces */
+  --bg: #0c0d10;
+  --surface: #14161c;
+  --surface-raised: #1c1f28;
+  --border: #2a2e3a;
+  --border-subtle: #1f222b;
+
+  /* Text */
+  --text: #e8eaef;
+  --muted: #7a8294;
+
+  /* Accent — warm copper/amber */
+  --accent: #d4a054;
+  --accent-hover: #e0b06a;
+  --accent-muted: rgba(212, 160, 84, 0.12);
+
+  /* Job type colors */
+  --sampling: #a78bfa;
+  --sampling-muted: rgba(167, 139, 250, 0.12);
+  --tagging: #5eead4;
+  --tagging-muted: rgba(94, 234, 212, 0.12);
+
+  /* Semantic status */
+  --success: #4ade80;
+  --success-muted: rgba(74, 222, 128, 0.12);
+  --warning: #fbbf24;
+  --warning-muted: rgba(251, 191, 36, 0.12);
+  --error: #f87171;
+  --error-muted: rgba(248, 113, 113, 0.12);
+  --running: #60a5fa;
+  --running-muted: rgba(96, 165, 250, 0.12);
+
+  /* Radii */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  /* Spacing scale (reference) */
+  --space-page: 2rem;
 }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
+  position: relative;
 }
 
-.status-badge {
-  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+/* Atmospheric grain texture */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px 128px;
 }
-.status-pending   { @apply bg-gray-800 text-gray-300; }
-.status-queued    { @apply bg-yellow-900 text-yellow-300; }
-.status-running   { @apply bg-blue-900 text-blue-300; }
-.status-completed { @apply bg-green-900 text-green-300; }
-.status-failed    { @apply bg-red-900 text-red-300; }
-.status-cancelled { @apply bg-gray-800 text-gray-500; }
+
+/* Gradient mesh accent */
+body::after {
+  content: "";
+  position: fixed;
+  top: -20%;
+  right: -10%;
+  width: 60%;
+  height: 60%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.04;
+  background: radial-gradient(ellipse at center, var(--accent) 0%, transparent 70%);
+}
+
+/* Status badges */
+.status-badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize;
+}
+.status-pending {
+  background: rgba(122, 130, 148, 0.15);
+  color: var(--muted);
+}
+.status-queued {
+  background: var(--warning-muted);
+  color: var(--warning);
+}
+.status-running {
+  background: var(--running-muted);
+  color: var(--running);
+}
+.status-completed {
+  background: var(--success-muted);
+  color: var(--success);
+}
+.status-failed {
+  background: var(--error-muted);
+  color: var(--error);
+}
+.status-cancelled {
+  background: rgba(122, 130, 148, 0.1);
+  color: var(--muted);
+}
+
+/* Dashboard stat card entrance */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.4s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up {
+    animation: none;
+  }
+}
+
+/* Focus ring utility */
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
+}

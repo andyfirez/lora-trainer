@@ -98,7 +98,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
   return (
     <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
       <div className="text-sm font-medium text-text">Preprocessing</div>
-      <p className="text-xs text-muted">
+      <p className="text-xs text-text-muted">
         {enableBucket
           ? "Aspect-ratio bucketing preserves image proportions. Click any image to adjust crop."
           : "Images are center-cropped to square. Click any image to adjust crop."}
@@ -106,7 +106,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
 
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-xs text-muted mb-1">Target resolution</label>
+          <label className="block text-xs text-text-muted mb-1">Target resolution</label>
           <input
             type="number"
             min={MIN_RESOLUTION}
@@ -118,7 +118,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
           />
         </div>
         {(saving || preparing) && (
-          <span className="text-xs text-muted pb-1.5">
+          <span className="text-xs text-text-muted pb-1.5">
             {saving ? "Saving…" : "Preparing images…"}
           </span>
         )}
@@ -137,7 +137,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
         {enableBucket && (
           <>
             <div>
-              <label className="block text-xs text-muted mb-1">Bucket steps</label>
+              <label className="block text-xs text-text-muted mb-1">Bucket steps</label>
               <input
                 type="number"
                 min={8}
@@ -166,21 +166,21 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
           <span
             className={`px-2 py-0.5 rounded-full border ${
               ready
-                ? "border-success/40 text-success bg-success-muted"
-                : "border-warning/40 text-warning bg-warning-muted"
+                ? "border-success/40 text-success bg-success/10"
+                : "border-warning/40 text-warning bg-warning/10"
             }`}
           >
             {ready ? "Ready for training" : preparing ? "Preparing…" : "Not ready"}
           </span>
-          <span className="text-muted">{status.ready}/{status.total} baked</span>
+          <span className="text-text-muted">{status.ready}/{status.total} baked</span>
           {!preparing && status.no_crop > 0 && (
-            <span className="text-muted">{status.no_crop} need crop</span>
+            <span className="text-text-muted">{status.no_crop} need crop</span>
           )}
           {!preparing && status.stale > 0 && (
             <span className="text-warning">{status.stale} stale</span>
           )}
           {!preparing && status.cropped > 0 && (
-            <span className="text-muted">{status.cropped} need bake</span>
+            <span className="text-text-muted">{status.cropped} need bake</span>
           )}
         </div>
       )}

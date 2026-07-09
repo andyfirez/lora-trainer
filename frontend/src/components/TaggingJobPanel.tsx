@@ -40,25 +40,25 @@ export default function TaggingJobPanel({ job }: TaggingJobPanelProps) {
           showBar={percent != null || job.status === "completed"}
           headerRight={
             percent != null ? (
-              <span className="text-muted">
+              <span className="text-text-muted">
                 {job.progress_step} / {job.progress_total} ({percent}%)
               </span>
             ) : (
-              <span className="text-muted capitalize">{job.status}</span>
+              <span className="text-text-muted capitalize">{job.status}</span>
             )
           }
         />
       )}
 
       {job.status === "failed" && job.error_message && (
-        <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">
+        <div className="rounded-lg bg-error/10 border border-error/30 text-error px-4 py-3 text-sm">
           <strong>Error:</strong> {job.error_message}
         </div>
       )}
 
       {job.tagging?.dataset_id != null && (
         <div className="bg-surface rounded-xl border border-border p-4">
-          <div className="text-xs text-muted mb-1">Dataset</div>
+          <div className="text-xs text-text-muted mb-1">Dataset</div>
           <Link
             href={`/datasets/${job.tagging.dataset_id}`}
             className="text-accent text-sm hover:underline"

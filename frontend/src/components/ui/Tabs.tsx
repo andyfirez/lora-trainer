@@ -2,35 +2,35 @@
 
 import { cn } from "@/lib/cn";
 
-export interface TabItem<T extends string> {
-  value: T;
+export interface Tab {
+  id: string;
   label: string;
 }
 
-export interface TabsProps<T extends string> {
-  tabs: TabItem<T>[];
-  value: T;
-  onChange: (value: T) => void;
+export interface TabsProps {
+  tabs: Tab[];
+  activeTab: string;
+  onChange: (id: string) => void;
   className?: string;
 }
 
-export default function Tabs<T extends string>({ tabs, value, onChange, className }: TabsProps<T>) {
+export default function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
   return (
     <div className={cn("flex gap-1 border-b border-border", className)} role="tablist">
       {tabs.map((tab) => {
-        const active = tab.value === value;
+        const isActive = tab.id === activeTab;
         return (
           <button
-            key={tab.value}
+            key={tab.id}
             type="button"
             role="tab"
-            aria-selected={active}
-            onClick={() => onChange(tab.value)}
+            aria-selected={isActive}
+            onClick={() => onChange(tab.id)}
             className={cn(
               "px-4 py-2 text-sm font-medium rounded-t-lg transition-colors capitalize",
-              active
-                ? "text-text border border-b-bg border-border bg-bg -mb-px"
-                : "text-muted hover:text-text",
+              isActive
+                ? "-mb-px border border-b-bg border-border bg-bg text-text"
+                : "text-text-muted hover:text-text",
             )}
           >
             {tab.label}

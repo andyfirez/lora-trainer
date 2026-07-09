@@ -19,10 +19,10 @@ interface Props {
 }
 
 const STATE_LABELS: Record<ImagePreprocessState, { label: string; className: string }> = {
-  no_crop: { label: "Needs crop", className: "bg-warning-muted text-warning border-warning/30" },
-  stale: { label: "Stale", className: "bg-accent-muted text-accent border-accent/30" },
-  cropped: { label: "Needs bake", className: "bg-running-muted text-running border-running/30" },
-  ready: { label: "Ready", className: "bg-success-muted text-success border-success/30" },
+  no_crop: { label: "Needs crop", className: "bg-warning/20 text-warning border-warning/30" },
+  stale: { label: "Stale", className: "bg-warning/20 text-warning border-warning/30" },
+  cropped: { label: "Needs bake", className: "bg-running/20 text-running border-running/30" },
+  ready: { label: "Ready", className: "bg-success/20 text-success border-success/30" },
 };
 
 export default function DatasetImageCard({
@@ -90,7 +90,7 @@ export default function DatasetImageCard({
       : stateInfo?.label;
   const badgeClassName =
     preparing && preprocessState && preprocessState !== "ready"
-      ? "bg-running-muted text-running border-running/30"
+      ? "bg-running/20 text-running border-running/30"
       : stateInfo?.className;
   const usePrepared = preprocessState === "ready" && !preparedFailed;
   const thumbnailSrc = usePrepared
@@ -125,11 +125,11 @@ export default function DatasetImageCard({
         )}
       </button>
       <div className="p-3 space-y-2 flex-1">
-        <div className="text-xs text-muted truncate" title={filename}>
+        <div className="text-xs text-text-muted truncate" title={filename}>
           {filename}
         </div>
         <TagChipEditor tags={tags} onChange={handleChange} disabled={saving} />
-        <div className="text-[10px] text-muted min-h-[14px]">
+        <div className="text-[10px] text-text-muted min-h-[14px]">
           {saving ? "Saving…" : error ? <span className="text-error">{error}</span> : null}
         </div>
       </div>

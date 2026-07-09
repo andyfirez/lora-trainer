@@ -6,9 +6,8 @@ import Cropper, {
   type MediaSize,
   getInitialCropFromCroppedAreaPixels,
 } from "react-easy-crop";
-import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
-import Button from "@/components/ui/Button";
-import { labelClassName } from "@/components/ui/Input";
+import { X } from "lucide-react";
+import { Modal, ModalFooter, Button } from "@/components/ui";
 import { datasetCropPreviewUrl, datasetsApi } from "@/lib/api/datasets";
 import type { CropMeta } from "@/types";
 
@@ -114,14 +113,6 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
 
   const cropSize = meta ? cropDimensions(meta, targetResolution) : { width: targetResolution, height: targetResolution };
   const previewSize = previewCanvasSize(cropSize.width, cropSize.height);
-
-  const cropDescription = meta
-    ? `${filename}${
-        meta.enable_bucket && meta.bucket_width && meta.bucket_height
-          ? ` · ${meta.bucket_width}×${meta.bucket_height}`
-          : ` · ${targetResolution}×${targetResolution}`
-      }`
-    : filename;
 
   useEffect(() => {
     let cancelled = false;
@@ -241,17 +232,26 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
   const aspect = cropSize.width / cropSize.height;
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title="Crop image"
-      description={cropDescription}
-      className="max-w-4xl p-0 gap-0 overflow-hidden"
-    >
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-0 -mx-6">
+    <Modal open onClose={onClose} size="xl" className="p-0 overflow-hidden max-w-4xl">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div>
+          <div className="text-sm font-medium text-text">Crop image</div>
+          <div className="text-xs text-text-muted truncate max-w-md">
+            {filename}
+            {meta?.enable_bucket && meta.bucket_width && meta.bucket_height
+              ? ` · ${meta.bucket_width}×${meta.bucket_height}`
+              : ` · ${targetResolution}×${targetResolution}`}
+          </div>
+        </div>
+        <Button variant="icon" onClick={onClose} aria-label="Close">
+          <X size={18} />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-0">
         <div className="relative h-[min(60vh,520px)] bg-neutral-900">
           {loading ? (
-            <div className="absolute inset-0 flex items-center justify-center text-muted text-sm">
+            <div className="absolute inset-0 flex items-center justify-center text-text-muted text-sm">
               Loading…
             </div>
           ) : meta && session ? (
@@ -283,28 +283,28 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
             />
           ) : null}
           {!loading && meta && !session && (
-            <div className="absolute inset-0 flex items-center justify-center text-muted text-sm">
+            <div className="absolute inset-0 flex items-center justify-center text-text-muted text-sm">
               Preparing crop…
             </div>
           )}
         </div>
 
         <div className="border-t md:border-t-0 md:border-l border-border p-4 flex md:flex-col items-center justify-center gap-2 bg-bg">
-          <div className="text-xs text-muted">Result preview</div>
+          <div className="text-xs text-text-muted">Result preview</div>
           <canvas
             ref={previewCanvasRef}
             className="rounded-lg border border-border bg-black"
             style={{ width: previewSize.width, height: previewSize.height }}
           />
-          <div className="text-[10px] text-muted text-center max-w-[160px]">
+          <div className="text-[10px] text-text-muted text-center max-w-[160px]">
             Updates as you move the image under the crop frame
           </div>
         </div>
       </div>
 
-      <div className="px-0 pt-4 space-y-3">
+      <div className="px-4 py-3 space-y-3 border-t border-border">
         <div className="flex items-center gap-3">
-          <label className={`${labelClassName} mb-0 shrink-0`}>Zoom</label>
+          <label className="text-xs text-text-muted shrink-0">Zoom</label>
           <input
             type="range"
             min={MIN_ZOOM}
@@ -312,12 +312,12 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
             step={0.05}
             value={zoom}
             onChange={(e) => setZoom(Number(e.target.value))}
-            className="flex-1 accent-accent"
+            className="flex-1"
             disabled={!session}
           />
         </div>
-        {error && <ModalError>{error}</ModalError>}
-        <ModalFooter>
+        {error && <div className="text-sm text-error">{error}</div>}
+        <ModalFooter className="justify-end pt-0">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>

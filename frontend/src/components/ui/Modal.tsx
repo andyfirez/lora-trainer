@@ -8,87 +8,63 @@ import Button from "./Button";
 export interface ModalProps {
   open: boolean;
   onClose: () => void;
-  title: string;
-  description?: string;
+  title?: string;
   children: ReactNode;
   className?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
-const sizeMap = {
+const sizeClasses = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
+  xl: "max-w-2xl",
 };
 
-export default function Modal({
-  open,
-  onClose,
-  title,
-  description,
-  children,
-  className,
-  size = "md",
-}: ModalProps) {
+export default function Modal({ open, onClose, title, children, className, size = "md" }: ModalProps) {
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
+    const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
 
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
-      role="presentation"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={title ? "modal-title" : undefined}
     >
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modal-title"
         className={cn(
-          "w-full rounded-xl border border-border bg-surface-raised p-6 shadow-lg space-y-4",
-          sizeMap[size],
+          "w-full rounded-2xl border border-border bg-surface p-6 shadow-lg",
+          sizeClasses[size],
           className,
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 id="modal-title" className="text-lg font-semibold text-text font-display">
+        {title && (
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <h2 id="modal-title" className="text-heading font-display font-semibold text-text">
               {title}
             </h2>
-            {description && <p className="text-sm text-muted mt-1">{description}</p>}
+            <Button variant="icon" onClick={onClose} aria-label="Close">
+              <X size={16} />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            aria-label="Close"
-            className="shrink-0 -mr-1 -mt-1"
-          >
-            <X size={18} />
-          </Button>
-        </div>
+        )}
         {children}
       </div>
     </div>
   );
 }
 
-export function ModalFooter({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("flex justify-end gap-2 pt-2", className)}>{children}</div>;
-}
-
-export function ModalError({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-lg bg-error-muted border border-error/30 text-error px-3 py-2 text-sm">
-      {children}
-    </div>
-  );
+export function ModalFooter({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("flex gap-2 pt-4", className)}>{children}</div>;
 }

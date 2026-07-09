@@ -1,13 +1,15 @@
 "use client";
 
-import { labelClassName } from "@/components/ui/Input";
-import { selectClassName } from "@/components/ui/Select";
 import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
+
+const selectClass =
+  "w-full rounded-lg bg-bg border border-border px-3 py-1.5 text-sm text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30";
+const labelClass = "block text-xs font-medium text-text-muted mb-1";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className={labelClassName}>{label}</label>
+      <label className={labelClass}>{label}</label>
       {children}
     </div>
   );
@@ -26,7 +28,7 @@ function SelectInput({
 }) {
   return (
     <Field label={label}>
-      <select className={selectClassName} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+      <select className={selectClass} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}

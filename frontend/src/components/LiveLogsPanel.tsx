@@ -45,7 +45,7 @@ export default function LiveLogsPanel({
 
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-medium text-muted">{title}</h2>
+      <h2 className="text-sm font-medium text-text-muted">{title}</h2>
       <pre
         ref={logRef}
         className="bg-surface rounded-xl border border-border p-4 text-xs text-success font-mono overflow-auto whitespace-pre-wrap break-words"
