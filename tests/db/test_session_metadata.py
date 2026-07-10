@@ -3,7 +3,6 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.db.alembic_runner import run_migrations
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import register_all_tables

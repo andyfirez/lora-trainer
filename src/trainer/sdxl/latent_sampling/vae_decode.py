@@ -1,17 +1,6 @@
 """VAE decode step (Comfy VAEDecode equivalent)."""
 
-import logging
-import time
-
-import numpy as np
-import torch
-from PIL import Image
-from torch import Tensor
-
-from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
-
-
-def _tensor_to_pil(image: Tensor) -> Image.Image:
+import loggingimport timeimport numpy as npimport torchfrom PIL import Imagefrom torch import Tensorfrom src.trainer.sdxl.latent_sampling.session import SDXLSamplingSessiondef _tensor_to_pil(image: Tensor) -> Image.Image:
     image = (image / 2 + 0.5).clamp(0, 1)
     image = image.cpu().permute(0, 2, 3, 1).numpy()[0]
     image = (image * 255).round().astype(np.uint8)

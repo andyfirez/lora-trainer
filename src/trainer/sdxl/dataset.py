@@ -8,7 +8,10 @@ from PIL import Image
 from torch.utils.data import ConcatDataset, Dataset
 from torchvision import transforms
 
-from src.trainer.concept_training_metadata import ConceptTrainingMetadata, ImageTrainingMeta
+from src.trainer.concept_training_metadata import (
+    ConceptTrainingMetadata,
+    ImageTrainingMeta,
+)
 from src.trainer.config import ConceptConfig, TrainConfig
 from src.trainer.sdxl.caption import join_trigger_words_and_text
 

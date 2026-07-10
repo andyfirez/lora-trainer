@@ -1,9 +1,12 @@
-import pytest
 from unittest.mock import patch
-from sqlmodel.ext.asyncio.session import AsyncSession
 
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.tables.job_config import ConfigType
-from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
+from src.services.configs.exceptions import (
+    JobConfigNotFoundError,
+    JobConfigValidationError,
+)
 from src.services.configs.service import JobConfigService
 from src.trainer.config import TrainConfig
 

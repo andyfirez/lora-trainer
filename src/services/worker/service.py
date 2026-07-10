@@ -3,11 +3,9 @@
 import asyncio
 import logging
 import subprocess
-import sys
 from dataclasses import dataclass
 
 import psutil
-
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository

@@ -4,28 +4,30 @@ import argparse
 import asyncio
 import logging
 import sys
-import threading
-from collections.abc import Coroutine
 from pathlib import Path
 
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
-from src.services.datasets.captions import list_image_filenames, merge_tags, read_tags, write_tags
+from src.services.datasets.captions import (
+    list_image_filenames,
+    merge_tags,
+    read_tags,
+    write_tags,
+)
 from src.services.datasets.training_cache import invalidate_te_cache_for_image
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
+from src.services.worker.progress_loop import (
+    start_progress_loop,
+    submit_to_progress_loop,
+)
 from src.tagger.config import TaggingConfig
 from src.tagger.wd14 import WD14Tagger
 
 logger = logging.getLogger(__name__)
 
-_progress_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
-threading.Thread(
-    target=_progress_loop.run_forever,
-    daemon=True,
-    name="tagging-progress-db-loop",
-).start()
+_progress_loop = start_progress_loop("tagging-progress-db-loop")
 
 
 async def _get_active_job(repo: JobRepository, job_id: int) -> Job | None:
@@ -65,8 +67,8 @@ async def _set_log_path(job_id: int, log_path: str) -> None:
             await session.commit()
 
 
-def _submit_to_progress_loop(coro: Coroutine[object, object, None]) -> None:
-    asyncio.run_coroutine_threadsafe(coro, _progress_loop)
+def _submit_to_progress_loop(coro: object) -> None:
+    submit_to_progress_loop(_progress_loop, coro)  # type: ignore[arg-type]
 
 
 async def _load_job(job_id: int) -> Job:

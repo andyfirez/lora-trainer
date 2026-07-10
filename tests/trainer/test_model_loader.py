@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from src.trainer.sdxl.model_loader import is_checkpoint_file
 
 

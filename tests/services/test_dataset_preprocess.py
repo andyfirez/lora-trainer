@@ -5,10 +5,12 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
-
 from src.db.tables.dataset import Dataset
 from src.db.tables.dataset_image_crop import DatasetImageCrop
-from src.services.datasets.exceptions import DatasetNotPreparedError, DatasetResolutionMismatchError
+from src.services.datasets.exceptions import (
+    DatasetNotPreparedError,
+    DatasetResolutionMismatchError,
+)
 from src.services.datasets.preprocess import (
     BucketPreprocessConfig,
     ImagePreprocessState,

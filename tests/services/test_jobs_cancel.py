@@ -1,10 +1,8 @@
 import pytest
-import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.api.dependencies import _get_jobs_service
 from src.api.main import app
 from src.db.repositories.dataset_repo import DatasetRepository
@@ -13,8 +11,6 @@ from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import register_all_tables
 from src.db.tables.job import Job, JobStatus, JobType
-from src.db.tables.job_config import ConfigType
-from src.services.configs.service import JobConfigService
 from src.services.jobs.exceptions import JobNotCancellableError
 from src.services.jobs.service import JobsService
 from src.trainer.metric_logger import MetricLogger

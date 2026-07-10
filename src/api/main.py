@@ -34,7 +34,6 @@ from src.api.exception_handlers import (
 )
 from src.api.routers import configs, datasets, files, jobs, queues
 from src.db.session import run_migrations
-from src.services.worker.service import QueueWorker
 from src.services.configs.exceptions import (
     JobConfigNotFoundError,
     JobConfigValidationError,
@@ -65,10 +64,36 @@ from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
 )
+from src.services.worker.service import QueueWorker
 from src.settings.app_settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+_EXCEPTION_HANDLERS: dict[type[Exception], object] = {
+    JobNotFoundError: job_not_found_handler,
+    JobAlreadyQueuedError: job_already_queued_handler,
+    JobNotCancellableError: job_not_cancellable_handler,
+    JobNotResumableError: job_not_resumable_handler,
+    JobCheckpointNotFoundError: job_checkpoint_not_found_handler,
+    JobOperationNotSupportedError: job_operation_not_supported_handler,
+    QueueEntryNotFoundError: queue_entry_not_found_handler,
+    JobConfigNotFoundError: job_config_not_found_handler,
+    JobConfigValidationError: job_config_validation_handler,
+    JobConfigVersionNotFoundError: job_config_version_not_found_handler,
+    SamplingLoRAPathNotFoundError: sampling_lora_path_not_found_handler,
+    SamplingCheckpointsNotFoundError: sampling_checkpoints_not_found_handler,
+    SamplingPromptsNotConfiguredError: sampling_prompts_not_configured_handler,
+    DatasetNotFoundError: dataset_not_found_handler,
+    DatasetNameConflictError: dataset_name_conflict_handler,
+    DatasetDirectoryNotFoundError: dataset_dir_not_found_handler,
+    DatasetImageNotFoundError: dataset_image_not_found_handler,
+    InvalidDatasetFilenameError: invalid_dataset_filename_handler,
+    DatasetNotPreparedError: dataset_not_prepared_handler,
+    DatasetResolutionMismatchError: dataset_resolution_mismatch_handler,
+    DatasetTargetResolutionNotSetError: dataset_target_resolution_not_set_handler,
+    DatasetPreprocessError: dataset_preprocess_handler,
+}
 
 
 @asynccontextmanager
@@ -93,28 +118,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_exception_handler(JobNotFoundError, job_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(JobAlreadyQueuedError, job_already_queued_handler)  # type: ignore[arg-type]
-app.add_exception_handler(JobNotCancellableError, job_not_cancellable_handler)  # type: ignore[arg-type]
-app.add_exception_handler(JobNotResumableError, job_not_resumable_handler)  # type: ignore[arg-type]
-app.add_exception_handler(JobCheckpointNotFoundError, job_checkpoint_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(JobOperationNotSupportedError, job_operation_not_supported_handler)  # type: ignore[arg-type]
-app.add_exception_handler(QueueEntryNotFoundError, queue_entry_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(JobConfigNotFoundError, job_config_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(JobConfigValidationError, job_config_validation_handler)  # type: ignore[arg-type]
-app.add_exception_handler(JobConfigVersionNotFoundError, job_config_version_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(SamplingLoRAPathNotFoundError, sampling_lora_path_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(SamplingCheckpointsNotFoundError, sampling_checkpoints_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(SamplingPromptsNotConfiguredError, sampling_prompts_not_configured_handler)  # type: ignore[arg-type]
-app.add_exception_handler(DatasetNotFoundError, dataset_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(DatasetNameConflictError, dataset_name_conflict_handler)  # type: ignore[arg-type]
-app.add_exception_handler(DatasetDirectoryNotFoundError, dataset_dir_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(DatasetImageNotFoundError, dataset_image_not_found_handler)  # type: ignore[arg-type]
-app.add_exception_handler(InvalidDatasetFilenameError, invalid_dataset_filename_handler)  # type: ignore[arg-type]
-app.add_exception_handler(DatasetNotPreparedError, dataset_not_prepared_handler)  # type: ignore[arg-type]
-app.add_exception_handler(DatasetResolutionMismatchError, dataset_resolution_mismatch_handler)  # type: ignore[arg-type]
-app.add_exception_handler(DatasetTargetResolutionNotSetError, dataset_target_resolution_not_set_handler)  # type: ignore[arg-type]
-app.add_exception_handler(DatasetPreprocessError, dataset_preprocess_handler)  # type: ignore[arg-type]
+for exc_type, handler in _EXCEPTION_HANDLERS.items():
+    app.add_exception_handler(exc_type, handler)  # type: ignore[arg-type]
 
 app.include_router(configs.router)
 app.include_router(jobs.router)

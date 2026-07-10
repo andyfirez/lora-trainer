@@ -2,12 +2,10 @@
 
 from collections.abc import Awaitable, Callable
 
-import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
@@ -20,6 +18,7 @@ from src.db.tables.job import Job
 from src.db.tables.job_config import ConfigType
 from src.services.configs.service import JobConfigService
 from src.services.datasets.service import DatasetsService
+from src.services.jobs.service import JobsService
 
 
 def _write_square_image(path, size: int = 1024) -> None:
@@ -43,7 +42,6 @@ async def _prepare_dataset(datasets_service: DatasetsService, image_dir, name: s
     await datasets_service.save_crop(dataset, "test.png", 0.5, 0.5)
     await datasets_service.bake_image(dataset, "test.png")
     return await datasets_service.get_dataset(dataset.id)  # type: ignore[arg-type]
-from src.services.jobs.service import JobsService
 
 
 @pytest_asyncio.fixture

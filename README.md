@@ -155,7 +155,7 @@ uv run lora-trainer-api
 uv run lora-trainer-worker
 ```
 
-> **Note:** `main.py` at the repo root is a stub. The real API entry point is `src.api.main`.
+> **Note:** The API entry point is `src.api.main` (CLI: `uv run lora-trainer-api`).
 
 Avoid editing API code during a running job when using `--reload`.
 

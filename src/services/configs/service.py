@@ -2,10 +2,9 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional, Sequence
+from typing import Sequence
 
 import yaml
-
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_config_version_repo import JobConfigVersionRepository

@@ -9,7 +9,6 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import register_all_tables
@@ -236,7 +235,6 @@ async def test_dequeue_on_start_prevents_requeue_after_completion(
     worker_db: tuple[AsyncSession, async_sessionmaker[AsyncSession]],
 ) -> None:
     session, test_session_factory = worker_db
-    job_repo = JobRepository(session)
     queue_repo = QueueRepository(session)
     job = Job(
         job_type=JobType.TRAINING,

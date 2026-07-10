@@ -1,13 +1,4 @@
-from unittest.mock import MagicMock, patch
-
-import torch
-from PIL import Image
-
-from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
-from src.trainer.sdxl.latent_sampling.vae_decode import decode_sdxl_latent
-
-
-def _build_session() -> SDXLSamplingSession:
+from unittest.mock import MagicMock, patchimport torchfrom PIL import Imagefrom src.trainer.sdxl.latent_sampling.session import SDXLSamplingSessionfrom src.trainer.sdxl.latent_sampling.vae_decode import decode_sdxl_latentdef _build_session() -> SDXLSamplingSession:
     vae = MagicMock()
     vae.dtype = torch.float32
     vae.config.scaling_factor = 0.13025

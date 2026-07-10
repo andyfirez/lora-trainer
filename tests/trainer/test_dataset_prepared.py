@@ -4,11 +4,10 @@ from pathlib import Path
 
 import torch
 from PIL import Image
-from torch.utils.data import DataLoader
-
-from src.trainer.config import ConceptConfig
 from src.trainer.concept_training_metadata import ImageTrainingMeta
+from src.trainer.config import ConceptConfig
 from src.trainer.sdxl.dataset import ConceptDataset
+from torch.utils.data import DataLoader
 
 
 def test_concept_dataset_loads_prepared_image_without_resize(tmp_path: Path) -> None:

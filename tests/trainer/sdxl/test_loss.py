@@ -1,7 +1,6 @@
 """Tests for SDXL training loss helpers."""
 
 import torch
-
 from src.trainer.sdxl.loss import apply_noise_offset, min_snr_weight
 
 

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import numpy as np
 import torch
-
 from src.trainer.sdxl.te_cache import build_te_cache
 
 

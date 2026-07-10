@@ -1,8 +1,7 @@
 """Business logic for jobs."""
 
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Sequence
 
 import yaml
 
@@ -16,11 +15,13 @@ from src.db.tables.job import Job, JobStatus, JobType
 from src.db.tables.job_config import ConfigType
 from src.db.tables.queue_entry import QueueEntry
 from src.sampler.config import SamplingConfig
-from src.sampler.output_paths import resolve_sampling_output_path
-from src.services.configs.exceptions import JobConfigNotFoundError, JobConfigValidationError
+from src.services.configs.exceptions import (
+    JobConfigNotFoundError,
+    JobConfigValidationError,
+)
 from src.services.configs.service import JobConfigService
-from src.services.datasets.training_validation import validate_dataset_for_training
 from src.services.configs.versioning import apply_lora_version_to_train_config
+from src.services.datasets.training_validation import validate_dataset_for_training
 from src.services.jobs.exceptions import (
     JobAlreadyQueuedError,
     JobCheckpointNotFoundError,
@@ -31,11 +32,14 @@ from src.services.jobs.exceptions import (
 )
 from src.services.jobs.handlers import get_job_handler
 from src.services.jobs.loss_log_reader import read_loss_log
-from src.services.sampling.exceptions import (
-    SamplingCheckpointsNotFoundError,
-    SamplingLoRAPathNotFoundError,
-    SamplingPromptsNotConfiguredError,
+from src.services.jobs.sampling_jobs import (
+    find_intermediate_checkpoints,
+    resolve_sampling_lora_paths,
+    resolve_sampling_output_dir,
+    validate_lora_paths,
+    validate_sample_prompts,
 )
+from src.services.sampling.exceptions import SamplingCheckpointsNotFoundError
 from src.tagger.config import TaggingConfig, TaggingMode
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
@@ -112,11 +116,15 @@ class JobsService:
             paths = (
                 lora_paths
                 if lora_paths is not None
-                else await self._resolve_sampling_lora_paths(source_job_id)
+                else await resolve_sampling_lora_paths(
+                    self._job_repo,
+                    source_job_id,
+                    runtime_train_config=self._runtime_train_config,
+                )
             )
             if paths:
-                self._validate_lora_paths(paths)
-            self._validate_sample_prompts(sampling_config)
+                validate_lora_paths(paths)
+            validate_sample_prompts(sampling_config)
             job = Job(
                 job_type=JobType.SAMPLING,
                 name=job_name,
@@ -129,7 +137,15 @@ class JobsService:
             sampling_config = SamplingConfig.from_yaml(job.config_yaml)
             await self._job_repo.update_output_path(
                 job,
-                str(await self._resolve_sampling_output_dir(sampling_config, job.id, source_job_id)),
+                str(
+                    await resolve_sampling_output_dir(
+                        self._job_repo,
+                        sampling_config,
+                        job.id,
+                        source_job_id,
+                        runtime_train_config=self._runtime_train_config,
+                    )
+                ),
             )
             return job
         return await self._job_repo.add(job)
@@ -186,7 +202,7 @@ class JobsService:
         if sampling_config_entity.config_type != ConfigType.SAMPLING:
             return None
         runtime_config = self._runtime_train_config(training_job)
-        if not self._find_intermediate_checkpoints(runtime_config):
+        if not find_intermediate_checkpoints(runtime_config):
             raise SamplingCheckpointsNotFoundError(training_job.id)
         job = await self.create_from_config(
             sampling_config_entity.id,
@@ -314,45 +330,6 @@ class JobsService:
             and job.status in (JobStatus.FAILED, JobStatus.CANCELLED)
             and bool(job.last_checkpoint_path)
         )
-
-    def _validate_sample_prompts(self, config: SamplingConfig) -> None:
-        if not config.sample_prompts:
-            raise SamplingPromptsNotConfiguredError()
-
-    def _validate_lora_paths(self, lora_paths: list[str]) -> None:
-        for lora_path in lora_paths:
-            path = Path(lora_path)
-            if not path.is_file():
-                raise SamplingLoRAPathNotFoundError(lora_path)
-
-    async def _resolve_sampling_lora_paths(self, source_job_id: int | None) -> list[str]:
-        if source_job_id is None:
-            return []
-        source_job = await self._job_repo.get_by_id(source_job_id)
-        if source_job is None or source_job.job_type != JobType.TRAINING:
-            return []
-        train_config = self._runtime_train_config(source_job)
-        return [str(path) for path in self._find_intermediate_checkpoints(train_config)]
-
-    def _find_intermediate_checkpoints(self, config: TrainConfig) -> list[Path]:
-        work_dir = Path(config.output_dir) / config.lora_name
-        ext = config.output_format.value
-        epoch_paths = list(work_dir.glob(f"{config.lora_name}_epoch*.{ext}"))
-        step_paths = list(work_dir.glob(f"{config.lora_name}_step*.{ext}"))
-        return sorted(epoch_paths + step_paths, key=lambda path: (path.stat().st_mtime, path.name))
-
-    async def _resolve_sampling_output_dir(
-        self,
-        sampling_config: SamplingConfig,
-        job_id: int,
-        source_job_id: int | None,
-    ) -> Path:
-        source_train_config: TrainConfig | None = None
-        if source_job_id is not None:
-            source_job = await self._job_repo.get_by_id(source_job_id)
-            if source_job is not None and source_job.job_type == JobType.TRAINING:
-                source_train_config = self._runtime_train_config(source_job)
-        return resolve_sampling_output_path(sampling_config, job_id, source_train_config)
 
     def _runtime_train_config(self, job: Job) -> TrainConfig:
         config = TrainConfig.from_yaml(job.config_yaml)

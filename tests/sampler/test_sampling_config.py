@@ -1,9 +1,9 @@
-import pytest
+
 
-from src.sampler.config import SamplingConfig
-from src.trainer.config import VaeDtype, WeightDtype
-
-
+from src.sampler.config import SamplingConfig
+from src.trainer.config import VaeDtype, WeightDtype
+
+
 def test_sampling_config_defaults_include_performance_fields() -> None:
     config = SamplingConfig()
 

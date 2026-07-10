@@ -2,7 +2,6 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from src.trainer.attention import configure_unet_attention
 
 

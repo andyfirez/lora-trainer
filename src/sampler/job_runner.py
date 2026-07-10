@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_repo import JobRepository
@@ -16,10 +15,16 @@ from src.db.tables.job import Job, JobStatus, JobType
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import SDXLLoRASampler
-from src.trainer.concept_training_metadata import ConceptTrainingMetadata, resolve_concept_training_metadata
-from src.trainer.config import TrainConfig
-from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
+from src.trainer.concept_training_metadata import (
+    ConceptTrainingMetadata,
+    resolve_concept_training_metadata,
+)
+from src.trainer.config import TrainConfig
+from src.trainer.sdxl.caption import (
+    apply_trigger_words_to_sample_prompts,
+    collect_trigger_words,
+)
 
 logger = logging.getLogger(__name__)
 

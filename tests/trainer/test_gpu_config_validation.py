@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-
 from src.trainer.config import VaeDtype, WeightDtype
 from src.trainer.gpu_config_validation import validate_gpu_config
 

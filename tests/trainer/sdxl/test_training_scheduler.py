@@ -2,7 +2,6 @@
 
 import torch
 from diffusers import DDPMScheduler, EulerDiscreteScheduler
-
 from src.trainer.sdxl.model_loader import _build_training_noise_scheduler
 
 _SCHEDULER_KWARGS = {

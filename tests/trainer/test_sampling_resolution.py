@@ -1,5 +1,4 @@
 import pytest
-
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.tables.job_config import ConfigType
 from src.sampler.config import SamplingConfig

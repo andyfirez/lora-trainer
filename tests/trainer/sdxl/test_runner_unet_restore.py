@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 import torch
-
 from src.trainer.sdxl.latent_sampling.runner import (
     _ensure_unet_on_device,
     _restore_unet_after_decode,

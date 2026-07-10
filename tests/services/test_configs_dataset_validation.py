@@ -1,7 +1,6 @@
 """Tests that training config rejects unprepared datasets."""
 
 import pytest
-
 from src.db.tables.job_config import ConfigType
 from src.services.configs.exceptions import JobConfigValidationError
 from src.services.configs.service import JobConfigService

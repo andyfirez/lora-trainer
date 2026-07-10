@@ -2,7 +2,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-
 from src.tagger.config import TaggingConfig
 from src.tagger.wd14 import WD14Tagger
 

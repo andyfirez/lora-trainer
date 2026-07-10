@@ -1,8 +1,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from src.trainer.metric_logger import MetricLogger
 from src.trainer.training_log import JobTrainingLogger
 

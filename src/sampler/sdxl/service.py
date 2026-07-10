@@ -9,21 +9,22 @@ from typing import Any, Callable
 
 import torch
 from peft import get_peft_model
-
 from src.trainer.attention import configure_unet_attention
+from src.trainer.concept_training_metadata import (
+    ConceptTrainingMetadata,
+    resolve_reference_add_time_ids,
+)
 from src.trainer.config import TrainConfig, WeightDtype
-from src.trainer.concept_training_metadata import ConceptTrainingMetadata, resolve_reference_add_time_ids
-from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
+from src.trainer.sdxl.inference_context import run_merged_adapter_sampling
 from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
 from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
-from src.trainer.sdxl.lora_targets import SDXL_TE_LORA_TARGET_MODULES, SDXL_UNET_LORA_TARGET_MODULES
-from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
-from src.trainer.sdxl.sampling import (
-    PromptEmbedCache,
-    build_inference_scheduler,
-    precompute_all_sample_embeds,
+from src.trainer.sdxl.lora_targets import (
+    SDXL_TE_LORA_TARGET_MODULES,
+    SDXL_UNET_LORA_TARGET_MODULES,
 )
+from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
+from src.trainer.sdxl.sampling import PromptEmbedCache
 
 logger = logging.getLogger(__name__)
 
@@ -226,111 +227,51 @@ class SDXLLoRASampler:
         sample_prompts = self._effective_sample_prompts()
         device = stack.device
         started_at = time.perf_counter()
-        unet = stack.unet
-        text_encoder_1 = stack.text_encoder_1
-        text_encoder_2 = stack.text_encoder_2
-        unet_merged = False
-        te1_merged = False
-        te2_merged = False
-        try:
-            if merge_unet_adapter:
-                unet.merge_adapter()
-                unet_merged = True
-                inference_unet = unet.base_model.model
-            else:
-                inference_unet = unet
-            if lora_config.text_encoder_1.train:
-                text_encoder_1.merge_adapter()
-                te1_merged = True
-                inference_te1 = text_encoder_1.base_model.model
-            else:
-                inference_te1 = text_encoder_1
-            if lora_config.text_encoder_2.train:
-                text_encoder_2.merge_adapter()
-                te2_merged = True
-                inference_te2 = text_encoder_2.base_model.model
-            else:
-                inference_te2 = text_encoder_2
 
-            inference_unet.eval()
-            inference_te1.eval()
-            inference_te2.eval()
-            width = config.sample_width or config.resolution
-            height = config.sample_height or config.resolution
-            autocast_dtype = _DTYPE_MAP[config.mixed_precision]
-
-            if lora_config.text_encoder_1.train or lora_config.text_encoder_2.train:
-                self._prompt_embed_cache.clear()
-
-            negative_prompt = config.sample_negative_prompt or ""
-            all_embeds = precompute_all_sample_embeds(
-                sample_prompts=sample_prompts,
-                negative_prompt=negative_prompt,
-                tokenizer_1=stack.tokenizer_1,
-                tokenizer_2=stack.tokenizer_2,
-                text_encoder_1=inference_te1,
-                text_encoder_2=inference_te2,
-                device=device,
-                dtype=autocast_dtype,
-                clip_skip=config.clip_skip,
-                cache=self._prompt_embed_cache,
-            )
-            inference_te1.to("cpu")
-            inference_te2.to("cpu")
-            torch.cuda.empty_cache()
-
-            reference_add_time_ids = resolve_reference_add_time_ids(
-                self._concept_metadata,
-                dataset_ids=self._reference_dataset_ids(config),
-                width=width,
-                height=height,
-            )
-            if reference_add_time_ids is not None:
-                self._log.info(
-                    "Sampling %s: using aligned add_time_ids %s (bucket match)",
-                    output_stem,
-                    reference_add_time_ids,
-                )
-
-            session = SDXLSamplingSession.create(
-                unet=inference_unet,
-                vae=stack.vae,
-                scheduler=build_inference_scheduler(config.sample_scheduler, stack.noise_scheduler),
-                device=device,
-                width=width,
-                height=height,
-                sample_steps=config.sample_steps,
-                autocast_dtype=autocast_dtype,
-                config=config,
-                reference_add_time_ids=reference_add_time_ids,
+        reference_add_time_ids = resolve_reference_add_time_ids(
+            self._concept_metadata,
+            dataset_ids=self._reference_dataset_ids(config),
+            width=config.sample_width or config.resolution,
+            height=config.sample_height or config.resolution,
+        )
+        if reference_add_time_ids is not None:
+            self._log.info(
+                "Sampling %s: using aligned add_time_ids %s (bucket match)",
+                output_stem,
+                reference_add_time_ids,
             )
 
-            run_sdxl_sampling_pass(
-                session=session,
-                embeds_list=all_embeds,
-                config=config,
-                output_dir=self._output_dir,
-                output_stem=output_stem,
-                log=self._log,
-                on_status=lambda prompt_index, n: self._set_status(
-                    f"{status_prefix} — image {prompt_index + 1}/{n}",
-                ),
-                on_step=lambda prompt_index, completed, total: self._on_sampling_step(
-                    prompt_index,
-                    completed,
-                    total,
-                    completed_images,
-                ),
-                log_step_context="[sample {prompt_index}/{n_prompts}]",
-            )
-        finally:
-            if unet_merged:
-                unet.unmerge_adapter()
-            if te1_merged:
-                text_encoder_1.unmerge_adapter()
-            if te2_merged:
-                text_encoder_2.unmerge_adapter()
-            self._log.info("Sampling %s completed in %.2fs", output_stem, time.perf_counter() - started_at)
+        run_merged_adapter_sampling(
+            unet=stack.unet,
+            text_encoder_1=stack.text_encoder_1,
+            text_encoder_2=stack.text_encoder_2,
+            vae=stack.vae,
+            tokenizer_1=stack.tokenizer_1,
+            tokenizer_2=stack.tokenizer_2,
+            noise_scheduler=stack.noise_scheduler,
+            lora_config=lora_config,
+            sampling_config=config,
+            device=device,
+            sample_prompts=sample_prompts,
+            output_dir=self._output_dir,
+            output_stem=output_stem,
+            log=self._log,
+            merge_unet=merge_unet_adapter,
+            embed_cache=self._prompt_embed_cache,
+            reference_add_time_ids=reference_add_time_ids,
+            on_status=lambda prompt_index, n: self._set_status(
+                f"{status_prefix} — image {prompt_index + 1}/{n}",
+            ),
+            on_step=lambda prompt_index, completed, total: self._on_sampling_step(
+                prompt_index,
+                completed,
+                total,
+                completed_images,
+            ),
+            log_step_context="[sample {prompt_index}/{n_prompts}]",
+            clear_embed_cache_on_te_train=True,
+        )
+        self._log.info("Sampling %s completed in %.2fs", output_stem, time.perf_counter() - started_at)
 
     def _on_sampling_step(
         self,

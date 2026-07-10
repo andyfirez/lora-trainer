@@ -1,7 +1,6 @@
 """Tests for job API response conversion."""
 
 import pytest
-
 from src.api.converters import to_job_response
 from src.db.tables.job import JobType
 from src.db.tables.job_config import ConfigType

@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 import torch
-
 from src.trainer.config import TrainConfig
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 

@@ -1,7 +1,6 @@
 """Tests for SDXL aspect-ratio bucket assignment."""
 
 import pytest
-
 from src.trainer.sdxl.buckets import (
     apply_center_offset,
     assign_bucket,

@@ -1,10 +1,10 @@
+from unittest.mock import patch
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-from unittest.mock import patch
-
 from src.db.session import register_all_tables
 from src.db.tables.job import Job, JobStatus, JobType
 from src.sampler.job_runner import run_sampling_job

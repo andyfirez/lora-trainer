@@ -1,12 +1,25 @@
-"""SDXL LoRA training configuration — Pydantic model, serialized as YAML."""
+"""SDXL LoRA training configuration — Pydantic model, serialized as YAML.
+
+Persisted YAML omits runtime-only fields:
+- Concept ``image_dir`` / ``prepared_dir`` are populated by ``resolve_concepts`` and
+  stripped by ``to_yaml`` (see ``ResolvedConceptPaths``).
+- Sampling prompt/size fields on ``TrainConfig`` are a runtime overlay applied via
+  ``resolve_sampling`` from a persisted ``SamplingConfig`` entity (``sampling_config_id``).
+"""
+
+from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field
 
-from src.trainer.optimizer_config import Optimizer, OptimizerConfig
+from src.trainer.optimizer_config import OptimizerConfig
+
+if TYPE_CHECKING:
+    from src.sampler.config import SamplingConfig
+    from src.trainer.concept_resolution import ResolvedConceptPaths
 
 
 class OutputFormat(StrEnum):
@@ -69,9 +82,11 @@ FORBIDDEN_DEPRECATED_CONCEPT_KEYS: frozenset[str] = frozenset({"image_dir", "pre
 
 
 class ConceptConfig(BaseModel):
+    """Dataset concept for training. ``image_dir``/``prepared_dir`` are runtime-resolved paths."""
+
     dataset_id: int
-    image_dir: str | None = None
-    prepared_dir: str | None = None
+    image_dir: str | None = None  # runtime: set by resolve_concepts, not persisted
+    prepared_dir: str | None = None  # runtime: set by resolve_concepts, not persisted
     caption_extension: str = ".txt"
     trigger_words: list[str] = Field(default_factory=list)
     caption_suffix: str = ""
@@ -182,7 +197,7 @@ class TrainConfig(BaseModel):
         data = yaml.safe_load(yaml_str)
         return cls.model_validate(data)
 
-    def resolve_concepts(self, paths: dict[int, "ResolvedConceptPaths"]) -> "TrainConfig":
+    def resolve_concepts(self, paths: dict[int, ResolvedConceptPaths]) -> TrainConfig:
         from src.trainer.concept_resolution import ResolvedConceptPaths
 
         resolved: list[ConceptConfig] = []
@@ -202,9 +217,12 @@ class TrainConfig(BaseModel):
             )
         return self.model_copy(update={"concepts": resolved})
 
-    def resolve_sampling(self, sampling: "SamplingConfig") -> "TrainConfig":
+    def resolve_sampling(self, sampling: SamplingConfig) -> TrainConfig:
         from src.sampler.config import SamplingConfig
-        from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
+        from src.trainer.sdxl.caption import (
+            apply_trigger_words_to_sample_prompts,
+            collect_trigger_words,
+        )
 
         if not isinstance(sampling, SamplingConfig):
             raise TypeError("sampling must be a SamplingConfig instance")

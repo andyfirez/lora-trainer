@@ -1,9 +1,14 @@
 from pathlib import Path
 
 import pytest
-
 from src.trainer.sdxl.dataset import count_latent_cache_items, count_te_cache_items
-from src.trainer.training_log import JobTrainingLogger, LossRecorder, build_tensorboard_dir, format_step_log, setup_tensorboard_writer
+from src.trainer.training_log import (
+    JobTrainingLogger,
+    LossRecorder,
+    build_tensorboard_dir,
+    format_step_log,
+    setup_tensorboard_writer,
+)
 
 
 def test_loss_recorder_moving_average() -> None:
@@ -59,7 +64,6 @@ def test_build_latent_cache_uses_job_logger(tmp_path) -> None:
     from unittest.mock import MagicMock
 
     import torch
-
     from src.trainer.sdxl.latent_cache import build_latent_cache
 
     job_logger = JobTrainingLogger(job_id=9102, log_path=tmp_path / "job.log")

@@ -1,5 +1,4 @@
 import pytest
-
 from src.db.tables.job import JobStatus
 from src.services.jobs.service import JobsService
 
