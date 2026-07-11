@@ -34,7 +34,7 @@ from src.trainer.concept_training_metadata import resolve_concept_training_metad
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 from src.trainer.sampling_resolution import resolve_sampling_config
-from src.trainer.sdxl.trainer import SDXLLoRATrainer, TrainingCancelledAfterSave
+from src.trainer.sdxl.trainer import SDXLLoRATrainer, TrainingCancelledAfterSave, TrainingCancelledDuringCache
 from src.trainer.training_log import JobTrainingLogger, setup_tensorboard_writer
 
 logging.basicConfig(
@@ -158,6 +158,15 @@ async def _consume_save_checkpoint_request(job_id: int) -> bool:
         await repo.request_checkpoint_save(job, False)
         await session.commit()
         return True
+
+
+async def _is_stop_requested(job_id: int) -> bool:
+    async with session_factory() as session:
+        repo = JobRepository(session)
+        job = await repo.get_by_id(job_id)
+        if job is None or job.status == JobStatus.CANCELLED:
+            return True
+        return job.save_checkpoint_requested
 
 
 def _submit_to_progress_loop(coro: Any) -> None:
@@ -299,6 +308,15 @@ async def _run(job_id: int) -> None:
                 logger.exception("Failed to poll save-checkpoint request")
                 return False
 
+        def _stop_requested() -> bool:
+            try:
+                return bool(_run_in_progress_loop(_is_stop_requested(job_id)))
+            except FutureTimeoutError:
+                return False
+            except Exception:
+                logger.exception("Failed to poll stop request during cache")
+                return False
+
         trainer = SDXLLoRATrainer(
             config,
             progress_callback=_make_progress_callback(job_id),
@@ -307,6 +325,7 @@ async def _run(job_id: int) -> None:
             training_logger=training_logger,
             checkpoint_callback=_checkpoint_callback,
             save_checkpoint_requested_callback=_save_checkpoint_requested,
+            stop_requested_callback=_stop_requested,
             concept_metadata=concept_metadata,
         )
         trainer.train()
@@ -315,6 +334,9 @@ async def _run(job_id: int) -> None:
     except TrainingCancelledAfterSave:
         await _update_status(job_id, JobStatus.CANCELLED)
         training_logger.logger.info("Job id=%d cancelled after saving checkpoint", job_id)
+    except TrainingCancelledDuringCache:
+        await _update_status(job_id, JobStatus.CANCELLED)
+        training_logger.logger.info("Job id=%d cancelled during cache/setup", job_id)
     except Exception as exc:
         training_logger.logger.exception("Job id=%d failed: %s", job_id, exc)
         await _update_status(job_id, JobStatus.FAILED, error=str(exc))

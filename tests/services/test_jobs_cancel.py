@@ -144,11 +144,27 @@ async def test_cancel_running_job_with_save_sets_request_flag(
 ) -> None:
     job = await create_training_job()
     await jobs_service._job_repo.update_status(job, JobStatus.RUNNING, pid=1234)
+    await jobs_service._job_repo.update_progress(job, 10, 100)
 
     result = await jobs_service.cancel_job(job.id, save_checkpoint=True)
 
     assert result.status == JobStatus.RUNNING
     assert result.save_checkpoint_requested is True
+
+
+@pytest.mark.asyncio
+async def test_cancel_with_save_during_cache_immediate_cancel(
+    jobs_service: JobsService,
+    create_training_job,
+) -> None:
+    job = await create_training_job()
+    await jobs_service._job_repo.update_status(job, JobStatus.RUNNING, pid=1234)
+
+    result = await jobs_service.cancel_job(job.id, save_checkpoint=True)
+
+    assert result.status == JobStatus.CANCELLED
+    assert result.save_checkpoint_requested is False
+    assert result.pid is None
 
 
 @pytest.mark.asyncio

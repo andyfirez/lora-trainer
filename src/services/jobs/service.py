@@ -263,12 +263,20 @@ class JobsService:
         await self._job_repo.request_checkpoint_save(job, False)
         return await self._enqueue_job(job, reset_runtime=False)
 
+    @staticmethod
+    def _can_save_checkpoint_on_cancel(job: Job) -> bool:
+        return (
+            job.job_type == JobType.TRAINING
+            and job.progress_step is not None
+            and job.progress_step > 0
+        )
+
     async def cancel_job(self, job_id: int, *, save_checkpoint: bool = False) -> Job:
         job = await self.get_job(job_id)
         if job.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
             raise JobNotCancellableError(job_id, job.status)
         if job.status == JobStatus.RUNNING:
-            if save_checkpoint and job.job_type == JobType.TRAINING:
+            if save_checkpoint and self._can_save_checkpoint_on_cancel(job):
                 await self._job_repo.request_checkpoint_save(job, True)
                 return job
             await self._job_repo.update_status(job, JobStatus.CANCELLED)

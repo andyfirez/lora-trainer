@@ -72,6 +72,10 @@ class TrainingCancelledAfterSave(Exception):
     """Raised when cancellation with save-checkpoint was requested."""
 
 
+class TrainingCancelledDuringCache(Exception):
+    """Raised when stop was requested during cache/setup before the training loop."""
+
+
 class SDXLLoRATrainer:
     def __init__(
         self,
@@ -82,6 +86,7 @@ class SDXLLoRATrainer:
         training_logger: Optional[JobTrainingLogger] = None,
         checkpoint_callback: Optional[Callable[[str, int, int], None]] = None,
         save_checkpoint_requested_callback: Optional[Callable[[], bool]] = None,
+        stop_requested_callback: Optional[Callable[[], bool]] = None,
         concept_metadata: Optional[dict[int, ConceptTrainingMetadata]] = None,
     ) -> None:
         self._config = config
@@ -92,6 +97,7 @@ class SDXLLoRATrainer:
         self._training_logger = training_logger
         self._checkpoint_callback = checkpoint_callback
         self._save_checkpoint_requested_callback = save_checkpoint_requested_callback
+        self._stop_requested_callback = stop_requested_callback
         self._progress = TrainProgress()
         self._total_steps: int = 0
         self._optimizer: Optional[object] = None
@@ -274,8 +280,14 @@ class SDXLLoRATrainer:
 
         cache_progress = 0
 
+        def _check_stop_during_cache() -> None:
+            if self._stop_requested_callback is not None and self._stop_requested_callback():
+                log.info("Stop requested during cache phase, cancelling")
+                raise TrainingCancelledDuringCache()
+
         def _on_cache_progress(phase_current: int, phase_total: int, phase: str) -> None:
             nonlocal cache_progress
+            _check_stop_during_cache()
             cache_progress += 1
             if self._training_logger is not None:
                 if cache_progress == 1:
@@ -287,6 +299,7 @@ class SDXLLoRATrainer:
         latent_cache: Optional[dict[str, Tensor]] = None
         te_cache: Optional[dict[str, tuple[Tensor, Tensor]]] = None
 
+        _check_stop_during_cache()
         if config.cache_latents:
             log.info("Building latent cache...")
             latent_cache = build_latent_cache(
@@ -297,6 +310,7 @@ class SDXLLoRATrainer:
                 on_progress=_on_cache_progress if cache_steps > 0 else None,
                 log=log,
             )
+            _check_stop_during_cache()
 
         if config.cache_text_encoder_outputs_to_disk:
             log.warning(
@@ -319,6 +333,7 @@ class SDXLLoRATrainer:
                 on_progress=_on_cache_progress if cache_steps > 0 else None,
                 log=log,
             )
+            _check_stop_during_cache()
 
         if self._training_logger is not None:
             if cache_steps > 0:

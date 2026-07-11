@@ -13,9 +13,11 @@ import StatusBadge from "@/components/StatusBadge";
 import TrainingJobPanel from "@/components/TrainingJobPanel";
 import SamplingJobPanel from "@/components/SamplingJobPanel";
 import TaggingJobPanel from "@/components/TaggingJobPanel";
+import StopJobDialog from "@/components/StopJobDialog";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import { ModalError } from "@/components/ui/Modal";
+import { useCancelJob } from "@/hooks/useCancelJob";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -37,6 +39,15 @@ export default function JobDetailPage({ params }: Props) {
   const [samplingLoading, setSamplingLoading] = useState(false);
   const [samplingError, setSamplingError] = useState<string | null>(null);
   const prevJobStatusRef = useRef<string | null>(null);
+  const {
+    dialogJob,
+    loading: cancelLoading,
+    error: cancelError,
+    canSaveCheckpoint,
+    requestCancel,
+    executeCancel,
+    closeDialog,
+  } = useCancelJob(() => void mutate());
 
   useEffect(() => {
     if (!job) return;
@@ -77,14 +88,8 @@ export default function JobDetailPage({ params }: Props) {
     await jobsApi.resume(id);
     mutate();
   };
-  const handleCancel = async () => {
-    if (job.status === "running" && isTraining) {
-      const saveCheckpoint = window.confirm("Save checkpoint before stopping this job?");
-      await jobsApi.cancel(id, saveCheckpoint);
-    } else {
-      await jobsApi.cancel(id);
-    }
-    mutate();
+  const handleCancel = () => {
+    requestCancel(job);
   };
   const handleDownloadYaml = () => {
     const blob = new Blob([job.config_yaml], { type: "text/yaml" });
@@ -151,8 +156,8 @@ export default function JobDetailPage({ params }: Props) {
             </Button>
           )}
           {(job.status === "queued" || job.status === "pending" || job.status === "running") && (
-            <Button variant="danger" size="sm" onClick={() => void handleCancel()}>
-              <Square size={13} />{" "}
+            <Button variant="danger" size="sm" onClick={handleCancel} disabled={cancelLoading}>
+              {cancelLoading ? <Loader2 size={13} className="animate-spin" /> : <Square size={13} />}{" "}
               {job.status === "running"
                 ? isTraining
                   ? "Stop Training"
@@ -169,6 +174,18 @@ export default function JobDetailPage({ params }: Props) {
       </div>
 
       {samplingError && <ModalError>{samplingError}</ModalError>}
+      {cancelError && !dialogJob && <ModalError>{cancelError}</ModalError>}
+
+      <StopJobDialog
+        open={dialogJob != null}
+        jobName={dialogJob?.name ?? job.name}
+        canSaveCheckpoint={canSaveCheckpoint}
+        loading={cancelLoading}
+        error={cancelError}
+        onClose={closeDialog}
+        onStopNow={() => dialogJob && void executeCancel(dialogJob, false)}
+        onSaveAndStop={() => dialogJob && void executeCancel(dialogJob, true)}
+      />
 
       {isTraining ? (
         <TrainingJobPanel job={job} lossGraphRunKey={lossGraphRunKey} />
