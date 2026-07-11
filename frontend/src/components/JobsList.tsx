@@ -7,6 +7,8 @@ import { jobsApi } from "@/lib/api/jobs";
 import { queuesApi } from "@/lib/api/queues";
 import StatusBadge from "@/components/StatusBadge";
 import ProgressTimingInfo from "@/components/ProgressTimingInfo";
+import StopJobDialog from "@/components/StopJobDialog";
+import { useCancelJob } from "@/hooks/useCancelJob";
 import type { Job, JobType } from "@/types";
 
 interface JobsListProps {
@@ -32,19 +34,23 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
     mutateQueue();
   };
 
+  const {
+    dialogJob,
+    loading: cancelLoading,
+    error: cancelError,
+    canSaveCheckpoint,
+    requestCancel,
+    executeCancel,
+    closeDialog,
+  } = useCancelJob(refresh);
+
   const handleEnqueue = async (job: Job) => {
     await jobsApi.enqueue(job.id);
     refresh();
   };
 
-  const handleCancel = async (job: Job) => {
-    if (job.status === "running" && job.job_type === "training") {
-      const saveCheckpoint = window.confirm("Save checkpoint before stopping this job?");
-      await jobsApi.cancel(job.id, saveCheckpoint);
-    } else {
-      await jobsApi.cancel(job.id);
-    }
-    refresh();
+  const handleCancel = (job: Job) => {
+    requestCancel(job);
   };
 
   const handleResume = async (job: Job) => {
@@ -85,6 +91,17 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
   }
 
   return (
+    <>
+      <StopJobDialog
+        open={dialogJob != null}
+        jobName={dialogJob?.name ?? ""}
+        canSaveCheckpoint={canSaveCheckpoint}
+        loading={cancelLoading}
+        error={cancelError}
+        onClose={closeDialog}
+        onStopNow={() => dialogJob && void executeCancel(dialogJob, false)}
+        onSaveAndStop={() => dialogJob && void executeCancel(dialogJob, true)}
+      />
     <div className="overflow-x-auto rounded-xl border border-border">
       <table className="w-full text-sm">
         <thead className="bg-surface">
@@ -186,9 +203,10 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                     )}
                     {(job.status === "queued" || job.status === "pending" || job.status === "running") && (
                       <button
-                        onClick={() => void handleCancel(job)}
+                        onClick={() => handleCancel(job)}
+                        disabled={cancelLoading}
                         title={job.status === "running" ? "Stop" : "Cancel"}
-                        className="p-1.5 rounded hover:bg-white/10 text-error hover:text-error"
+                        className="p-1.5 rounded hover:bg-white/10 text-error hover:text-error disabled:opacity-50"
                       >
                         <X size={14} />
                       </button>
@@ -210,5 +228,6 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
         </tbody>
       </table>
     </div>
+    </>
   );
 }

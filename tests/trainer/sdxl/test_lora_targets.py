@@ -1,6 +1,9 @@
 """Tests for SDXL LoRA PEFT target module names."""
 
-from src.trainer.sdxl.lora_targets import SDXL_TE_LORA_TARGET_MODULES, SDXL_UNET_LORA_TARGET_MODULES
+from src.trainer.sdxl.lora_targets import (
+    SDXL_TE_LORA_TARGET_MODULES,
+    SDXL_UNET_LORA_TARGET_MODULES,
+)
 
 
 def test_unet_target_modules_include_ff_layers() -> None:

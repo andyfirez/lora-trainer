@@ -3,7 +3,6 @@
 import re
 
 import yaml
-
 from src.trainer.config import TrainConfig
 
 _LORA_VERSION_SUFFIX_RE = re.compile(r"_v\d+$")

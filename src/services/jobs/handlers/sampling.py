@@ -2,8 +2,8 @@
 
 import sys
 
-from src.services.jobs.handlers.base import BaseJobHandler
 from src.sampler.config import SamplingConfig
+from src.services.jobs.handlers.base import BaseJobHandler
 
 
 class SamplingJobHandler(BaseJobHandler):

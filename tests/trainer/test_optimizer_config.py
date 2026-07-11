@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 import torch.nn as nn
-
 from src.trainer.config import LRScheduler, TrainConfig
 from src.trainer.optimizer_config import (
     Optimizer,

@@ -1,12 +1,11 @@
 """Queues router: list queue, move to top."""
 
-from typing import Sequence
 
 from fastapi import APIRouter
 
+from src.api.converters import to_job_response
 from src.api.dependencies import JobsServiceDep, QueuesServiceDep
 from src.api.schemas.queues import QueueEntryResponse, QueueEntryWithJobResponse
-from src.api.converters import to_job_response
 
 router = APIRouter(prefix="/queues", tags=["queues"])
 

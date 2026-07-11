@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import torch
-
 from src.trainer.sdxl.sampling import PromptEmbedCache
 
 

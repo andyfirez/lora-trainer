@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import torch
-
 from src.trainer.config import VaeDtype
 from src.trainer.sdxl.model_loader import resolve_vae_dtype
 

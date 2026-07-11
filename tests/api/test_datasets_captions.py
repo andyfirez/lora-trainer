@@ -4,7 +4,6 @@ from PIL import Image
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-
 from src.api.dependencies import _get_datasets_service, _get_jobs_service
 from src.api.main import app
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository

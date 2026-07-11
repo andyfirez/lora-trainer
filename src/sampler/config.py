@@ -1,12 +1,16 @@
 """Sampling configuration — Pydantic model, serialized as YAML."""
 
-from typing import Literal, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field
-
 from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
 from src.trainer.gpu_config_validation import validate_gpu_config
+
+if TYPE_CHECKING:
+    from src.trainer.config import TrainConfig
 
 
 class SamplingConfig(BaseModel):
@@ -62,7 +66,7 @@ class SamplingConfig(BaseModel):
             "sample_offload_unet_before_decode": self.sample_offload_unet_before_decode,
         }
 
-    def to_train_config(self) -> "TrainConfig":
+    def to_train_config(self) -> TrainConfig:
         from src.trainer.config import ModelPartConfig, TrainConfig
 
         base = TrainConfig(

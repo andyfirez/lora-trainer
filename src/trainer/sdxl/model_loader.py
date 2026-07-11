@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch
-from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionXLPipeline, UNet2DConditionModel
+from diffusers import (
+    AutoencoderKL,
+    DDPMScheduler,
+    StableDiffusionXLPipeline,
+    UNet2DConditionModel,
+)
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
 from src.trainer.config import VaeDtype, WeightDtype

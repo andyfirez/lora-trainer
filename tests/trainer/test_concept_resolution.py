@@ -1,12 +1,10 @@
 """Tests for training concept dataset resolution."""
 
 import pytest
-
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.services.datasets.exceptions import DatasetNotFoundError
 from src.trainer.concept_resolution import resolve_dataset_ids
 from src.trainer.config import ConceptConfig, TrainConfig
-
 from tests.conftest import _prepare_dataset
 
 

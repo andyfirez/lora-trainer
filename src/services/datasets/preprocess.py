@@ -9,7 +9,11 @@ from PIL import Image
 
 from src.db.tables.dataset import Dataset
 from src.services.datasets.captions import list_image_filenames
-from src.trainer.sdxl.buckets import BucketAssignment, assign_bucket, assignment_from_stored
+from src.trainer.sdxl.buckets import (
+    BucketAssignment,
+    assign_bucket,
+    assignment_from_stored,
+)
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 _MIN_RESOLUTION = 64

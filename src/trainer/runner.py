@@ -11,9 +11,7 @@ import argparse
 import asyncio
 import logging
 import sys
-import threading
 from concurrent.futures import TimeoutError as FutureTimeoutError
-from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -23,15 +21,20 @@ from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
-from src.settings.app_settings import settings
 from src.services.configs.versioning import apply_lora_version_to_train_config
 from src.services.datasets.training_validation import validate_dataset_for_training
+from src.services.worker.progress_loop import (
+    run_in_progress_loop,
+    start_progress_loop,
+    submit_to_progress_loop,
+)
+from src.settings.app_settings import settings
 from src.trainer.concept_resolution import resolve_concept_paths
 from src.trainer.concept_training_metadata import resolve_concept_training_metadata
 from src.trainer.config import TrainConfig
-from src.trainer.sampling_resolution import resolve_sampling_config
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
-from src.trainer.sdxl.trainer import SDXLLoRATrainer, TrainingCancelledAfterSave
+from src.trainer.sampling_resolution import resolve_sampling_config
+from src.trainer.sdxl.trainer import SDXLLoRATrainer, TrainingCancelledAfterSave, TrainingCancelledDuringCache
 from src.trainer.training_log import JobTrainingLogger, setup_tensorboard_writer
 
 logging.basicConfig(
@@ -41,13 +44,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Background event loop for non-blocking DB progress updates from the training thread.
-_progress_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
-threading.Thread(
-    target=_progress_loop.run_forever,
-    daemon=True,
-    name="progress-db-loop",
-).start()
+_progress_loop = start_progress_loop("progress-db-loop")
 
 
 async def _get_active_job(repo: JobRepository, job_id: int) -> Job | None:
@@ -163,21 +160,21 @@ async def _consume_save_checkpoint_request(job_id: int) -> bool:
         return True
 
 
-def _submit_to_progress_loop(coro: Coroutine[Any, Any, None]) -> None:
-    future = asyncio.run_coroutine_threadsafe(coro, _progress_loop)
-
-    def _log_exception(fut: asyncio.Future[object]) -> None:
-        try:
-            fut.result()
-        except Exception:
-            logger.exception("Progress DB update failed")
-
-    future.add_done_callback(_log_exception)
+async def _is_stop_requested(job_id: int) -> bool:
+    async with session_factory() as session:
+        repo = JobRepository(session)
+        job = await repo.get_by_id(job_id)
+        if job is None or job.status == JobStatus.CANCELLED:
+            return True
+        return job.save_checkpoint_requested
 
 
-def _run_in_progress_loop(coro: Coroutine[Any, Any, Any], timeout_s: float = 1.0) -> Any:
-    future = asyncio.run_coroutine_threadsafe(coro, _progress_loop)
-    return future.result(timeout=timeout_s)
+def _submit_to_progress_loop(coro: Any) -> None:
+    submit_to_progress_loop(_progress_loop, coro)
+
+
+def _run_in_progress_loop(coro: Any, timeout_s: float = 1.0) -> Any:
+    return run_in_progress_loop(_progress_loop, coro, timeout_s=timeout_s)
 
 
 def _make_progress_callback(job_id: int):
@@ -311,6 +308,15 @@ async def _run(job_id: int) -> None:
                 logger.exception("Failed to poll save-checkpoint request")
                 return False
 
+        def _stop_requested() -> bool:
+            try:
+                return bool(_run_in_progress_loop(_is_stop_requested(job_id)))
+            except FutureTimeoutError:
+                return False
+            except Exception:
+                logger.exception("Failed to poll stop request during cache")
+                return False
+
         trainer = SDXLLoRATrainer(
             config,
             progress_callback=_make_progress_callback(job_id),
@@ -319,6 +325,7 @@ async def _run(job_id: int) -> None:
             training_logger=training_logger,
             checkpoint_callback=_checkpoint_callback,
             save_checkpoint_requested_callback=_save_checkpoint_requested,
+            stop_requested_callback=_stop_requested,
             concept_metadata=concept_metadata,
         )
         trainer.train()
@@ -327,6 +334,9 @@ async def _run(job_id: int) -> None:
     except TrainingCancelledAfterSave:
         await _update_status(job_id, JobStatus.CANCELLED)
         training_logger.logger.info("Job id=%d cancelled after saving checkpoint", job_id)
+    except TrainingCancelledDuringCache:
+        await _update_status(job_id, JobStatus.CANCELLED)
+        training_logger.logger.info("Job id=%d cancelled during cache/setup", job_id)
     except Exception as exc:
         training_logger.logger.exception("Job id=%d failed: %s", job_id, exc)
         await _update_status(job_id, JobStatus.FAILED, error=str(exc))

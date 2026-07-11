@@ -1,9 +1,9 @@
 """Native filesystem dialogs via tkinter."""
 
 import asyncio
+import tkinter as tk
 from enum import StrEnum
 from pathlib import Path
-import tkinter as tk
 from tkinter import filedialog
 
 from src.services.files.exceptions import PickCancelledError

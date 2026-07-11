@@ -2,7 +2,6 @@
 
 import sys
 
-from src.db.tables.job import Job
 from src.services.jobs.handlers.base import BaseJobHandler
 from src.trainer.config import TrainConfig
 

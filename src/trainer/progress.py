@@ -1,7 +1,6 @@
 """SDXL LoRA training progress tracking."""
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass

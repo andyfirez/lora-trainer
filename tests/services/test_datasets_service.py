@@ -3,9 +3,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 from PIL import Image
-
 from src.db.tables.dataset import Dataset
-from src.services.datasets.exceptions import DatasetDirectoryNotFoundError, DatasetNameConflictError
+from src.services.datasets.exceptions import (
+    DatasetDirectoryNotFoundError,
+    DatasetNameConflictError,
+)
 from src.services.datasets.preprocess import ImagePreprocessState, prepared_dir_path
 from src.services.datasets.service import DatasetsService
 

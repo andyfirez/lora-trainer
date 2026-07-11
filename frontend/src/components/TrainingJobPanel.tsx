@@ -38,6 +38,12 @@ export default function TrainingJobPanel({ job, lossGraphRunKey }: TrainingJobPa
 
   return (
     <div className="space-y-6">
+      {isRunning && training?.save_checkpoint_requested && (
+        <div className="rounded-lg bg-warning/10 border border-warning/30 text-warning px-4 py-3 text-sm">
+          Saving checkpoint before stopping…
+        </div>
+      )}
+
       {isRunning && training?.sampling_status != null && (
         <JobProgressBar
           title={training.sampling_status}

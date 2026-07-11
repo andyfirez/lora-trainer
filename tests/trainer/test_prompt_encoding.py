@@ -1,7 +1,6 @@
 """Tests for CLIP hidden-state selection."""
 
 import torch
-
 from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
 
 

@@ -1,8 +1,12 @@
 """API response converters."""
 
-import yaml
 
-from src.api.schemas.jobs import JobResponse, SamplingJobDetails, TaggingJobDetails, TrainingJobDetails
+from src.api.schemas.jobs import (
+    JobResponse,
+    SamplingJobDetails,
+    TaggingJobDetails,
+    TrainingJobDetails,
+)
 from src.db.tables.job import Job, JobType
 from src.services.jobs.service import JobsService
 from src.tagger.config import TaggingConfig

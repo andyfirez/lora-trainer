@@ -2,8 +2,6 @@
 
 from abc import ABC, abstractmethod
 
-from src.db.tables.job import Job
-
 
 class BaseJobHandler(ABC):
     @abstractmethod

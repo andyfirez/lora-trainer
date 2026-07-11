@@ -85,15 +85,15 @@ def _get_queues_service(
     return QueuesService(queue_repo, job_repo)
 
 
+def _get_crop_repo(session: SessionDep) -> DatasetImageCropRepository:
+    return DatasetImageCropRepository(session)
+
+
 def _get_datasets_service(
     dataset_repo: DatasetRepoDep,
     crop_repo: Annotated[DatasetImageCropRepository, Depends(_get_crop_repo)],
 ) -> DatasetsService:
     return DatasetsService(dataset_repo, crop_repo)
-
-
-def _get_crop_repo(session: SessionDep) -> DatasetImageCropRepository:
-    return DatasetImageCropRepository(session)
 
 
 def _get_files_service() -> FilesService:

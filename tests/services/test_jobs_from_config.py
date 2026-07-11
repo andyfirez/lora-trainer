@@ -1,5 +1,4 @@
 import pytest
-
 from src.db.tables.job import JobType
 from src.db.tables.job_config import ConfigType
 from src.services.configs.service import JobConfigService

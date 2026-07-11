@@ -2,7 +2,10 @@
 
 from src.sampler.config import SamplingConfig
 from src.trainer.config import ConceptConfig, TrainConfig
-from src.trainer.sdxl.caption import apply_trigger_words_to_sample_prompts, collect_trigger_words
+from src.trainer.sdxl.caption import (
+    apply_trigger_words_to_sample_prompts,
+    collect_trigger_words,
+)
 
 
 def test_sampling_job_applies_triggers_without_lora_paths() -> None:

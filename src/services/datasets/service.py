@@ -33,7 +33,6 @@ from src.services.datasets.exceptions import (
     DatasetTargetResolutionNotSetError,
     InvalidDatasetFilenameError,
 )
-from src.services.datasets.training_cache import invalidate_te_cache_for_image
 from src.services.datasets.preprocess import (
     BucketPreprocessConfig,
     CropMeta,
@@ -53,6 +52,7 @@ from src.services.datasets.preprocess import (
     source_mtime,
     validate_target_resolution,
 )
+from src.services.datasets.training_cache import invalidate_te_cache_for_image
 
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 

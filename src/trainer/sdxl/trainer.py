@@ -13,14 +13,18 @@ from diffusers import DDPMScheduler
 from peft import get_peft_model
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
-from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
+from transformers import CLIPTokenizer
 
 from src.trainer.attention import configure_unet_attention
+from src.trainer.concept_training_metadata import (
+    ConceptTrainingMetadata,
+    resolve_reference_add_time_ids,
+)
 from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.optimizer_config import Optimizer, build_optimizer
 from src.trainer.progress import TrainProgress
-from src.trainer.concept_training_metadata import ConceptTrainingMetadata, resolve_reference_add_time_ids
 from src.trainer.sdxl.bucket_batch_sampler import build_bucket_batch_sampler
+from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
 from src.trainer.sdxl.dataset import (
     build_training_dataset,
     collect_all_image_paths_and_captions,
@@ -28,22 +32,30 @@ from src.trainer.sdxl.dataset import (
     count_latent_cache_items,
     count_te_cache_items,
 )
-from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
+from src.trainer.sdxl.inference_context import (
+    merge_adapters_for_inference,
+    run_sampling_pass_with_embeds,
+    unmerge_adapters,
+)
 from src.trainer.sdxl.latent_cache import build_latent_cache
-from src.trainer.sdxl.loss import apply_noise_offset, min_snr_weight
-from src.trainer.sdxl.lora_export import export_kohya_state_dict
-from src.trainer.sdxl.lora_io import apply_lora_state_dict, apply_lora_state_to_module
-from src.trainer.sdxl.mixed_precision import cast_trainable_params_to_fp32, create_grad_scaler
 from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
-from src.trainer.sdxl.lora_targets import SDXL_TE_LORA_TARGET_MODULES, SDXL_UNET_LORA_TARGET_MODULES
+from src.trainer.sdxl.lora_persistence import (
+    collect_lora_state_dict,
+    export_lora_weights,
+    load_lora_state_dict,
+)
+from src.trainer.sdxl.lora_targets import (
+    SDXL_TE_LORA_TARGET_MODULES,
+    SDXL_UNET_LORA_TARGET_MODULES,
+)
+from src.trainer.sdxl.loss import apply_noise_offset, min_snr_weight
+from src.trainer.sdxl.mixed_precision import (
+    cast_trainable_params_to_fp32,
+    create_grad_scaler,
+)
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
-from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
-from src.trainer.sdxl.sampling import (
-    PromptEmbedCache,
-    build_inference_scheduler,
-    precompute_all_sample_embeds,
-)
+from src.trainer.sdxl.sampling import PromptEmbedCache
 from src.trainer.sdxl.te_cache import build_te_cache
 from src.trainer.training_log import JobTrainingLogger
 
@@ -60,6 +72,10 @@ class TrainingCancelledAfterSave(Exception):
     """Raised when cancellation with save-checkpoint was requested."""
 
 
+class TrainingCancelledDuringCache(Exception):
+    """Raised when stop was requested during cache/setup before the training loop."""
+
+
 class SDXLLoRATrainer:
     def __init__(
         self,
@@ -70,6 +86,7 @@ class SDXLLoRATrainer:
         training_logger: Optional[JobTrainingLogger] = None,
         checkpoint_callback: Optional[Callable[[str, int, int], None]] = None,
         save_checkpoint_requested_callback: Optional[Callable[[], bool]] = None,
+        stop_requested_callback: Optional[Callable[[], bool]] = None,
         concept_metadata: Optional[dict[int, ConceptTrainingMetadata]] = None,
     ) -> None:
         self._config = config
@@ -80,6 +97,7 @@ class SDXLLoRATrainer:
         self._training_logger = training_logger
         self._checkpoint_callback = checkpoint_callback
         self._save_checkpoint_requested_callback = save_checkpoint_requested_callback
+        self._stop_requested_callback = stop_requested_callback
         self._progress = TrainProgress()
         self._total_steps: int = 0
         self._optimizer: Optional[object] = None
@@ -173,7 +191,7 @@ class SDXLLoRATrainer:
             trainable_params += list(text_encoder_2.parameters())
 
         if resume_state is not None:
-            self._load_lora_state_dict(
+            load_lora_state_dict(
                 resume_state.lora_state_dict,
                 unet=unet,
                 text_encoder_1=text_encoder_1,
@@ -262,8 +280,14 @@ class SDXLLoRATrainer:
 
         cache_progress = 0
 
+        def _check_stop_during_cache() -> None:
+            if self._stop_requested_callback is not None and self._stop_requested_callback():
+                log.info("Stop requested during cache phase, cancelling")
+                raise TrainingCancelledDuringCache()
+
         def _on_cache_progress(phase_current: int, phase_total: int, phase: str) -> None:
             nonlocal cache_progress
+            _check_stop_during_cache()
             cache_progress += 1
             if self._training_logger is not None:
                 if cache_progress == 1:
@@ -275,6 +299,7 @@ class SDXLLoRATrainer:
         latent_cache: Optional[dict[str, Tensor]] = None
         te_cache: Optional[dict[str, tuple[Tensor, Tensor]]] = None
 
+        _check_stop_during_cache()
         if config.cache_latents:
             log.info("Building latent cache...")
             latent_cache = build_latent_cache(
@@ -285,6 +310,7 @@ class SDXLLoRATrainer:
                 on_progress=_on_cache_progress if cache_steps > 0 else None,
                 log=log,
             )
+            _check_stop_during_cache()
 
         if config.cache_text_encoder_outputs_to_disk:
             log.warning(
@@ -307,6 +333,7 @@ class SDXLLoRATrainer:
                 on_progress=_on_cache_progress if cache_steps > 0 else None,
                 log=log,
             )
+            _check_stop_during_cache()
 
         if self._training_logger is not None:
             if cache_steps > 0:
@@ -619,8 +646,8 @@ class SDXLLoRATrainer:
     ) -> Path:
         ext = f".{config.output_format.value}"
         checkpoint_path = self._work_dir(config) / f"{checkpoint_name}{ext}"
-        self._export_lora(unet, text_encoder_1, text_encoder_2, config, checkpoint_path)
-        lora_state_dict = self._collect_lora_state_dict(unet, text_encoder_1, text_encoder_2, config)
+        export_lora_weights(unet, text_encoder_1, text_encoder_2, config, checkpoint_path)
+        lora_state_dict = collect_lora_state_dict(unet, text_encoder_1, text_encoder_2, config)
         grad_scaler_state_dict = grad_scaler.state_dict() if grad_scaler is not None else None
         save_resume_state(
             checkpoint_path=checkpoint_path,
@@ -646,7 +673,7 @@ class SDXLLoRATrainer:
     ) -> None:
         ext = f".{config.output_format.value}"
         final_path = self._work_dir(config) / f"{config.lora_name}{ext}"
-        self._export_lora(unet, text_encoder_1, text_encoder_2, config, final_path)
+        export_lora_weights(unet, text_encoder_1, text_encoder_2, config, final_path)
 
     def _offload_to_cpu(
         self,
@@ -736,28 +763,20 @@ class SDXLLoRATrainer:
         inference_unet: Optional[torch.nn.Module] = None
         inference_te1: Optional[torch.nn.Module] = None
         inference_te2: Optional[torch.nn.Module] = None
-        unet_merged = False
-        te1_merged = False
-        te2_merged = False
+        merge_state = None
 
         try:
             merge_started_at = time.perf_counter()
-            unet.merge_adapter()
-            unet_merged = True
-            inference_unet = unet.base_model.model
-            if config.text_encoder_1.train:
-                text_encoder_1.merge_adapter()
-                te1_merged = True
-                inference_te1 = text_encoder_1.base_model.model
-            else:
-                inference_te1 = text_encoder_1
-
-            if config.text_encoder_2.train:
-                text_encoder_2.merge_adapter()
-                te2_merged = True
-                inference_te2 = text_encoder_2.base_model.model
-            else:
-                inference_te2 = text_encoder_2
+            merge_state = merge_adapters_for_inference(
+                unet=unet,
+                text_encoder_1=text_encoder_1,
+                text_encoder_2=text_encoder_2,
+                lora_config=config,
+                merge_unet=True,
+            )
+            inference_unet = merge_state.models.unet
+            inference_te1 = merge_state.models.text_encoder_1
+            inference_te2 = merge_state.models.text_encoder_2
             log.info("[sampling e%d] merge adapters: %.2fs", epoch, time.perf_counter() - merge_started_at)
 
             build_started_at = time.perf_counter()
@@ -765,42 +784,13 @@ class SDXLLoRATrainer:
             inference_te1 = inference_te1.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_1.weight_dtype])
             inference_te2 = inference_te2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
             vae = vae.to(device=device, dtype=resolve_vae_dtype(config.vae_dtype))
-
-            width = config.sample_width or config.resolution
-            height = config.sample_height or config.resolution
-            autocast_dtype = _DTYPE_MAP[config.mixed_precision]
-
-            inference_scheduler = build_inference_scheduler(config.sample_scheduler, noise_scheduler)
-            inference_unet.eval()
-            inference_te1.eval()
-            inference_te2.eval()
             log.info("[sampling e%d] move inference models: %.2fs", epoch, time.perf_counter() - build_started_at)
-
-            embed_started_at = time.perf_counter()
-            negative_prompt = config.sample_negative_prompt or ""
-            prompt_embed_cache = PromptEmbedCache()
-            all_embeds = precompute_all_sample_embeds(
-                sample_prompts=sample_prompts,
-                negative_prompt=negative_prompt,
-                tokenizer_1=tokenizer_1,
-                tokenizer_2=tokenizer_2,
-                text_encoder_1=inference_te1,
-                text_encoder_2=inference_te2,
-                device=device,
-                dtype=autocast_dtype,
-                clip_skip=config.clip_skip,
-                cache=prompt_embed_cache,
-            )
-            inference_te1.to("cpu")
-            inference_te2.to("cpu")
-            torch.cuda.empty_cache()
-            log.info("[sampling e%d] precompute embeds + TE offload: %.2fs", epoch, time.perf_counter() - embed_started_at)
 
             reference_add_time_ids = resolve_reference_add_time_ids(
                 self._concept_metadata,
                 dataset_ids=[c.dataset_id for c in config.concepts],
-                width=width,
-                height=height,
+                width=config.sample_width or config.resolution,
+                height=config.sample_height or config.resolution,
             )
             if reference_add_time_ids is not None:
                 log.info(
@@ -809,18 +799,7 @@ class SDXLLoRATrainer:
                     reference_add_time_ids,
                 )
 
-            session = SDXLSamplingSession.create(
-                unet=inference_unet,
-                vae=vae,
-                scheduler=inference_scheduler,
-                device=device,
-                width=width,
-                height=height,
-                sample_steps=config.sample_steps,
-                autocast_dtype=autocast_dtype,
-                config=config,
-                reference_add_time_ids=reference_add_time_ids,
-            )
+            embed_started_at = time.perf_counter()
 
             def _on_status(prompt_index: int, total_prompts: int) -> None:
                 if sampling_status_callback is not None:
@@ -832,17 +811,27 @@ class SDXLLoRATrainer:
                 if sampling_progress_callback is not None:
                     sampling_progress_callback(completed, total)
 
-            run_sdxl_sampling_pass(
-                session=session,
-                embeds_list=all_embeds,
-                config=config,
+            run_sampling_pass_with_embeds(
+                inference_unet=inference_unet,
+                inference_te1=inference_te1,
+                inference_te2=inference_te2,
+                vae=vae,
+                tokenizer_1=tokenizer_1,
+                tokenizer_2=tokenizer_2,
+                noise_scheduler=noise_scheduler,
+                sampling_config=config,
+                device=device,
+                sample_prompts=sample_prompts,
                 output_dir=sample_dir,
                 output_stem=f"{config.lora_name}_epoch{epoch}",
                 log=log,
+                embed_cache=PromptEmbedCache(),
+                reference_add_time_ids=reference_add_time_ids,
                 on_status=_on_status,
                 on_step=_on_step,
                 log_step_context=f"[sample {{prompt_index}}/{{n_prompts}} e{epoch}]",
             )
+            log.info("[sampling e%d] precompute embeds + TE offload: %.2fs", epoch, time.perf_counter() - embed_started_at)
         finally:
             restore_started_at = time.perf_counter()
             if inference_unet is not None:
@@ -852,12 +841,13 @@ class SDXLLoRATrainer:
             if inference_te2 is not None:
                 inference_te2.to(te2_device)
             vae.to(vae_device)
-            if unet_merged:
-                unet.unmerge_adapter()
-            if te1_merged:
-                text_encoder_1.unmerge_adapter()
-            if te2_merged:
-                text_encoder_2.unmerge_adapter()
+            if merge_state is not None:
+                unmerge_adapters(
+                    unet=unet,
+                    text_encoder_1=text_encoder_1,
+                    text_encoder_2=text_encoder_2,
+                    state=merge_state,
+                )
             self._restore_to_gpu(unet, text_encoder_1, text_encoder_2, config, log)
             log.info("[sampling e%d] restore: %.2fs", epoch, time.perf_counter() - restore_started_at)
             log.info("[sampling e%d] total: %.2fs", epoch, time.perf_counter() - sampling_started_at)
@@ -869,55 +859,3 @@ class SDXLLoRATrainer:
                     initial=self._progress.global_step,
                     desc="steps",
                 )
-
-    def _export_lora(
-        self,
-        unet: torch.nn.Module,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        config: TrainConfig,
-        path: Path,
-    ) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        from safetensors.torch import save_file  # noqa: PLC0415
-
-        state_dict = export_kohya_state_dict(unet, text_encoder_1, text_encoder_2, config)
-        if config.output_format.value == "safetensors":
-            save_file(state_dict, str(path))
-        else:
-            torch.save(state_dict, str(path))
-
-    def _collect_lora_state_dict(
-        self,
-        unet: torch.nn.Module,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        config: TrainConfig,
-    ) -> dict[str, Tensor]:
-        return export_kohya_state_dict(unet, text_encoder_1, text_encoder_2, config)
-
-    def _load_lora_state_dict(
-        self,
-        state_dict: dict[str, Any],
-        *,
-        unet: torch.nn.Module,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        config: TrainConfig,
-    ) -> None:
-        apply_lora_state_dict(
-            state_dict,
-            unet=unet,
-            text_encoder_1=text_encoder_1,
-            text_encoder_2=text_encoder_2,
-            config=config,
-        )
-
-    def _apply_lora_state_to_module(
-        self,
-        module: torch.nn.Module,
-        state_dict: dict[str, Any],
-        *,
-        prefix: str,
-    ) -> None:
-        apply_lora_state_to_module(module, state_dict, prefix=prefix)

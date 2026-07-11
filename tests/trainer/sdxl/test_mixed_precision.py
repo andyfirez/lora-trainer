@@ -3,10 +3,12 @@
 import torch
 import torch.nn as nn
 from peft import get_peft_model
-
 from src.trainer.config import WeightDtype
 from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
-from src.trainer.sdxl.mixed_precision import cast_trainable_params_to_fp32, create_grad_scaler
+from src.trainer.sdxl.mixed_precision import (
+    cast_trainable_params_to_fp32,
+    create_grad_scaler,
+)
 
 
 class _LinearTargetModule(nn.Module):

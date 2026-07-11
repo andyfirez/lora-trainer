@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
-
 from src.services.datasets.captions import (
     collect_tag_stats,
     merge_tags,
@@ -11,7 +10,10 @@ from src.services.datasets.captions import (
     serialize_tags,
     write_tags,
 )
-from src.services.datasets.exceptions import DatasetImageNotFoundError, InvalidDatasetFilenameError
+from src.services.datasets.exceptions import (
+    DatasetImageNotFoundError,
+    InvalidDatasetFilenameError,
+)
 from src.services.datasets.service import DatasetsService
 
 

@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 import torch
-
 from src.trainer.sdxl.latent_sampling.runner import (
     _ensure_unet_on_device,
     _restore_unet_after_decode,
@@ -11,7 +10,9 @@ from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 
 def _session_with_unet_on(device: torch.device) -> SDXLSamplingSession:
     unet = MagicMock()
-    unet.parameters.side_effect = lambda: iter([torch.zeros(1, device=device)])
+    param = MagicMock()
+    param.device = device
+    unet.parameters.side_effect = lambda: iter([param])
     return SDXLSamplingSession(
         device=torch.device("cuda:0"),
         unet=unet,

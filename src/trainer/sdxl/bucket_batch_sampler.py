@@ -3,7 +3,7 @@
 import random
 from collections.abc import Iterator, Sized
 
-from torch.utils.data import BatchSampler, Sampler
+from torch.utils.data import BatchSampler
 
 
 class BucketBatchSampler(BatchSampler):
