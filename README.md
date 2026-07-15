@@ -159,10 +159,18 @@ uv run lora-trainer-worker
 
 Avoid editing API code during a running job when using `--reload`.
 
+## LoRA Training Notes
+
+Практические заметки по обучению персонажных LoRA (датасет, гиперпараметры, теги, эксперименты):
+
+**[realistic-lora-training/](realistic-lora-training/)** — experiment notes. Captioning guide: **[docs/lora-captioning-guide.md](docs/lora-captioning-guide.md)**.
+
 ## Project Structure
 
 ```
 lora-trainer/
+├── docs/                     # General training guides
+├── realistic-lora-training/  # Experiment notes (Melanie_CFTS)
 ├── src/
 │   ├── api/          # FastAPI app and routers
 │   ├── db/           # SQLModel tables and repositories
