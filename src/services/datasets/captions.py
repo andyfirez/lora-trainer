@@ -4,7 +4,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+from src.services.datasets.formats import IMAGE_EXTENSIONS
+
 DEFAULT_CAPTION_EXTENSION = ".txt"
 
 
@@ -39,7 +40,7 @@ def caption_path(image_dir: Path, filename: str, caption_extension: str = DEFAUL
 def image_path(image_dir: Path, filename: str) -> Path:
     safe_filename(filename)
     path = image_dir / filename
-    if not path.is_file() or path.suffix.lower() not in _IMAGE_EXTENSIONS:
+    if not path.is_file() or path.suffix.lower() not in IMAGE_EXTENSIONS:
         raise FileNotFoundError(filename)
     return path
 
@@ -83,7 +84,7 @@ def list_image_filenames(image_dir: Path) -> list[str]:
     return sorted(
         p.name
         for p in image_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in _IMAGE_EXTENSIONS
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
     )
 
 

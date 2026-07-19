@@ -6,6 +6,7 @@ from PIL import Image
 from src.db.tables.dataset import Dataset
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
+    DatasetImageNotFoundError,
     DatasetNameConflictError,
 )
 from src.services.datasets.preprocess import ImagePreprocessState, prepared_dir_path
@@ -103,7 +104,7 @@ async def test_bake_all_creates_default_crop_and_bakes(tmp_path: Path, datasets_
     assert baked == 1
     dataset = await datasets_service.get_dataset(dataset.id)  # type: ignore[arg-type]
     assert dataset.preprocess_ready is True
-    prepared = prepared_dir_path(image_dir, 1024) / "img.png"
+    prepared = prepared_dir_path(image_dir, 1024) / "img.jpg"
     assert prepared.is_file()
     with Image.open(prepared) as img:
         assert img.size == (1024, 1024)
@@ -163,3 +164,29 @@ async def test_update_tags_invalidates_te_cache(tmp_path: Path, datasets_service
     datasets_service.update_tags(dataset, "img.png", ["solo", "1girl"])
 
     assert not cache_path.is_file()
+
+
+@pytest.mark.asyncio
+async def test_delete_image_removes_files_and_crop(tmp_path: Path, datasets_service: DatasetsService) -> None:
+    image_dir = tmp_path / "images"
+    _write_test_image(image_dir / "keep.png")
+    _write_test_image(image_dir / "remove.png")
+    (image_dir / "remove.txt").write_text("solo, 1girl", encoding="utf-8")
+    dataset = await _create_dataset_with_resolution(datasets_service, image_dir)
+    await datasets_service.bake_all(dataset)
+
+    prepared = prepared_dir_path(image_dir, 1024) / "remove.jpg"
+    assert prepared.is_file()
+
+    await datasets_service.delete_image(dataset, "remove.png")
+
+    assert (image_dir / "keep.png").is_file()
+    assert not (image_dir / "remove.png").is_file()
+    assert not (image_dir / "remove.txt").is_file()
+    assert not prepared.is_file()
+
+    dataset = await datasets_service.get_dataset(dataset.id)  # type: ignore[arg-type]
+    assert dataset.preprocess_ready is True
+
+    with pytest.raises(DatasetImageNotFoundError):
+        await datasets_service.delete_image(dataset, "remove.png")

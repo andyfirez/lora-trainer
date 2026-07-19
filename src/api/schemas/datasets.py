@@ -86,6 +86,14 @@ class BakeResponse(BaseModel):
     preprocess_ready: bool
 
 
+class RemoveDuplicatesResponse(BaseModel):
+    removed_count: int
+
+
+class DuplicatesResponse(BaseModel):
+    duplicate_count: int
+
+
 class DatasetImagesResponse(BaseModel):
     dataset_id: int
     image_dir: str

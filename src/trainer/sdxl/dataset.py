@@ -8,14 +8,14 @@ from PIL import Image
 from torch.utils.data import ConcatDataset, Dataset
 from torchvision import transforms
 
+from src.services.datasets.formats import IMAGE_EXTENSIONS, PREPARED_EXTENSION
+from src.services.datasets.preprocess import resolve_prepared_path
 from src.trainer.concept_training_metadata import (
     ConceptTrainingMetadata,
     ImageTrainingMeta,
 )
 from src.trainer.config import ConceptConfig, TrainConfig
 from src.trainer.sdxl.caption import join_trigger_words_and_text
-
-_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 
 def _concept_image_dir(concept: ConceptConfig) -> Path:
@@ -52,13 +52,11 @@ def collect_all_image_paths_and_captions(
     for concept in config.concepts:
         prepared_dir = _concept_prepared_dir(concept)
         image_dir = _concept_image_dir(concept)
-        image_paths = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in _IMAGE_EXTENSIONS)
+        image_paths = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS)
         for original_path in image_paths:
-            prepared_path = prepared_dir / original_path.name
-            if not prepared_path.is_file():
-                alt_png = prepared_dir / f"{original_path.stem}.png"
-                if alt_png.is_file():
-                    prepared_path = alt_png
+            prepared_path = resolve_prepared_path(prepared_dir, original_path.name)
+            if prepared_path is None:
+                prepared_path = prepared_dir / f"{original_path.stem}{PREPARED_EXTENSION}"
             caption = _load_caption(original_path, concept)
             all_paths.append(prepared_path)
             all_pairs.append((prepared_path, caption))
@@ -108,7 +106,7 @@ class ConceptDataset(Dataset):
         prepared_dir = _concept_prepared_dir(concept)
         self._image_dir = image_dir
         self._prepared_dir = prepared_dir
-        self._image_paths = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in _IMAGE_EXTENSIONS)
+        self._image_paths = sorted(p for p in image_dir.iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS)
         self._cache_mode = cache_mode
         if not cache_mode:
             self._transform = transforms.Compose([
@@ -141,13 +139,10 @@ class ConceptDataset(Dataset):
         return meta
 
     def _prepared_path(self, original_path: Path) -> Path:
-        prepared = self._prepared_dir / original_path.name
-        if prepared.is_file():
+        prepared = resolve_prepared_path(self._prepared_dir, original_path.name)
+        if prepared is not None:
             return prepared
-        alt_png = self._prepared_dir / f"{original_path.stem}.png"
-        if alt_png.is_file():
-            return alt_png
-        return prepared
+        return self._prepared_dir / f"{original_path.stem}{PREPARED_EXTENSION}"
 
     def __len__(self) -> int:
         return len(self._image_paths) * self._concept.repeats

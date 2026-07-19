@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Trash2 } from "lucide-react";
 import TagChipEditor from "@/components/dataset/TagChipEditor";
+import Button from "@/components/ui/Button";
 import { datasetImageUrl, datasetPreparedImageUrl } from "@/lib/api/datasets";
 import type { ImagePreprocessState } from "@/types";
 
@@ -12,8 +14,10 @@ interface Props {
   preprocessState?: ImagePreprocessState | null;
   canCrop: boolean;
   preparing?: boolean;
+  deleteDisabled?: boolean;
   cacheKey?: string;
   onCropClick: () => void;
+  onDelete: (filename: string) => void;
   onTagsSaved: (filename: string, tags: string[]) => void;
   onSave: (filename: string, tags: string[]) => Promise<void>;
 }
@@ -32,8 +36,10 @@ export default function DatasetImageCard({
   preprocessState,
   canCrop,
   preparing = false,
+  deleteDisabled = false,
   cacheKey,
   onCropClick,
+  onDelete,
   onTagsSaved,
   onSave,
 }: Props) {
@@ -99,31 +105,47 @@ export default function DatasetImageCard({
 
   return (
     <div className="bg-surface rounded-xl border border-border overflow-hidden flex flex-col">
-      <button
-        type="button"
-        onClick={canCrop ? onCropClick : undefined}
-        disabled={!canCrop}
-        className={`aspect-square bg-bg relative w-full text-left ${canCrop ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
-        title={canCrop ? "Edit crop" : "Set target resolution first"}
-      >
-        <img
-          key={thumbnailSrc}
-          src={thumbnailSrc}
-          alt={filename}
-          className="w-full h-full object-cover pointer-events-none"
-          loading="lazy"
-          onError={() => {
-            if (usePrepared) setPreparedFailed(true);
-          }}
-        />
+      <div className="aspect-square bg-bg relative w-full">
+        <button
+          type="button"
+          onClick={canCrop ? onCropClick : undefined}
+          disabled={!canCrop}
+          className={`absolute inset-0 w-full h-full text-left ${canCrop ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
+          title={canCrop ? "Edit crop" : "Set target resolution first"}
+        >
+          <img
+            key={thumbnailSrc}
+            src={thumbnailSrc}
+            alt={filename}
+            className="w-full h-full object-cover pointer-events-none"
+            loading="lazy"
+            onError={() => {
+              if (usePrepared) setPreparedFailed(true);
+            }}
+          />
+        </button>
         {badgeLabel && badgeClassName && (
           <span
-            className={`absolute top-2 left-2 text-[10px] px-1.5 py-0.5 rounded border ${badgeClassName}`}
+            className={`absolute top-2 left-2 text-[10px] px-1.5 py-0.5 rounded border pointer-events-none ${badgeClassName}`}
           >
             {badgeLabel}
           </span>
         )}
-      </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={deleteDisabled}
+          onClick={() => {
+            if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
+            onDelete(filename);
+          }}
+          className="absolute top-2 right-2 z-10 bg-surface/90 text-muted hover:text-error hover:bg-error-muted border border-border"
+          aria-label={`Delete ${filename}`}
+        >
+          <Trash2 size={14} />
+        </Button>
+      </div>
       <div className="p-3 space-y-2 flex-1">
         <div className="text-xs text-muted truncate" title={filename}>
           {filename}

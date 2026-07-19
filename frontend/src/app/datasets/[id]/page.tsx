@@ -4,7 +4,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Pencil, Sparkles } from "lucide-react";
+import { ArrowLeft, CopyMinus, Pencil, Sparkles } from "lucide-react";
 import AutoTagModal from "@/components/dataset/AutoTagModal";
 import EditDatasetModal from "@/components/dataset/EditDatasetModal";
 import DatasetImageCard from "@/components/dataset/DatasetImageCard";
@@ -30,6 +30,7 @@ export default function DatasetDetailPage() {
   const [cropFilename, setCropFilename] = useState<string | null>(null);
   const [filterIncomplete, setFilterIncomplete] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  const [removingDuplicates, setRemovingDuplicates] = useState(false);
   const bakingInFlight = useRef(false);
   const lastBakeKey = useRef<string | null>(null);
 
@@ -59,6 +60,11 @@ export default function DatasetDetailPage() {
     () => datasetsApi.getPreprocessStatus(datasetId)
   );
 
+  const { data: duplicatesInfo, mutate: mutateDuplicates } = useSWR(
+    Number.isFinite(datasetId) ? `/datasets/${datasetId}/duplicates` : null,
+    () => datasetsApi.getDuplicates(datasetId)
+  );
+
   const { data: taggingJob } = useSWR<Job | null>(
     taggingJobId ? `/jobs/${taggingJobId}` : null,
     () => (taggingJobId ? jobsApi.get(taggingJobId) : null),
@@ -86,8 +92,14 @@ export default function DatasetDetailPage() {
   }, [taggingJob, mutateItems, mutateStats]);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([mutateItems(), mutateStats(), mutatePreprocessStatus(), mutateDataset()]);
-  }, [mutateItems, mutateStats, mutatePreprocessStatus, mutateDataset]);
+    await Promise.all([
+      mutateItems(),
+      mutateStats(),
+      mutatePreprocessStatus(),
+      mutateDataset(),
+      mutateDuplicates(),
+    ]);
+  }, [mutateItems, mutateStats, mutatePreprocessStatus, mutateDataset, mutateDuplicates]);
 
   const handleSaveTags = useCallback(
     async (filename: string, tags: string[]) => {
@@ -134,6 +146,33 @@ export default function DatasetDetailPage() {
       setTaggingJobId(result.job_id);
     },
     [datasetId]
+  );
+
+  const handleRemoveDuplicates = useCallback(async () => {
+    const duplicateCount = duplicatesInfo?.duplicate_count ?? 0;
+    if (duplicateCount <= 0) return;
+    if (
+      !confirm(
+        `Remove ${duplicateCount} duplicate image${duplicateCount === 1 ? "" : "s"}? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setRemovingDuplicates(true);
+    try {
+      await datasetsApi.removeDuplicates(datasetId, CAPTION_EXTENSION);
+      await refreshAll();
+    } finally {
+      setRemovingDuplicates(false);
+    }
+  }, [datasetId, duplicatesInfo?.duplicate_count, refreshAll]);
+
+  const handleDeleteImage = useCallback(
+    async (filename: string) => {
+      await datasetsApi.deleteImage(datasetId, filename, CAPTION_EXTENSION);
+      await refreshAll();
+    },
+    [datasetId, refreshAll]
   );
 
   const handleDatasetSaved = useCallback(async () => {
@@ -280,6 +319,24 @@ export default function DatasetDetailPage() {
       />
 
       <div className="space-y-4">
+        {(duplicatesInfo?.duplicate_count ?? 0) > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning-muted px-4 py-3">
+            <span className="text-sm text-text">
+              Found {duplicatesInfo?.duplicate_count} duplicate image
+              {duplicatesInfo?.duplicate_count === 1 ? "" : "s"}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={removingDuplicates || taggingActive}
+              onClick={() => void handleRemoveDuplicates()}
+            >
+              <CopyMinus size={14} />
+              {removingDuplicates ? "Removing…" : "Remove duplicates"}
+            </Button>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
           <span>{filteredItems.length} images{filterIncomplete ? " (filtered)" : ""}</span>
           <label className="flex items-center gap-2 text-xs cursor-pointer">
@@ -338,6 +395,8 @@ export default function DatasetDetailPage() {
                 preparing={preparing}
                 cacheKey={dataset.updated_at}
                 onCropClick={() => setCropFilename(item.filename)}
+                onDelete={handleDeleteImage}
+                deleteDisabled={taggingActive || preparing}
                 onSave={handleSaveTags}
                 onTagsSaved={handleTagsSaved}
               />

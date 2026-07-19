@@ -116,14 +116,12 @@ def validate_dataset_for_training(
             f"{len(invalid_size)} prepared image(s) have wrong size",
         )
 
-    prepared_files = [
-        p.name
-        for p in prepared_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
-    ]
-    if len(prepared_files) != len(filenames):
+    prepared_count = sum(
+        1 for filename in filenames if resolve_prepared_path(prepared_dir, filename) is not None
+    )
+    if prepared_count != len(filenames):
         raise DatasetNotPreparedError(
             dataset.id,
             dataset.name,
-            f"Prepared image count ({len(prepared_files)}) != original count ({len(filenames)})",
+            f"Prepared image count ({prepared_count}) != original count ({len(filenames)})",
         )

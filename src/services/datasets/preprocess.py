@@ -9,13 +9,13 @@ from PIL import Image
 
 from src.db.tables.dataset import Dataset
 from src.services.datasets.captions import list_image_filenames
+from src.services.datasets.formats import IMAGE_EXTENSIONS, PREPARED_EXTENSION
 from src.trainer.sdxl.buckets import (
     BucketAssignment,
     assign_bucket,
     assignment_from_stored,
 )
 
-_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 _MIN_RESOLUTION = 64
 _MAX_RESOLUTION = 2048
 
@@ -281,18 +281,34 @@ def is_crop_stale(crop_mtime: float, current_mtime: float) -> bool:
     return current_mtime > crop_mtime + 1e-6
 
 
+def prepared_jpg_path(prepared_dir: Path, source_filename: str) -> Path:
+    return prepared_dir / f"{Path(source_filename).stem}{PREPARED_EXTENSION}"
+
+
 def prepared_image_path(prepared_dir: Path, filename: str) -> Path:
-    return prepared_dir / filename
+    return prepared_jpg_path(prepared_dir, filename)
 
 
 def resolve_prepared_path(prepared_dir: Path, filename: str) -> Path | None:
     prepared_path = prepared_dir / filename
     if prepared_path.is_file():
         return prepared_path
+    jpg_path = prepared_jpg_path(prepared_dir, filename)
+    if jpg_path.is_file():
+        return jpg_path
     alt_png = prepared_dir / f"{Path(filename).stem}.png"
     if alt_png.is_file():
         return alt_png
     return None
+
+
+def _cleanup_stale_prepared(prepared_dir: Path, stem: str, keep_path: Path) -> None:
+    for ext in IMAGE_EXTENSIONS:
+        candidate = prepared_dir / f"{stem}{ext}"
+        if candidate == keep_path or not candidate.is_file():
+            continue
+        invalidate_latent_cache_for_prepared(candidate)
+        candidate.unlink(missing_ok=True)
 
 
 def is_prepared_file_valid(
@@ -359,11 +375,15 @@ def get_image_state(
         center_y=crop_record.crop_center_y,
         stored=crop_record,
     )
-    prepared_path = prepared_image_path(
+    prepared_path = resolve_prepared_path(
         prepared_dir_path(image_dir, bucket_config.resolution),
         filename,
     )
-    if crop_record.baked_at is None or not is_prepared_file_valid(prepared_path, expected_w, expected_h):
+    if (
+        prepared_path is None
+        or crop_record.baked_at is None
+        or not is_prepared_file_valid(prepared_path, expected_w, expected_h)
+    ):
         return ImagePreprocessState.CROPPED
     return ImagePreprocessState.READY
 
@@ -494,16 +514,9 @@ def bake_image_to_prepared(
         result = apply_bucket_crop(image, bucket_assignment)
     else:
         result = apply_crop(image, bucket_config.resolution, center_x, center_y)
-    output_path = prepared_image_path(prepared_dir, source_path.name)
-    suffix = source_path.suffix.lower()
-    if suffix in {".jpg", ".jpeg"}:
-        result.save(output_path, format="JPEG", quality=95)
-    elif suffix == ".png":
-        result.save(output_path, format="PNG")
-    elif suffix == ".webp":
-        result.save(output_path, format="WEBP", quality=95)
-    else:
-        result.save(output_path, format="PNG")
+    output_path = prepared_jpg_path(prepared_dir, source_path.name)
+    result.save(output_path, format="JPEG", quality=95)
+    _cleanup_stale_prepared(prepared_dir, source_path.stem, output_path)
     return output_path, bucket_assignment
 
 

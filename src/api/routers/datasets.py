@@ -15,6 +15,7 @@ from src.api.schemas.datasets import (
     BulkTagResponse,
     CaptionResponse,
     CaptionUpdateRequest,
+    DuplicatesResponse,
     CropMetaResponse,
     CropUpdateRequest,
     DatasetCreate,
@@ -24,6 +25,7 @@ from src.api.schemas.datasets import (
     DatasetResponse,
     DatasetUpdate,
     PreprocessStatusResponse,
+    RemoveDuplicatesResponse,
     TagStatResponse,
     TagStatsResponse,
 )
@@ -103,6 +105,24 @@ async def delete_dataset(dataset_id: int, service: DatasetsServiceDep) -> None:
     await service.delete_dataset(dataset_id)
 
 
+@router.get("/{dataset_id}/duplicates", response_model=DuplicatesResponse)
+async def get_duplicates(dataset_id: int, service: DatasetsServiceDep) -> DuplicatesResponse:
+    dataset = await service.get_dataset(dataset_id)
+    result = service.scan_duplicates(dataset)
+    return DuplicatesResponse(duplicate_count=result.duplicate_count)
+
+
+@router.post("/{dataset_id}/duplicates/remove", response_model=RemoveDuplicatesResponse)
+async def remove_duplicates(
+    dataset_id: int,
+    service: DatasetsServiceDep,
+    caption_extension: str = Query(default=".txt"),
+) -> RemoveDuplicatesResponse:
+    dataset = await service.get_dataset(dataset_id)
+    removed_count = await service.remove_duplicates(dataset, caption_extension)
+    return RemoveDuplicatesResponse(removed_count=removed_count)
+
+
 @router.get("/{dataset_id}/images", response_model=DatasetImagesResponse)
 async def list_images(dataset_id: int, service: DatasetsServiceDep) -> DatasetImagesResponse:
     dataset = await service.get_dataset(dataset_id)
@@ -134,6 +154,17 @@ async def list_items(
             for item, state in rows
         ],
     )
+
+
+@router.delete("/{dataset_id}/images/{filename}", status_code=204)
+async def delete_image(
+    dataset_id: int,
+    filename: str,
+    service: DatasetsServiceDep,
+    caption_extension: str = Query(default=".txt"),
+) -> None:
+    dataset = await service.get_dataset(dataset_id)
+    await service.delete_image(dataset, filename, caption_extension)
 
 
 @router.get("/{dataset_id}/images/{filename}")

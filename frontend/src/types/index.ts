@@ -144,6 +144,14 @@ export interface PreprocessStatus {
   ready: number;
 }
 
+export interface DuplicatesInfo {
+  duplicate_count: number;
+}
+
+export interface RemoveDuplicatesResult {
+  removed_count: number;
+}
+
 export interface CropMeta {
   crop_center_x: number;
   crop_center_y: number;

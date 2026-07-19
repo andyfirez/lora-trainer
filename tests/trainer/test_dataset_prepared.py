@@ -18,8 +18,8 @@ def test_concept_dataset_loads_prepared_image_without_resize(tmp_path: Path) -> 
 
     original = image_dir / "sample.png"
     Image.new("RGB", (800, 600), (200, 100, 50)).save(original)
-    prepared = prepared_dir / "sample.png"
-    Image.new("RGB", (512, 512), (10, 20, 30)).save(prepared)
+    prepared = prepared_dir / "sample.jpg"
+    Image.new("RGB", (512, 512), (10, 20, 30)).save(prepared, format="JPEG")
 
     concept = ConceptConfig(
         dataset_id=1,
@@ -45,8 +45,8 @@ def test_dataloader_collate_add_time_ids_without_cross_sample_mixing(tmp_path: P
     second_original = image_dir / "second.png"
     Image.new("RGB", (800, 600), (200, 100, 50)).save(first_original)
     Image.new("RGB", (900, 700), (50, 100, 200)).save(second_original)
-    Image.new("RGB", (1024, 768), (10, 20, 30)).save(prepared_dir / "first.png")
-    Image.new("RGB", (768, 512), (30, 20, 10)).save(prepared_dir / "second.png")
+    Image.new("RGB", (1024, 768), (10, 20, 30)).save(prepared_dir / "first.jpg", format="JPEG")
+    Image.new("RGB", (768, 512), (30, 20, 10)).save(prepared_dir / "second.jpg", format="JPEG")
 
     first_meta = ImageTrainingMeta(
         filename="first.png",

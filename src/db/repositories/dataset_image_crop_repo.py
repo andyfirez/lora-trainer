@@ -38,3 +38,14 @@ class DatasetImageCropRepository(BaseRepository[DatasetImageCrop]):
         crops = await self.list_by_dataset(dataset_id)
         for crop in crops:
             await self.delete(crop)
+
+    async def delete_by_dataset_and_filenames(self, dataset_id: int, filenames: list[str]) -> None:
+        if not filenames:
+            return
+        result = await self._exec(
+            select(DatasetImageCrop)
+            .where(DatasetImageCrop.dataset_id == dataset_id)
+            .where(DatasetImageCrop.filename.in_(filenames))
+        )
+        for crop in result.all():
+            await self.delete(crop)

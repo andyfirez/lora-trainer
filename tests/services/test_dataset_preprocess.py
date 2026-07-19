@@ -25,6 +25,7 @@ from src.services.datasets.preprocess import (
     get_image_state,
     prepared_dir_path,
     recompute_preprocess_ready,
+    resolve_prepared_path,
 )
 from src.services.datasets.training_validation import validate_dataset_for_training
 
@@ -81,9 +82,12 @@ def test_bake_image_writes_square_prepared_file(tmp_path: Path) -> None:
         center_y=0.5,
     )
     assert assignment is None
+    assert output.name == "img.jpg"
     assert output.is_file()
     with Image.open(output) as baked:
         assert baked.size == (1024, 1024)
+        assert baked.format == "JPEG"
+    assert not (prepared_dir / "img.png").is_file()
 
 
 def test_bake_image_writes_bucket_prepared_file(tmp_path: Path) -> None:
@@ -98,10 +102,27 @@ def test_bake_image_writes_bucket_prepared_file(tmp_path: Path) -> None:
         center_y=0.5,
     )
     assert assignment is not None
+    assert output.name == "img.jpg"
     assert output.is_file()
     with Image.open(output) as baked:
         assert baked.size == (assignment.bucket_width, assignment.bucket_height)
         assert baked.size != (1024, 1024)
+
+
+def test_resolve_prepared_path_prefers_jpg(tmp_path: Path) -> None:
+    prepared_dir = tmp_path / ".prepared" / "1024"
+    prepared_dir.mkdir(parents=True)
+    _save_rgb(prepared_dir / "photo.jpg", (512, 512))
+    resolved = resolve_prepared_path(prepared_dir, "photo.png")
+    assert resolved is not None
+    assert resolved.name == "photo.jpg"
+
+
+def test_list_image_filenames_includes_avif(tmp_path: Path) -> None:
+    from src.services.datasets.captions import list_image_filenames
+
+    (tmp_path / "photo.avif").write_bytes(b"placeholder")
+    assert list_image_filenames(tmp_path) == ["photo.avif"]
 
 
 def test_get_image_state_ready(tmp_path: Path) -> None:

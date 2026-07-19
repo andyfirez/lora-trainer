@@ -24,6 +24,7 @@ from src.services.datasets.captions import (
     safe_filename,
     write_tags,
 )
+from src.services.datasets.duplicates import DuplicateScanResult, remove_duplicate_files, scan_duplicates
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetImageNotFoundError,
@@ -33,6 +34,7 @@ from src.services.datasets.exceptions import (
     DatasetTargetResolutionNotSetError,
     InvalidDatasetFilenameError,
 )
+from src.services.datasets.formats import IMAGE_EXTENSIONS
 from src.services.datasets.preprocess import (
     BucketPreprocessConfig,
     CropMeta,
@@ -49,12 +51,11 @@ from src.services.datasets.preprocess import (
     is_crop_stale,
     prepared_dir_path,
     recompute_preprocess_ready,
+    resolve_prepared_path,
     source_mtime,
     validate_target_resolution,
 )
 from src.services.datasets.training_cache import invalidate_te_cache_for_image
-
-_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 
 
 class DatasetsService:
@@ -312,13 +313,10 @@ class DatasetsService:
         if dataset.target_resolution is None:
             raise DatasetTargetResolutionNotSetError(dataset.id)  # type: ignore[arg-type]
         prepared_dir = prepared_dir_path(dataset.image_dir, dataset.target_resolution)
-        path = prepared_dir / filename
-        if path.is_file():
-            return path
-        alt_png = prepared_dir / f"{Path(filename).stem}.png"
-        if alt_png.is_file():
-            return alt_png
-        raise DatasetImageNotFoundError(filename)
+        path = resolve_prepared_path(prepared_dir, filename)
+        if path is None:
+            raise DatasetImageNotFoundError(filename)
+        return path
 
     def get_prepared_image_bytes(
         self,
@@ -381,7 +379,7 @@ class DatasetsService:
         for path in prepared_dir.iterdir():
             if not path.is_file():
                 continue
-            if path.suffix.lower() in _IMAGE_EXTENSIONS:
+            if path.suffix.lower() in IMAGE_EXTENSIONS:
                 path.unlink(missing_ok=True)
                 invalidate_latent_cache_for_prepared(path)
             elif path.name.endswith("_sdxl.npz"):
@@ -613,3 +611,54 @@ class DatasetsService:
             crop_center_y=crop.crop_center_y if crop else None,
             stored=self._stored_crop_record(crop) if crop else None,
         ).state
+
+    def scan_duplicates(self, dataset: Dataset) -> DuplicateScanResult:
+        return scan_duplicates(Path(dataset.image_dir))
+
+    async def remove_duplicates(
+        self,
+        dataset: Dataset,
+        caption_extension: str = DEFAULT_CAPTION_EXTENSION,
+    ) -> int:
+        scan = self.scan_duplicates(dataset)
+        if not scan.duplicate_filenames:
+            return 0
+
+        removed = 0
+        for filename in scan.duplicate_filenames:
+            await self.delete_image(dataset, filename, caption_extension)
+            removed += 1
+        return removed
+
+    async def delete_image(
+        self,
+        dataset: Dataset,
+        filename: str,
+        caption_extension: str = DEFAULT_CAPTION_EXTENSION,
+    ) -> None:
+        try:
+            safe_filename(filename)
+            image_path(Path(dataset.image_dir), filename)
+        except ValueError as exc:
+            raise InvalidDatasetFilenameError(filename) from exc
+        except FileNotFoundError as exc:
+            raise DatasetImageNotFoundError(filename) from exc
+
+        self._remove_prepared_for_image(dataset, filename)
+        self._invalidate_te_cache(dataset, filename)
+        remove_duplicate_files(Path(dataset.image_dir), [filename], caption_extension)
+        await self._crop_repo.delete_by_dataset_and_filenames(
+            dataset.id,  # type: ignore[arg-type]
+            [filename],
+        )
+        await self._update_preprocess_ready_flag(dataset)
+
+    def _remove_prepared_for_image(self, dataset: Dataset, filename: str) -> None:
+        if dataset.target_resolution is None:
+            return
+        prepared_dir = prepared_dir_path(dataset.image_dir, dataset.target_resolution)
+        prepared_path = resolve_prepared_path(prepared_dir, filename)
+        if prepared_path is None or not prepared_path.is_file():
+            return
+        invalidate_latent_cache_for_prepared(prepared_path)
+        prepared_path.unlink(missing_ok=True)

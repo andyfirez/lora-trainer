@@ -8,7 +8,9 @@ import type {
   DatasetImages,
   DatasetItem,
   DatasetItems,
+  DuplicatesInfo,
   PreprocessStatus,
+  RemoveDuplicatesResult,
   TagStat,
   TagStats,
 } from "@/types";
@@ -57,6 +59,16 @@ export const datasetsApi = {
   listItems: (id: number, captionExtension = ".txt") =>
     api.get<DatasetItems>(`/datasets/${id}/items?caption_extension=${encodeURIComponent(captionExtension)}`),
   getPreprocessStatus: (id: number) => api.get<PreprocessStatus>(`/datasets/${id}/preprocess/status`),
+  getDuplicates: (id: number) => api.get<DuplicatesInfo>(`/datasets/${id}/duplicates`),
+  removeDuplicates: (id: number, captionExtension = ".txt") =>
+    api.post<RemoveDuplicatesResult>(
+      `/datasets/${id}/duplicates/remove?caption_extension=${encodeURIComponent(captionExtension)}`,
+      {}
+    ),
+  deleteImage: (id: number, filename: string, captionExtension = ".txt") =>
+    api.delete(
+      `/datasets/${id}/images/${encodeURIComponent(filename)}?caption_extension=${encodeURIComponent(captionExtension)}`
+    ),
   getCropMeta: (id: number, filename: string) =>
     api.get<CropMeta>(`/datasets/${id}/images/${encodeURIComponent(filename)}/crop-meta`),
   saveCrop: (id: number, filename: string, crop_center_x: number, crop_center_y: number) =>
