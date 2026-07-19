@@ -22,6 +22,7 @@ from src.trainer.concept_training_metadata import (
 )
 from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.optimizer_config import Optimizer, build_optimizer
+from src.trainer.training_log import resolve_part_learning_rates
 from src.trainer.progress import TrainProgress
 from src.trainer.sdxl.bucket_batch_sampler import build_bucket_batch_sampler
 from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
@@ -168,7 +169,9 @@ class SDXLLoRATrainer:
             target_modules=SDXL_UNET_LORA_TARGET_MODULES,
         )
         unet = get_peft_model(unet, unet_lora_config)
-        trainable_params: list = list(unet.parameters())
+        param_groups: list[dict] = [
+            {"params": list(unet.parameters()), "lr": config.resolve_learning_rate("unet")}
+        ]
 
         if config.text_encoder_1.train:
             te1_lora_config = build_sdxl_lora_config(
@@ -178,7 +181,12 @@ class SDXLLoRATrainer:
                 target_modules=SDXL_TE_LORA_TARGET_MODULES,
             )
             text_encoder_1 = get_peft_model(text_encoder_1, te1_lora_config)
-            trainable_params += list(text_encoder_1.parameters())
+            param_groups.append(
+                {
+                    "params": list(text_encoder_1.parameters()),
+                    "lr": config.resolve_learning_rate("text_encoder_1"),
+                }
+            )
 
         if config.text_encoder_2.train:
             te2_lora_config = build_sdxl_lora_config(
@@ -188,7 +196,13 @@ class SDXLLoRATrainer:
                 target_modules=SDXL_TE_LORA_TARGET_MODULES,
             )
             text_encoder_2 = get_peft_model(text_encoder_2, te2_lora_config)
-            trainable_params += list(text_encoder_2.parameters())
+            param_groups.append(
+                {
+                    "params": list(text_encoder_2.parameters()),
+                    "lr": config.resolve_learning_rate("text_encoder_2"),
+                }
+            )
+        trainable_params: list = [param for group in param_groups for param in group["params"]]
 
         if resume_state is not None:
             load_lora_state_dict(
@@ -225,7 +239,7 @@ class SDXLLoRATrainer:
             log.info("Compiling UNet with torch.compile (inductor)...")
             unet = torch.compile(unet, backend="inductor")
 
-        optimizer = build_optimizer(trainable_params, config)
+        optimizer = build_optimizer(param_groups, config)
         self._optimizer = optimizer
         self._device = device
         cache_mode = config.cache_latents or config.cache_text_encoder_outputs
@@ -489,7 +503,8 @@ class SDXLLoRATrainer:
                         lr_scheduler.step()
                         optimizer.zero_grad()
                         self._progress.next_step(accumulated_loss)
-                        current_lr = lr_scheduler.get_last_lr()[0]
+                        part_lrs = resolve_part_learning_rates(config, lr_scheduler.get_last_lr())
+                        current_lr = part_lrs["unet"]
                         avr_loss = accumulated_loss
                         if self._training_logger is not None:
                             avr_loss = self._training_logger.log_step(
@@ -500,6 +515,7 @@ class SDXLLoRATrainer:
                                 epoch=epoch + 1,
                                 epoch_total=config.epochs,
                                 epoch_step=self._progress.epoch_step,
+                                part_lrs=part_lrs if len(part_lrs) > 1 else None,
                             )
                         accumulated_loss = 0.0
                         if self._progress_callback is not None:
@@ -560,13 +576,6 @@ class SDXLLoRATrainer:
     @staticmethod
     def _validate_config(config: TrainConfig) -> None:
         config.validate_gpu()
-        if config.cache_text_encoder_outputs and (
-            config.text_encoder_1.train or config.text_encoder_2.train
-        ):
-            raise ValueError(
-                "cache_text_encoder_outputs=True is incompatible with training text encoders. "
-                "Set cache_text_encoder_outputs=False or disable text encoder training."
-            )
 
     def _encode_prompt(
         self,

@@ -26,6 +26,103 @@ def trainable_params() -> list[nn.Parameter]:
     return list(_ParamModule().parameters())
 
 
+def _param_groups(params: list[nn.Parameter], lr: float) -> list[dict]:
+    return [{"params": params, "lr": lr}]
+
+
+def test_resolve_learning_rate_per_part_defaults() -> None:
+    config = TrainConfig()
+    assert config.resolve_learning_rate("unet") == pytest.approx(5e-5)
+    assert config.resolve_learning_rate("text_encoder_1") == pytest.approx(5e-5)
+    assert config.resolve_learning_rate("text_encoder_2") == pytest.approx(5e-5)
+
+
+def test_resolve_learning_rate_per_part_override() -> None:
+    config = TrainConfig(
+        unet={"train": True, "learning_rate": 5e-4},
+        text_encoder_1={"train": True, "learning_rate": 3e-5},
+        text_encoder_2={"train": True, "learning_rate": 4e-5},
+    )
+    assert config.resolve_learning_rate("unet") == pytest.approx(5e-4)
+    assert config.resolve_learning_rate("text_encoder_1") == pytest.approx(3e-5)
+    assert config.resolve_learning_rate("text_encoder_2") == pytest.approx(4e-5)
+
+
+def test_train_config_yaml_roundtrip_per_part_learning_rate() -> None:
+    config = TrainConfig(
+        unet={"train": True, "learning_rate": 5e-4},
+        text_encoder_1={"train": True, "learning_rate": 2e-5},
+    )
+    restored = TrainConfig.from_yaml(config.to_yaml())
+    assert restored.unet.learning_rate == pytest.approx(5e-4)
+    assert restored.text_encoder_1.learning_rate == pytest.approx(2e-5)
+    assert restored.text_encoder_2.learning_rate == pytest.approx(5e-5)
+
+
+def test_train_config_from_yaml_migrates_legacy_learning_rate() -> None:
+    yaml_str = """
+learning_rate: 0.0003
+unet:
+  train: true
+text_encoder_1:
+  train: true
+  learning_rate: 0.00005
+"""
+    config = TrainConfig.from_yaml(yaml_str)
+    assert config.unet.learning_rate == pytest.approx(3e-4)
+    assert config.text_encoder_1.learning_rate == pytest.approx(5e-5)
+    assert config.text_encoder_2.learning_rate == pytest.approx(3e-4)
+
+
+def test_build_optimizer_param_groups(trainable_params: list[nn.Parameter]) -> None:
+    te1_params = list(_ParamModule().parameters())
+    te2_params = list(_ParamModule().parameters())
+    config = TrainConfig(
+        unet={"train": True, "learning_rate": 1e-4},
+        text_encoder_1={"train": True, "learning_rate": 2e-5},
+        text_encoder_2={"train": True, "learning_rate": 3e-5},
+    )
+    param_groups = [
+        {"params": trainable_params, "lr": config.resolve_learning_rate("unet")},
+        {"params": te1_params, "lr": config.resolve_learning_rate("text_encoder_1")},
+        {"params": te2_params, "lr": config.resolve_learning_rate("text_encoder_2")},
+    ]
+    optimizer = build_optimizer(param_groups, config)
+    assert len(optimizer.param_groups) == 3
+    assert optimizer.param_groups[0]["lr"] == pytest.approx(1e-4)
+    assert optimizer.param_groups[1]["lr"] == pytest.approx(2e-5)
+    assert optimizer.param_groups[2]["lr"] == pytest.approx(3e-5)
+
+
+def test_build_optimizer_single_group(trainable_params: list[nn.Parameter]) -> None:
+    config = TrainConfig(unet={"train": True, "learning_rate": 2e-4})
+    optimizer = build_optimizer(_param_groups(trainable_params, config.unet.learning_rate), config)
+    assert len(optimizer.param_groups) == 1
+    assert optimizer.param_groups[0]["lr"] == pytest.approx(2e-4)
+
+
+def test_te_training_disables_text_encoder_cache() -> None:
+    config = TrainConfig(
+        text_encoder_1={"train": True},
+        cache_text_encoder_outputs=True,
+        cache_text_encoder_outputs_to_disk=True,
+    )
+    assert config.cache_text_encoder_outputs is False
+    assert config.cache_text_encoder_outputs_to_disk is False
+
+
+def test_te_training_cache_sync_from_yaml() -> None:
+    yaml_str = """
+text_encoder_2:
+  train: true
+cache_text_encoder_outputs: true
+cache_text_encoder_outputs_to_disk: true
+"""
+    config = TrainConfig.from_yaml(yaml_str)
+    assert config.cache_text_encoder_outputs is False
+    assert config.cache_text_encoder_outputs_to_disk is False
+
+
 def test_load_optimizer_presets_has_all_types() -> None:
     presets = load_optimizer_presets()
     assert set(presets.keys()) == {"adamw", "adamw_8bit", "adafactor", "prodigy"}
@@ -89,7 +186,7 @@ def test_train_config_yaml_roundtrip_nested_optimizer() -> None:
             beta2=0.95,
             decouple=False,
         ),
-        learning_rate=1.0,
+        unet={"train": True, "learning_rate": 1.0},
         lr_scheduler=LRScheduler.CONSTANT,
     )
     restored = TrainConfig.from_yaml(config.to_yaml())
@@ -97,12 +194,12 @@ def test_train_config_yaml_roundtrip_nested_optimizer() -> None:
     assert restored.optimizer.weight_decay == 0.02
     assert restored.optimizer.beta1 == 0.85
     assert restored.optimizer.decouple is False
-    assert restored.learning_rate == 1.0
+    assert restored.unet.learning_rate == pytest.approx(1.0)
 
 
 def test_build_optimizer_adamw_uses_config_params(trainable_params: list[nn.Parameter]) -> None:
     config = TrainConfig(
-        learning_rate=2e-4,
+        unet={"train": True, "learning_rate": 2e-4},
         optimizer=OptimizerConfig(
             type=Optimizer.ADAMW,
             weight_decay=0.05,
@@ -110,7 +207,7 @@ def test_build_optimizer_adamw_uses_config_params(trainable_params: list[nn.Para
             beta2=0.88,
         ),
     )
-    optimizer = build_optimizer(trainable_params, config)
+    optimizer = build_optimizer(_param_groups(trainable_params, config.unet.learning_rate), config)
     assert isinstance(optimizer, torch.optim.AdamW)
     assert optimizer.param_groups[0]["lr"] == pytest.approx(2e-4)
     assert optimizer.param_groups[0]["weight_decay"] == pytest.approx(0.05)
@@ -124,13 +221,13 @@ def test_build_optimizer_adamw_8bit_uses_config_params(
 ) -> None:
     mock_adamw8bit.return_value = MagicMock()
     config = TrainConfig(
-        learning_rate=3e-4,
+        unet={"train": True, "learning_rate": 3e-4},
         optimizer=OptimizerConfig(type=Optimizer.ADAMW_8BIT, weight_decay=0.03),
     )
-    build_optimizer(trainable_params, config)
+    param_groups = _param_groups(trainable_params, 3e-4)
+    build_optimizer(param_groups, config)
     mock_adamw8bit.assert_called_once_with(
-        trainable_params,
-        lr=3e-4,
+        param_groups,
         betas=(0.9, 0.999),
         weight_decay=0.03,
     )
@@ -143,7 +240,7 @@ def test_build_optimizer_adafactor_uses_config_params(
 ) -> None:
     mock_adafactor.return_value = MagicMock()
     config = TrainConfig(
-        learning_rate=5e-4,
+        unet={"train": True, "learning_rate": 5e-4},
         optimizer=OptimizerConfig(
             type=Optimizer.ADAFACTOR,
             relative_step=True,
@@ -151,10 +248,10 @@ def test_build_optimizer_adafactor_uses_config_params(
             warmup_init=True,
         ),
     )
-    build_optimizer(trainable_params, config)
+    param_groups = _param_groups(trainable_params, 5e-4)
+    build_optimizer(param_groups, config)
     mock_adafactor.assert_called_once_with(
-        trainable_params,
-        lr=5e-4,
+        param_groups,
         relative_step=True,
         scale_parameter=True,
         warmup_init=True,
@@ -168,7 +265,7 @@ def test_build_optimizer_prodigy_uses_config_params(
 ) -> None:
     mock_prodigy.return_value = MagicMock()
     config = TrainConfig(
-        learning_rate=1.0,
+        unet={"train": True, "learning_rate": 1.0},
         optimizer=OptimizerConfig(
             type=Optimizer.PRODIGY,
             weight_decay=0.02,
@@ -181,10 +278,10 @@ def test_build_optimizer_prodigy_uses_config_params(
             d_coef=2.0,
         ),
     )
-    build_optimizer(trainable_params, config)
+    param_groups = _param_groups(trainable_params, 1.0)
+    build_optimizer(param_groups, config)
     mock_prodigy.assert_called_once_with(
-        trainable_params,
-        lr=1.0,
+        param_groups,
         betas=(0.91, 0.98),
         weight_decay=0.02,
         decouple=False,

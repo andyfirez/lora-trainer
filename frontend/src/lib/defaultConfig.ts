@@ -14,18 +14,20 @@ lora_dropout: 0.0
 unet:
   train: true
   weight_dtype: float16
+  learning_rate: 0.00005
 text_encoder_1:
   train: false
   weight_dtype: float16
+  learning_rate: 0.00005
 text_encoder_2:
   train: false
   weight_dtype: float16
+  learning_rate: 0.00005
 
 # Training hyperparameters
 epochs: 30
 batch_size: 1
 gradient_accumulation_steps: 1
-learning_rate: 0.00005
 lr_scheduler: constant
 lr_warmup_steps: 0
 min_snr_gamma: 5.0

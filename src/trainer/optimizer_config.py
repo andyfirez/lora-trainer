@@ -57,28 +57,26 @@ def get_optimizer_preset(optimizer_type: Optimizer) -> OptimizerPreset:
     return OptimizerPreset.model_validate(raw)
 
 
-def build_optimizer(params: list[Any], config: Any) -> Any:
+def build_optimizer(param_groups: list[dict[str, Any]], config: Any) -> Any:
     import torch
 
     from src.trainer.config import TrainConfig
 
     assert isinstance(config, TrainConfig)
-    lr = config.learning_rate
     opt = config.optimizer
     betas = (opt.beta1, opt.beta2)
 
     if opt.type == Optimizer.ADAMW:
-        return torch.optim.AdamW(params, lr=lr, betas=betas, weight_decay=opt.weight_decay)
+        return torch.optim.AdamW(param_groups, betas=betas, weight_decay=opt.weight_decay)
     if opt.type == Optimizer.ADAMW_8BIT:
         from bitsandbytes.optim import AdamW8bit
 
-        return AdamW8bit(params, lr=lr, betas=betas, weight_decay=opt.weight_decay)
+        return AdamW8bit(param_groups, betas=betas, weight_decay=opt.weight_decay)
     if opt.type == Optimizer.ADAFACTOR:
         from transformers.optimization import Adafactor
 
         return Adafactor(
-            params,
-            lr=lr,
+            param_groups,
             relative_step=opt.relative_step,
             scale_parameter=opt.scale_parameter,
             warmup_init=opt.warmup_init,
@@ -87,8 +85,7 @@ def build_optimizer(params: list[Any], config: Any) -> Any:
         from prodigyopt import Prodigy
 
         return Prodigy(
-            params,
-            lr=lr,
+            param_groups,
             betas=betas,
             weight_decay=opt.weight_decay,
             decouple=opt.decouple,
@@ -97,4 +94,4 @@ def build_optimizer(params: list[Any], config: Any) -> Any:
             d0=opt.d0,
             d_coef=opt.d_coef,
         )
-    return torch.optim.AdamW(params, lr=lr, betas=betas, weight_decay=opt.weight_decay)
+    return torch.optim.AdamW(param_groups, betas=betas, weight_decay=opt.weight_decay)

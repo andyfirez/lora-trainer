@@ -135,6 +135,22 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     ],
   },
   {
+    key: "unet.learning_rate",
+    label: "UNet — Learning Rate",
+    section: "Training Targets",
+    shortHint: "Learning rate for UNet LoRA weights.",
+    description:
+      "Step size for UNet weight updates. Typical SDXL LoRA range: 1e-4 to 5e-4 for AdamW. Only applies when UNet training is enabled.",
+    defaultValue: "5e-5",
+    constraints: "> 0",
+    recommendedValue: "5e-5",
+    rangeGuidance: [
+      { range: "1e-5", description: "Conservative; slower convergence." },
+      { range: "5e-5", description: "Common default for SDXL LoRA UNet training." },
+      { range: "1e-4 – 5e-4", description: "Aggressive; faster training, often used for UNet-only runs." },
+    ],
+  },
+  {
     key: "text_encoder_1.train",
     label: "Text Encoder 1 — Train",
     section: "Training Targets",
@@ -166,6 +182,21 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     ],
   },
   {
+    key: "text_encoder_1.learning_rate",
+    label: "Text Encoder 1 — Learning Rate",
+    section: "Training Targets",
+    shortHint: "Learning rate for CLIP-L LoRA weights.",
+    description:
+      "Step size for text encoder 1 weight updates. Typically lower than UNet (e.g. 5e-5). Only applies when text encoder 1 training is enabled.",
+    defaultValue: "5e-5",
+    constraints: "> 0",
+    recommendedValue: "5e-5",
+    rangeGuidance: [
+      { range: "1e-5", description: "Conservative text encoder LR." },
+      { range: "5e-5", description: "Typical text encoder LR for SDXL LoRA." },
+    ],
+  },
+  {
     key: "text_encoder_2.train",
     label: "Text Encoder 2 — Train",
     section: "Training Targets",
@@ -194,6 +225,21 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       { value: "float32", description: "Full precision for text encoder 2 weights." },
       { value: "float16", description: "Half precision; saves VRAM with minimal quality impact." },
       { value: "bfloat16", description: "Brain float; stable on Ampere+ GPUs." },
+    ],
+  },
+  {
+    key: "text_encoder_2.learning_rate",
+    label: "Text Encoder 2 — Learning Rate",
+    section: "Training Targets",
+    shortHint: "Learning rate for OpenCLIP-G LoRA weights.",
+    description:
+      "Step size for text encoder 2 weight updates. Only applies when text encoder 2 training is enabled.",
+    defaultValue: "5e-5",
+    constraints: "> 0",
+    recommendedValue: "5e-5",
+    rangeGuidance: [
+      { range: "1e-5", description: "Conservative text encoder LR." },
+      { range: "5e-5", description: "Typical text encoder LR for SDXL LoRA." },
     ],
   },
   {
@@ -260,22 +306,6 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     rangeGuidance: [
       { range: "1", description: "No accumulation; each step updates weights immediately." },
       { range: "2–8", description: "Simulates larger batch without extra VRAM; useful when batch_size must stay at 1." },
-    ],
-  },
-  {
-    key: "learning_rate",
-    label: "Learning Rate",
-    section: "Training",
-    shortHint: "Step size for weight updates. Too high causes instability; too low trains slowly.",
-    description:
-      "Base learning rate for the optimizer. Typical SDXL LoRA range: 1e-5 to 1e-4 for AdamW, higher for Prodigy. The optimizer preset may override this when switching optimizer type. Pair with LR scheduler and warmup for stable training.",
-    defaultValue: "5e-5",
-    constraints: "> 0",
-    recommendedValue: "5e-5",
-    rangeGuidance: [
-      { range: "1e-5", description: "Conservative; slower convergence, safer for small datasets." },
-      { range: "5e-5", description: "Common AdamW default for SDXL LoRA training." },
-      { range: "1e-4", description: "Aggressive; faster training but risk of instability or overfitting." },
     ],
   },
   {

@@ -34,13 +34,23 @@ export function getOptimizerPreset(type: OptimizerType): OptimizerPreset {
 
 export function applyOptimizerPreset(config: Config, type: OptimizerType): Config {
   const preset = getOptimizerPreset(type);
-  return {
+  const next: Config = {
     ...config,
     optimizer: { ...preset.optimizer },
-    learning_rate: preset.learning_rate,
     lr_scheduler: preset.lr_scheduler,
     lr_warmup_steps: preset.lr_warmup_steps,
   };
+  delete next.learning_rate;
+
+  for (const part of ["unet", "text_encoder_1", "text_encoder_2"] as const) {
+    const partCfg = (next[part] as Record<string, unknown> | undefined) ?? {};
+    const isTraining = part === "unet" ? partCfg.train !== false : partCfg.train === true;
+    if (isTraining) {
+      next[part] = { ...partCfg, learning_rate: preset.learning_rate };
+    }
+  }
+
+  return next;
 }
 
 export const optimizerOptions = [

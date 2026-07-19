@@ -10,10 +10,10 @@ Persisted YAML omits runtime-only fields:
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional, Self, TypeAlias
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from src.trainer.optimizer_config import OptimizerConfig
 
@@ -76,9 +76,11 @@ FORBIDDEN_INLINE_SAMPLING_KEYS: frozenset[str] = frozenset(
     }
 )
 
-FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({"sample_after_training"})
+FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({"sample_after_training", "learning_rate"})
 
 FORBIDDEN_DEPRECATED_CONCEPT_KEYS: frozenset[str] = frozenset({"image_dir", "prepared_dir"})
+
+TrainablePart: TypeAlias = Literal["unet", "text_encoder_1", "text_encoder_2"]
 
 
 class ConceptConfig(BaseModel):
@@ -96,6 +98,7 @@ class ConceptConfig(BaseModel):
 class ModelPartConfig(BaseModel):
     train: bool = True
     weight_dtype: WeightDtype = WeightDtype.FLOAT_16
+    learning_rate: float = Field(default=5e-5, gt=0.0)
 
 
 class LoggingConfig(BaseModel):
@@ -119,15 +122,20 @@ class TrainConfig(BaseModel):
     lora_dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
 
     # Training targets
-    unet: ModelPartConfig = Field(default_factory=lambda: ModelPartConfig(train=True, weight_dtype=WeightDtype.FLOAT_16))
-    text_encoder_1: ModelPartConfig = Field(default_factory=lambda: ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16))
-    text_encoder_2: ModelPartConfig = Field(default_factory=lambda: ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16))
+    unet: ModelPartConfig = Field(
+        default_factory=lambda: ModelPartConfig(train=True, weight_dtype=WeightDtype.FLOAT_16, learning_rate=5e-5)
+    )
+    text_encoder_1: ModelPartConfig = Field(
+        default_factory=lambda: ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16, learning_rate=5e-5)
+    )
+    text_encoder_2: ModelPartConfig = Field(
+        default_factory=lambda: ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16, learning_rate=5e-5)
+    )
 
     # Training hyperparameters
     epochs: int = Field(default=30, ge=1)
     batch_size: int = Field(default=1, ge=1)
     gradient_accumulation_steps: int = Field(default=1, ge=1)
-    learning_rate: float = Field(default=5e-5, gt=0.0)
     lr_scheduler: LRScheduler = LRScheduler.CONSTANT
     lr_warmup_steps: int = Field(default=0, ge=0)
     optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig.defaults)
@@ -195,7 +203,21 @@ class TrainConfig(BaseModel):
     @classmethod
     def from_yaml(cls, yaml_str: str) -> "TrainConfig":
         data = yaml.safe_load(yaml_str)
+        if isinstance(data, dict):
+            cls._migrate_legacy_learning_rate(data)
         return cls.model_validate(data)
+
+    @staticmethod
+    def _migrate_legacy_learning_rate(data: dict) -> None:
+        legacy_lr = data.pop("learning_rate", None)
+        if legacy_lr is None:
+            return
+        for part in ("unet", "text_encoder_1", "text_encoder_2"):
+            part_data = data.get(part)
+            if part_data is None:
+                data[part] = {"learning_rate": legacy_lr}
+            elif isinstance(part_data, dict) and "learning_rate" not in part_data:
+                part_data["learning_rate"] = legacy_lr
 
     def resolve_concepts(self, paths: dict[int, ResolvedConceptPaths]) -> TrainConfig:
         from src.trainer.concept_resolution import ResolvedConceptPaths
@@ -248,6 +270,16 @@ class TrainConfig(BaseModel):
     @classmethod
     def default_yaml(cls) -> str:
         return cls().to_yaml()
+
+    @model_validator(mode="after")
+    def sync_te_cache_with_training(self) -> Self:
+        if self.text_encoder_1.train or self.text_encoder_2.train:
+            self.cache_text_encoder_outputs = False
+            self.cache_text_encoder_outputs_to_disk = False
+        return self
+
+    def resolve_learning_rate(self, part: TrainablePart) -> float:
+        return getattr(self, part).learning_rate
 
     def validate_gpu(self) -> None:
         from src.trainer.gpu_config_validation import validate_gpu_config

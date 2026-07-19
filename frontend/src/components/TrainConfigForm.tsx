@@ -236,10 +236,21 @@ function normalizeConcept(concept: unknown, datasets?: Dataset[]): Config {
   return item;
 }
 
+function isTextEncoderTrainingEnabled(config: Config): boolean {
+  return Boolean(config.text_encoder_1?.train || config.text_encoder_2?.train);
+}
+
 function sanitizeTrainConfig(next: Config, datasets?: Dataset[]): Config {
   let cleaned = stripInlineSamplingFields(next);
   if (cleaned.clip_skip == null) {
     cleaned = { ...cleaned, clip_skip: 2 };
+  }
+  if (isTextEncoderTrainingEnabled(cleaned)) {
+    cleaned = {
+      ...cleaned,
+      cache_text_encoder_outputs: false,
+      cache_text_encoder_outputs_to_disk: false,
+    };
   }
   const concepts = cleaned.concepts;
   if (Array.isArray(concepts)) {
@@ -391,7 +402,10 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
     : null;
   const checkpointingEnabled = config.checkpointing_enabled ?? true;
   const cacheLatentsEnabled = config.cache_latents ?? true;
-  const cacheTextEncoderEnabled = config.cache_text_encoder_outputs ?? true;
+  const textEncoderTrainingEnabled = isTextEncoderTrainingEnabled(config);
+  const cacheTextEncoderEnabled = textEncoderTrainingEnabled
+    ? false
+    : (config.cache_text_encoder_outputs ?? true);
   const samplingEnabled = config.sampling_enabled ?? false;
   const samplingConfigRequired = samplingEnabled;
 
@@ -400,10 +414,14 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
     const before = JSON.stringify({
       concepts: config.concepts ?? [],
       clip_skip: config.clip_skip ?? null,
+      cache_text_encoder_outputs: config.cache_text_encoder_outputs ?? null,
+      cache_text_encoder_outputs_to_disk: config.cache_text_encoder_outputs_to_disk ?? null,
     });
     const after = JSON.stringify({
       concepts: normalized.concepts ?? [],
       clip_skip: normalized.clip_skip ?? null,
+      cache_text_encoder_outputs: normalized.cache_text_encoder_outputs ?? null,
+      cache_text_encoder_outputs_to_disk: normalized.cache_text_encoder_outputs_to_disk ?? null,
     });
     if (before !== after) {
       onChange(normalized);
@@ -502,12 +520,15 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 <th className="pb-2 font-medium">Component</th>
                 <th className="pb-2 font-medium">Train</th>
                 <th className="pb-2 font-medium">Weight Dtype</th>
+                <th className="pb-2 font-medium">Learning Rate</th>
               </tr>
             </thead>
             <tbody className="space-y-2">
               {(["unet", "text_encoder_1", "text_encoder_2"] as const).map((part) => {
                 const trainHints = trainHint(`${part}.train`);
                 const dtypeHints = trainHint(`${part}.weight_dtype`);
+                const lrHints = trainHint(`${part}.learning_rate`);
+                const isTraining = !!(config[part]?.train ?? (part === "unet"));
                 return (
                 <tr key={part} className="border-t border-border">
                   <td className="py-2 pr-4 text-text font-mono text-xs">{part}</td>
@@ -516,7 +537,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                       <input
                         type="checkbox"
                         className="w-4 h-4 accent-accent"
-                        checked={!!(config[part]?.train ?? (part === "unet"))}
+                        checked={isTraining}
                         onChange={(e) => setNested(part, "train", e.target.checked)}
                       />
                       {trainHints.hint && (
@@ -541,6 +562,29 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                         <FieldHint hint={dtypeHints.hint} hintAnchor={dtypeHints.hintAnchor} />
                       )}
                     </div>
+                  </td>
+                  <td className="py-2">
+                    {isTraining ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          className="rounded-lg bg-bg border border-border px-2 py-1 text-xs text-text focus:outline-none focus:border-accent w-28"
+                          value={config[part]?.learning_rate ?? 0.00005}
+                          min={0}
+                          step={0.00001}
+                          placeholder="0.00005"
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setNested(part, "learning_rate", raw === "" ? 0.00005 : Number(raw));
+                          }}
+                        />
+                        {lrHints.hint && (
+                          <FieldHint hint={lrHints.hint} hintAnchor={lrHints.hintAnchor} />
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted">—</span>
+                    )}
                   </td>
                 </tr>
               );
@@ -577,15 +621,6 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             min={1}
             placeholder="1"
             paramKey="gradient_accumulation_steps"
-          />
-          <NumberInput
-            label="Learning Rate"
-            value={config.learning_rate}
-            onChange={(v) => set("learning_rate", v)}
-            min={0}
-            step={0.00001}
-            placeholder="0.00005"
-            paramKey="learning_rate"
           />
           <SelectInput
             label="LR Scheduler"
@@ -914,6 +949,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
               label="Cache Text Encoder Outputs (RAM)"
               checked={cacheTextEncoderEnabled}
               onChange={(v) => set("cache_text_encoder_outputs", v)}
+              disabled={textEncoderTrainingEnabled}
               paramKey="cache_text_encoder_outputs"
             />
             <div className="space-y-1">
@@ -936,14 +972,14 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                 disabled={!cacheTextEncoderEnabled}
                 paramKey="cache_text_encoder_outputs_to_disk"
               />
-              {!cacheTextEncoderEnabled && (
+              {!cacheTextEncoderEnabled && !textEncoderTrainingEnabled && (
                 <p className="text-xs text-muted">Requires RAM caching to be enabled.</p>
               )}
             </div>
           </div>
-          {cacheTextEncoderEnabled && (config.unet?.train === false) && (config.text_encoder_1?.train || config.text_encoder_2?.train) && (
-            <p className="text-xs text-error mt-1">
-              Cache Text Encoder Outputs is incompatible with training text encoders. Disable one of them.
+          {textEncoderTrainingEnabled && (
+            <p className="text-xs text-muted mt-1">
+              Text encoder output caching is disabled while training text encoders.
             </p>
           )}
         </div>

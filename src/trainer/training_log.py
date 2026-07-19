@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from tqdm import tqdm
 
-from src.trainer.config import TrainConfig
+from src.trainer.config import TrainConfig, TrainablePart
 from src.trainer.metric_logger import MetricLogger
 
 
@@ -35,6 +35,28 @@ class LossRecorder:
         return self._loss_total / len(self._loss_list)
 
 
+def format_trainable_learning_rates(config: TrainConfig) -> str:
+    parts: list[str] = []
+    if config.unet.train:
+        parts.append(f"unet_lr={config.resolve_learning_rate('unet'):.2e}")
+    if config.text_encoder_1.train:
+        parts.append(f"te1_lr={config.resolve_learning_rate('text_encoder_1'):.2e}")
+    if config.text_encoder_2.train:
+        parts.append(f"te2_lr={config.resolve_learning_rate('text_encoder_2'):.2e}")
+    return ", ".join(parts)
+
+
+def resolve_part_learning_rates(config: TrainConfig, last_lrs: list[float]) -> dict[TrainablePart, float]:
+    part_lrs: dict[TrainablePart, float] = {"unet": last_lrs[0]}
+    index = 1
+    if config.text_encoder_1.train:
+        part_lrs["text_encoder_1"] = last_lrs[index]
+        index += 1
+    if config.text_encoder_2.train:
+        part_lrs["text_encoder_2"] = last_lrs[index]
+    return part_lrs
+
+
 def format_step_log(
     *,
     step: int,
@@ -44,11 +66,22 @@ def format_step_log(
     lr: float,
     epoch: int,
     epoch_total: int,
+    part_lrs: dict[TrainablePart, float] | None = None,
 ) -> str:
-    return (
+    line = (
         f"step {step}/{total_steps} | loss={loss:.4f} avr_loss={avr_loss:.4f} "
         f"lr={lr:.2e} epoch={epoch}/{epoch_total}"
     )
+    if part_lrs is None:
+        return line
+    extras: list[str] = []
+    if "text_encoder_1" in part_lrs:
+        extras.append(f"te1_lr={part_lrs['text_encoder_1']:.2e}")
+    if "text_encoder_2" in part_lrs:
+        extras.append(f"te2_lr={part_lrs['text_encoder_2']:.2e}")
+    if extras:
+        return f"{line} {' '.join(extras)}"
+    return line
 
 
 def build_tensorboard_dir(log_dir: str, job_id: int) -> Path:
@@ -122,12 +155,12 @@ class JobTrainingLogger:
             total_steps,
         )
         self._logger.info(
-            "batch_size=%d, lr=%.2e, resolution=%d, gradient_accumulation_steps=%d",
+            "batch_size=%d, resolution=%d, gradient_accumulation_steps=%d",
             config.batch_size,
-            config.learning_rate,
             config.resolution,
             config.gradient_accumulation_steps,
         )
+        self._logger.info("learning_rates: %s", format_trainable_learning_rates(config))
 
     def log_epoch(self, epoch: int, epoch_total: int) -> None:
         self._logger.info("epoch %d/%d", epoch, epoch_total)
@@ -167,11 +200,18 @@ class JobTrainingLogger:
         epoch: int,
         epoch_total: int,
         epoch_step: int,
+        part_lrs: dict[TrainablePart, float] | None = None,
     ) -> float:
         self._loss_recorder.add(epoch=epoch - 1, step=epoch_step, loss=loss)
         avr_loss = self._loss_recorder.moving_average
         if self._progress_bar is not None:
-            self._progress_bar.set_postfix(avr_loss=f"{avr_loss:.4f}", lr=f"{lr:.2e}")
+            postfix: dict[str, str] = {"avr_loss": f"{avr_loss:.4f}", "lr": f"{lr:.2e}"}
+            if part_lrs is not None:
+                if "text_encoder_1" in part_lrs:
+                    postfix["te1_lr"] = f"{part_lrs['text_encoder_1']:.2e}"
+                if "text_encoder_2" in part_lrs:
+                    postfix["te2_lr"] = f"{part_lrs['text_encoder_2']:.2e}"
+            self._progress_bar.set_postfix(postfix)
             self._progress_bar.update(1)
         self._logger.info(
             format_step_log(
@@ -182,21 +222,31 @@ class JobTrainingLogger:
                 lr=lr,
                 epoch=epoch,
                 epoch_total=epoch_total,
+                part_lrs=part_lrs,
             )
         )
         if step % self.log_every == 0:
             if self.metric_logger is not None:
-                self.metric_logger.log(
-                    {
-                        "loss/loss": loss,
-                        "loss/avr_loss": avr_loss,
-                        "learning_rate": lr,
-                    }
-                )
+                metrics: dict[str, float] = {
+                    "loss/loss": loss,
+                    "loss/avr_loss": avr_loss,
+                    "learning_rate": lr,
+                }
+                if part_lrs is not None:
+                    if "text_encoder_1" in part_lrs:
+                        metrics["learning_rate/te1"] = part_lrs["text_encoder_1"]
+                    if "text_encoder_2" in part_lrs:
+                        metrics["learning_rate/te2"] = part_lrs["text_encoder_2"]
+                self.metric_logger.log(metrics)
             if self.tensorboard_writer is not None:
                 self.tensorboard_writer.add_scalar("loss", loss, step)
                 self.tensorboard_writer.add_scalar("avr_loss", avr_loss, step)
                 self.tensorboard_writer.add_scalar("lr", lr, step)
+                if part_lrs is not None:
+                    if "text_encoder_1" in part_lrs:
+                        self.tensorboard_writer.add_scalar("lr/te1", part_lrs["text_encoder_1"], step)
+                    if "text_encoder_2" in part_lrs:
+                        self.tensorboard_writer.add_scalar("lr/te2", part_lrs["text_encoder_2"], step)
                 self.tensorboard_writer.flush()
         if self.metric_logger is not None:
             self.metric_logger.commit(step=step)
