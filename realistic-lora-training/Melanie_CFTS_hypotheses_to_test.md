@@ -5,6 +5,7 @@
 Связанные документы:
 - [Описание проблемы](Melanie_CFTS_problem.md)
 - [Проверенные гипотезы](Melanie_CFTS_hypotheses_tested.md)
+- [Анализ референсной LoRA Noor_IL](Noor_IL_reference_analysis.md)
 - [Captioning guide](../docs/lora-captioning-guide.md)
 
 **Текущая задача:** 2D-персонаж, узнаваемо похожий на фото. База: `illustriousXL_v01`.

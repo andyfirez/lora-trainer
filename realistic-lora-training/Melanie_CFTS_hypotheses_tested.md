@@ -5,6 +5,7 @@
 Связанные документы:
 - [Описание проблемы](Melanie_CFTS_problem.md)
 - [Гипотезы на проверку](Melanie_CFTS_hypotheses_to_test.md)
+- [Анализ референсной LoRA Noor_IL](Noor_IL_reference_analysis.md)
 - [Captioning guide](../docs/lora-captioning-guide.md)
 
 Формат: **Гипотеза → Что сделали → Результат → Вывод**
