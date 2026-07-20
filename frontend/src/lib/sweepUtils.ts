@@ -85,9 +85,30 @@ export function getParameters(config: Record<string, unknown>): SweepParameters 
   if (config.sample_height != null) legacy.height = { mode: "fixed", value: config.sample_height };
   if (config.sample_scheduler != null) legacy.scheduler = { mode: "fixed", value: config.sample_scheduler };
   if (Array.isArray(config.lora_paths) && config.lora_paths.length) {
-    legacy.lora_path = { mode: "vary", values: config.lora_paths };
+    const paths = config.lora_paths.filter((p) => p != null && String(p).trim());
+    if (paths.length === 1) {
+      legacy.lora_path = { mode: "fixed", value: paths[0] };
+    } else if (paths.length > 1) {
+      legacy.lora_path = { mode: "vary", values: paths };
+    }
   }
   return legacy;
+}
+
+export function loraPathsFromParameter(param: SweepParameter | undefined): string[] {
+  if (!param) return [];
+  if (param.mode === "vary") {
+    return (param.values ?? []).map(String).filter((p) => p.trim());
+  }
+  const value = param.value;
+  if (value == null || value === "") return [];
+  return [String(value).trim()].filter(Boolean);
+}
+
+export function syncLoraPathsToParameters(config: Record<string, unknown>): Record<string, unknown> {
+  const parameters = { ...getParameters(config) };
+  const loraPaths = loraPathsFromParameter(parameters.lora_path);
+  return { ...config, parameters, lora_paths: loraPaths };
 }
 
 export function varyKeysWithValues(parameters: SweepParameters): SweepParamKey[] {

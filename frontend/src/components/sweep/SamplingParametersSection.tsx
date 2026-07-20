@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import PathInput from "@/components/PathInput";
+import ParamGroup from "@/components/sweep/ParamGroup";
 import SweepField from "@/components/sweep/SweepField";
 import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
-import { inputClassName, labelClassName } from "@/components/ui/Input";
+import { labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
 import {
   SWEEP_PARAM_LABELS,
@@ -26,7 +27,19 @@ const sectionTitleClass = "text-sm font-semibold text-text mb-3 font-display";
 
 function param(config: Config, key: SweepParamKey) {
   const parameters = getParameters(config);
-  return parameters[key] ?? defaultSweepParameter(key === "steps" || key === "cfg_scale" || key === "lora_weight" || key === "seed" || key === "width" || key === "height" ? "number" : "string");
+  return (
+    parameters[key] ??
+    defaultSweepParameter(
+      key === "steps" ||
+        key === "cfg_scale" ||
+        key === "lora_weight" ||
+        key === "seed" ||
+        key === "width" ||
+        key === "height"
+        ? "number"
+        : "string",
+    )
+  );
 }
 
 export default function SamplingParametersSection({ config, onChange }: SamplingParametersSectionProps) {
@@ -44,7 +57,7 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
     <>
       <section className={sectionClass}>
         <div className={sectionTitleClass}>Parameters</div>
-        <div className="space-y-5">
+        <div className="space-y-6">
           <PathInput
             label="Base Model (default fixed)"
             value={String(param(config, "base_model_name").value ?? config.base_model_name ?? "")}
@@ -53,26 +66,33 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
             pickerTitle="Select Base Model"
             kind="model"
           />
-          <SweepField
-            label={SWEEP_PARAM_LABELS.prompt}
-            param={param(config, "prompt")}
-            onChange={(p) => updateParam("prompt", p)}
-            multiline
-            placeholder="Prompt text"
-          />
-          <SweepField
-            label={SWEEP_PARAM_LABELS.negative_prompt}
-            param={param(config, "negative_prompt")}
-            onChange={(p) => updateParam("negative_prompt", p)}
-            placeholder="low quality, blurry"
-          />
-          <SweepField
-            label={SWEEP_PARAM_LABELS.lora_weight}
-            param={param(config, "lora_weight")}
-            onChange={(p) => updateParam("lora_weight", p)}
-            type="number"
-          />
-          <div className="grid grid-cols-2 gap-4">
+
+          <ParamGroup title="Prompts">
+            <SweepField
+              label={SWEEP_PARAM_LABELS.prompt}
+              param={param(config, "prompt")}
+              onChange={(p) => updateParam("prompt", p)}
+              multiline
+              placeholder="Prompt text"
+            />
+            <SweepField
+              label={SWEEP_PARAM_LABELS.negative_prompt}
+              param={param(config, "negative_prompt")}
+              onChange={(p) => updateParam("negative_prompt", p)}
+              placeholder="low quality, blurry"
+            />
+          </ParamGroup>
+
+          <ParamGroup title="LoRA">
+            <SweepField
+              label={SWEEP_PARAM_LABELS.lora_weight}
+              param={param(config, "lora_weight")}
+              onChange={(p) => updateParam("lora_weight", p)}
+              type="number"
+            />
+          </ParamGroup>
+
+          <ParamGroup title="Sampler">
             <SweepField
               label={SWEEP_PARAM_LABELS.steps}
               param={param(config, "steps")}
@@ -86,6 +106,22 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
               type="number"
             />
             <SweepField
+              label={SWEEP_PARAM_LABELS.seed}
+              param={param(config, "seed")}
+              onChange={(p) => updateParam("seed", p)}
+              type="number"
+            />
+            <SweepField
+              label={SWEEP_PARAM_LABELS.scheduler}
+              param={param(config, "scheduler")}
+              onChange={(p) => updateParam("scheduler", p)}
+              type="select"
+              selectOptions={diffusersSchedulerOptions}
+            />
+          </ParamGroup>
+
+          <ParamGroup title="Resolution">
+            <SweepField
               label={SWEEP_PARAM_LABELS.width}
               param={param(config, "width")}
               onChange={(p) => updateParam("width", p)}
@@ -97,20 +133,7 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
               onChange={(p) => updateParam("height", p)}
               type="number"
             />
-            <SweepField
-              label={SWEEP_PARAM_LABELS.seed}
-              param={param(config, "seed")}
-              onChange={(p) => updateParam("seed", p)}
-              type="number"
-            />
-          </div>
-          <SweepField
-            label={SWEEP_PARAM_LABELS.scheduler}
-            param={param(config, "scheduler")}
-            onChange={(p) => updateParam("scheduler", p)}
-            type="select"
-            selectOptions={diffusersSchedulerOptions}
-          />
+          </ParamGroup>
         </div>
       </section>
 
@@ -124,11 +147,11 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
           <span className="text-muted text-xs">{advancedOpen ? "▲" : "▼"}</span>
         </button>
         {advancedOpen && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div>
               <label className={labelClassName}>Attention</label>
               <select
-                className={selectClassName}
+                className={`${selectClassName} max-w-[14rem] mt-1`}
                 value={(config.attention_mechanism as string) ?? "sdpa"}
                 onChange={(e) => set("attention_mechanism", e.target.value)}
               >
@@ -140,7 +163,7 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
             <div>
               <label className={labelClassName}>Mixed Precision</label>
               <select
-                className={selectClassName}
+                className={`${selectClassName} max-w-[14rem] mt-1`}
                 value={(config.mixed_precision as string) ?? "float16"}
                 onChange={(e) => set("mixed_precision", e.target.value)}
               >
@@ -152,7 +175,7 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
             <div>
               <label className={labelClassName}>VAE Dtype</label>
               <select
-                className={selectClassName}
+                className={`${selectClassName} max-w-[14rem] mt-1`}
                 value={(config.vae_dtype as string) ?? "auto"}
                 onChange={(e) => set("vae_dtype", e.target.value)}
               >
@@ -162,7 +185,7 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
                 <option value="float32">float32</option>
               </select>
             </div>
-            <label className="flex items-center gap-2 cursor-pointer col-span-2">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={(config.tf32 as boolean) ?? true}
@@ -170,7 +193,7 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
               />
               <span className="text-sm">TF32 matmul</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer col-span-2">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={(config.sample_vae_tiling as boolean) ?? true}

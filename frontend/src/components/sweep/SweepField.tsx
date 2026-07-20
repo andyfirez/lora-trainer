@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
+import ModeToggle from "@/components/sweep/ModeToggle";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
 import type { SelectOption } from "@/lib/sampleSamplerOptions";
@@ -16,6 +17,9 @@ interface SweepFieldProps {
   selectOptions?: SelectOption[];
 }
 
+const numberInputClass = `${inputClassName} max-w-[10rem]`;
+const selectInputClass = `${selectClassName} max-w-[14rem]`;
+
 export default function SweepField({
   label,
   param,
@@ -28,14 +32,10 @@ export default function SweepField({
   const mode = param.mode ?? "fixed";
   const defaultSelectValue = selectOptions[0]?.value ?? "";
 
-  function renderSelect(value: unknown, onSelect: (v: string) => void) {
+  function renderSelect(value: unknown, onSelect: (v: string) => void, className: string) {
     const selected = String(value ?? defaultSelectValue);
     return (
-      <select
-        className={`${selectClassName} w-full`}
-        value={selected}
-        onChange={(e) => onSelect(e.target.value)}
-      >
+      <select className={className} value={selected} onChange={(e) => onSelect(e.target.value)}>
         {selectOptions.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -92,96 +92,99 @@ export default function SweepField({
     });
   }
 
+  function renderFixedInput() {
+    if (type === "select") {
+      return renderSelect(param.value, (v) => updateFixed(v), selectInputClass);
+    }
+    if (multiline) {
+      return (
+        <textarea
+          className={`${inputClassName} min-h-[72px]`}
+          value={String(param.value ?? "")}
+          placeholder={placeholder}
+          onChange={(e) => updateFixed(e.target.value)}
+        />
+      );
+    }
+    return (
+      <input
+        type={type}
+        className={type === "number" ? numberInputClass : inputClassName}
+        value={
+          param.value === null || param.value === undefined ? "" : (param.value as string | number)
+        }
+        placeholder={placeholder}
+        step={type === "number" ? "any" : undefined}
+        onChange={(e) =>
+          updateFixed(e.target.value === "" && type === "number" ? null : e.target.value)
+        }
+      />
+    );
+  }
+
+  function renderVaryValueInput(value: unknown, i: number) {
+    if (type === "select") {
+      return (
+        <div className="flex-1 min-w-0">{renderSelect(value, (v) => updateValue(i, v), selectClassName)}</div>
+      );
+    }
+    if (multiline) {
+      return (
+        <textarea
+          className={`${inputClassName} min-h-[56px] flex-1 min-w-0`}
+          value={String(value ?? "")}
+          placeholder={placeholder}
+          onChange={(e) => updateValue(i, e.target.value)}
+        />
+      );
+    }
+    return (
+      <input
+        type={type}
+        className={type === "number" ? `${numberInputClass} flex-1 min-w-0` : `${inputClassName} flex-1 min-w-0`}
+        value={value as string | number}
+        placeholder={placeholder}
+        step={type === "number" ? "any" : undefined}
+        onChange={(e) =>
+          updateValue(i, e.target.value === "" && type === "number" ? null : e.target.value)
+        }
+      />
+    );
+  }
+
+  function renderVaryContent() {
+    return (
+      <div className="rounded-lg border border-border/60 bg-bg/40 p-3 space-y-2">
+        {(param.values ?? []).map((value, i) => (
+          <div key={i} className="flex items-center gap-2 min-w-0">
+            {renderVaryValueInput(value, i)}
+            <button
+              type="button"
+              onClick={() => removeValue(i)}
+              className="p-1.5 rounded hover:bg-white/10 text-muted hover:text-error shrink-0"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addValue}
+          className="flex items-center gap-1.5 text-sm text-muted hover:text-text border border-dashed border-border hover:border-text/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
+        >
+          <Plus size={13} /> Add value
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <label className={labelClassName}>{label}</label>
-        <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-          <button
-            type="button"
-            onClick={() => setMode("fixed")}
-            className={`px-3 py-1 ${mode === "fixed" ? "bg-accent text-white" : "text-muted hover:text-text"}`}
-          >
-            Fixed
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("vary")}
-            className={`px-3 py-1 ${mode === "vary" ? "bg-accent text-white" : "text-muted hover:text-text"}`}
-          >
-            Vary
-          </button>
-        </div>
+        <ModeToggle mode={mode} onChange={setMode} />
       </div>
-      {mode === "fixed" ? (
-        type === "select" ? (
-          renderSelect(param.value, (v) => updateFixed(v))
-        ) : multiline ? (
-          <textarea
-            className={`${inputClassName} min-h-[72px]`}
-            value={String(param.value ?? "")}
-            placeholder={placeholder}
-            onChange={(e) => updateFixed(e.target.value)}
-          />
-        ) : (
-          <input
-            type={type}
-            className={inputClassName}
-            value={
-              param.value === null || param.value === undefined
-                ? ""
-                : (param.value as string | number)
-            }
-            placeholder={placeholder}
-            step={type === "number" ? "any" : undefined}
-            onChange={(e) =>
-              updateFixed(e.target.value === "" && type === "number" ? null : e.target.value)
-            }
-          />
-        )
-      ) : (
-        <div className="space-y-2">
-          {(param.values ?? []).map((value, i) => (
-            <div key={i} className="flex items-center gap-2 min-w-0">
-              {type === "select" ? (
-                <div className="flex-1 min-w-0">{renderSelect(value, (v) => updateValue(i, v))}</div>
-              ) : multiline ? (
-                <textarea
-                  className={`${inputClassName} min-h-[56px]`}
-                  value={String(value ?? "")}
-                  placeholder={placeholder}
-                  onChange={(e) => updateValue(i, e.target.value)}
-                />
-              ) : (
-                <input
-                  type={type}
-                  className={inputClassName}
-                  value={value as string | number}
-                  placeholder={placeholder}
-                  step={type === "number" ? "any" : undefined}
-                  onChange={(e) =>
-                    updateValue(i, e.target.value === "" && type === "number" ? null : e.target.value)
-                  }
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => removeValue(i)}
-                className="p-1.5 rounded hover:bg-white/10 text-muted hover:text-error shrink-0"
-              >
-                <X size={13} />
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={addValue}
-            className="flex items-center gap-1.5 text-sm text-muted hover:text-text border border-dashed border-border hover:border-text/30 rounded-lg px-3 py-2 w-full justify-center transition-colors"
-          >
-            <Plus size={13} /> Add value
-          </button>
-        </div>
-      )}
+      {mode === "fixed" ? renderFixedInput() : renderVaryContent()}
     </div>
   );
 }
