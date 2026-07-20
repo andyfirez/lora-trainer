@@ -5,6 +5,12 @@ import useSWR from "swr";
 import Link from "next/link";
 import { Plus, X } from "lucide-react";
 import { parse as yamlParse } from "yaml";
+import {
+  countCombinations,
+  getParameters,
+  hasVaryingParamsExceptPrompt,
+  sweepSummary,
+} from "@/lib/sweepUtils";
 import PathInput from "@/components/PathInput";
 import FieldHint from "@/components/FieldHint";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
@@ -274,14 +280,20 @@ function samplingPreview(configYaml: string): {
   promptCount: number;
   steps: number;
   scheduler: string;
+  summary: string;
+  hasVaryingExceptPrompt: boolean;
 } | null {
   try {
     const parsed = yamlParse(configYaml) as Record<string, unknown>;
-    const prompts = Array.isArray(parsed.sample_prompts) ? parsed.sample_prompts : [];
+    const parameters = getParameters(parsed);
+    const prompts = parameters.prompt?.mode === "vary" ? parameters.prompt.values ?? [] : [parameters.prompt?.value ?? ""];
+    const promptCount = countCombinations(parameters) || prompts.filter((p) => String(p).trim()).length;
     return {
-      promptCount: prompts.length,
-      steps: typeof parsed.sample_steps === "number" ? parsed.sample_steps : 30,
-      scheduler: typeof parsed.sample_scheduler === "string" ? parsed.sample_scheduler : "euler",
+      promptCount,
+      steps: Number(parameters.steps?.value ?? parsed.sample_steps ?? 30),
+      scheduler: String(parameters.scheduler?.value ?? parsed.sample_scheduler ?? "euler"),
+      summary: sweepSummary(parameters),
+      hasVaryingExceptPrompt: hasVaryingParamsExceptPrompt(parameters),
     };
   } catch {
     return null;
@@ -1081,7 +1093,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                     No sampling configs yet. Create one to configure preview prompts and sampler settings.
                   </p>
                   <Link
-                    href="/configs/new?type=sampling"
+                    href="/sampling/new"
                     className="inline-flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium"
                   >
                     Create Sampling Config
@@ -1098,8 +1110,16 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                   />
                   {samplingEnabled && selectedSamplingPreview && (
                     <p className="text-xs text-muted">
-                      {selectedSamplingPreview.promptCount} prompt(s), {selectedSamplingPreview.steps} steps,{" "}
-                      {selectedSamplingPreview.scheduler} scheduler
+                      {selectedSamplingPreview.promptCount} image(s) per checkpoint,{" "}
+                      {selectedSamplingPreview.steps} steps, {selectedSamplingPreview.scheduler} scheduler
+                      {selectedSamplingPreview.summary !== "all fixed"
+                        ? ` · vary: ${selectedSamplingPreview.summary}`
+                        : ""}
+                    </p>
+                  )}
+                  {samplingEnabled && selectedSamplingPreview?.hasVaryingExceptPrompt && (
+                    <p className="text-xs text-amber-400/90">
+                      Mid-training sampling uses the first value of varying parameters (except prompts).
                     </p>
                   )}
                   {samplingEnabled && config.sampling_config_id != null && !selectedSamplingConfig && (

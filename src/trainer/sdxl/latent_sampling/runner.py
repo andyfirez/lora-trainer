@@ -116,6 +116,7 @@ def run_sdxl_sampling_pass(
     on_status: StatusCallback | None = None,
     on_step: StepProgressCallback | None = None,
     log_step_context: str = "",
+    output_filenames: list[str] | None = None,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     n_prompts = len(embeds_list)
@@ -236,7 +237,11 @@ def run_sdxl_sampling_pass(
             if config.sample_offload_unet_before_decode:
                 _restore_unet_after_decode(session, log, prefix=prefix)
 
-            filename = f"{output_stem}_{prompt_index:02d}.png"
+            filename = (
+                output_filenames[prompt_index]
+                if output_filenames is not None and prompt_index < len(output_filenames)
+                else f"{output_stem}_{prompt_index:02d}.png"
+            )
             output_path = output_dir / filename
             save_started_at = time.perf_counter()
             image.save(output_path)

@@ -13,12 +13,14 @@ import {
   PanelLeft,
   Menu,
   X,
+  ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/configs", label: "Configs", icon: FileCog },
+  { href: "/sampling", label: "Sampling", icon: ImageIcon },
   { href: "/jobs", label: "Jobs", icon: ListOrdered },
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/parameters", label: "Parameters", icon: BookOpen },

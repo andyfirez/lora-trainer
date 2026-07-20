@@ -21,6 +21,7 @@ interface ConfigFormProps {
   initialYaml?: string;
   configId?: number;
   onSaved?: () => void;
+  saveRedirectBase?: string;
 }
 
 type Tab = "form" | "yaml";
@@ -32,6 +33,7 @@ export default function ConfigForm({
   initialYaml,
   configId,
   onSaved,
+  saveRedirectBase,
 }: ConfigFormProps) {
   const router = useRouter();
   const defaultYaml = configType === "training" ? TrainConfig.DEFAULT_YAML : SamplingConfig.DEFAULT_YAML;
@@ -87,7 +89,7 @@ export default function ConfigForm({
         });
         setYaml(updated.config_yaml);
         onSaved?.();
-        router.push(`/configs/${configId}`);
+        router.push(`${saveRedirectBase ?? "/configs"}/${configId}`);
         return;
       }
       const created = await configsApi.create({
@@ -96,7 +98,7 @@ export default function ConfigForm({
         config_yaml: yaml,
         description: description || null,
       });
-      router.push(`/configs/${created.id}`);
+      router.push(`${saveRedirectBase ?? "/configs"}/${created.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {

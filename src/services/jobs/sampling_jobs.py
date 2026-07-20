@@ -17,7 +17,7 @@ from src.trainer.config import TrainConfig
 
 
 def validate_sample_prompts(config: SamplingConfig) -> None:
-    if not config.sample_prompts:
+    if not config.effective_prompts():
         raise SamplingPromptsNotConfiguredError()
 
 
@@ -26,6 +26,47 @@ def validate_lora_paths(lora_paths: list[str]) -> None:
         path = Path(lora_path)
         if not path.is_file():
             raise SamplingLoRAPathNotFoundError(lora_path)
+
+
+def resolve_lora_paths_from_sampling_config(sampling_config: SamplingConfig) -> list[str]:
+    """Collect LoRA paths stored in a sampling config (manual source)."""
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    def add(path: object | None) -> None:
+        if path is None:
+            return
+        text = str(path).strip()
+        if not text or text in seen:
+            return
+        seen.add(text)
+        ordered.append(text)
+
+    for path in sampling_config.lora_paths:
+        add(path)
+
+    lora_param = sampling_config.parameters.lora_path
+    for value in lora_param.effective_values():
+        add(value)
+
+    return ordered
+
+
+def prepare_sampling_config_lora_paths(
+    sampling_config: SamplingConfig,
+    job_lora_paths: list[str] | None = None,
+) -> tuple[SamplingConfig, list[str]]:
+    """Merge job-level and config-level LoRA paths; ensure parameters are populated."""
+    paths: list[str] = []
+    seen: set[str] = set()
+    for candidate in (job_lora_paths or []) + resolve_lora_paths_from_sampling_config(sampling_config):
+        text = str(candidate).strip()
+        if text and text not in seen:
+            seen.add(text)
+            paths.append(text)
+    if not paths:
+        return sampling_config, []
+    return sampling_config.with_resolved_lora_paths(paths), paths
 
 
 def find_intermediate_checkpoints(config: TrainConfig) -> list[Path]:

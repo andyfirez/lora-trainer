@@ -9,6 +9,7 @@ from typing import Any, Callable
 
 import torch
 from peft import get_peft_model
+from src.sampler.config import SamplingConfig
 from src.trainer.attention import configure_unet_attention
 from src.trainer.concept_training_metadata import (
     ConceptTrainingMetadata,
@@ -55,23 +56,51 @@ class SDXLLoRASampler:
         self,
         config: TrainConfig,
         *,
-        lora_paths: list[Path],
+        sampling_config: SamplingConfig | None = None,
+        lora_paths: list[Path] | None = None,
         output_dir: Path,
         progress_status_callback: ProgressStatusCallback | None = None,
         progress_callback: ProgressCallback | None = None,
         log: logging.Logger | None = None,
         concept_metadata: dict[int, ConceptTrainingMetadata] | None = None,
+        compose_grids: bool = True,
+        job_id: int | None = None,
     ) -> None:
         self._config = config
-        self._lora_paths = lora_paths
+        self._sampling_config = sampling_config
+        self._lora_paths = lora_paths or []
         self._output_dir = output_dir
         self._progress_status_callback = progress_status_callback
         self._progress_callback = progress_callback
         self._log = log or logger
         self._prompt_embed_cache = PromptEmbedCache()
         self._concept_metadata = concept_metadata or {}
+        self._compose_grids = compose_grids
+        self._job_id = job_id
 
     def run(self) -> None:
+        if self._sampling_config is not None:
+            from src.sampler.sweep.combinations import build_combinations
+            from src.sampler.sweep.engine import SweepEngine
+
+            combos = build_combinations(self._sampling_config.parameters)
+            if not combos:
+                raise ValueError("No sample prompts configured")
+            self._log.info("Sweep mode: %d cell(s) planned", len(combos))
+            engine = SweepEngine(
+                self._sampling_config,
+                base_train_config=self._config,
+                output_dir=self._output_dir,
+                job_id=self._job_id,
+                progress_status_callback=self._progress_status_callback,
+                progress_callback=self._progress_callback,
+                log=self._log,
+                concept_metadata=self._concept_metadata,
+                compose_grids=self._compose_grids,
+            )
+            engine.run()
+            return
+
         config = self._config
         if not self._effective_sample_prompts():
             raise ValueError("No sample prompts configured")
@@ -95,23 +124,10 @@ class SDXLLoRASampler:
             for lora_index, lora_path in enumerate(self._lora_paths):
                 status_prefix = f"Sampling {lora_path.name} ({lora_index + 1}/{len(self._lora_paths)})"
                 self._set_status(f"{status_prefix} — loading LoRA")
-                state_dict = load_lora_file(lora_path)
-                lora_config = apply_lora_metadata_to_config(config, state_dict)
-                self._log.info(
-                    "LoRA %s: rank=%d alpha=%.1f te1=%s te2=%s",
-                    lora_path.name,
-                    lora_config.lora_rank,
-                    lora_config.lora_alpha,
-                    lora_config.text_encoder_1.train,
-                    lora_config.text_encoder_2.train,
-                )
-                stack = self._load_stack(lora_config, enable_lora=True)
-                apply_lora_state_dict(
-                    state_dict,
-                    unet=stack.unet,
-                    text_encoder_1=stack.text_encoder_1,
-                    text_encoder_2=stack.text_encoder_2,
-                    config=lora_config,
+                stack, lora_config, merge_unet = self.load_stack_for_combo(
+                    base_model=config.base_model_name,
+                    lora_path=lora_path,
+                    combo_params={"lora_weight": 1.0},
                 )
                 try:
                     self._sample_pass(
@@ -120,14 +136,18 @@ class SDXLLoRASampler:
                         completed_images=completed_images,
                         stack=stack,
                         lora_config=lora_config,
-                        merge_unet_adapter=True,
+                        merge_unet_adapter=merge_unet,
                     )
                 finally:
                     del stack
                     torch.cuda.empty_cache()
                 completed_images += len(self._effective_sample_prompts())
         else:
-            stack = self._load_stack(config, enable_lora=False)
+            stack, lora_config, merge_unet = self.load_stack_for_combo(
+                base_model=config.base_model_name,
+                lora_path=None,
+                combo_params={},
+            )
             status_prefix = "Sampling base model"
             self._set_status(status_prefix)
             try:
@@ -136,17 +156,62 @@ class SDXLLoRASampler:
                     status_prefix=status_prefix,
                     completed_images=0,
                     stack=stack,
-                    lora_config=config,
-                    merge_unet_adapter=False,
+                    lora_config=lora_config,
+                    merge_unet_adapter=merge_unet,
                 )
             finally:
                 del stack
                 torch.cuda.empty_cache()
         self._set_status(None)
 
+    def load_stack_for_combo(
+        self,
+        *,
+        base_model: str,
+        lora_path: Path | None,
+        combo_params: dict[str, Any],
+    ) -> tuple[_SamplingStack, TrainConfig, bool]:
+        config = self._config.model_copy(update={"base_model_name": base_model})
+        enable_lora = lora_path is not None
+        if enable_lora and lora_path is not None:
+            self._log.info("Reading LoRA file: %s", lora_path)
+            load_started = time.perf_counter()
+            state_dict = load_lora_file(lora_path)
+            self._log.info("LoRA file read in %.1fs", time.perf_counter() - load_started)
+            lora_config = apply_lora_metadata_to_config(config, state_dict)
+            self._log.info(
+                "LoRA metadata: rank=%d alpha=%.1f te1=%s te2=%s",
+                lora_config.lora_rank,
+                lora_config.lora_alpha,
+                lora_config.text_encoder_1.train,
+                lora_config.text_encoder_2.train,
+            )
+            stack = self._load_stack(lora_config, enable_lora=True)
+            self._log.info("Applying LoRA weights to pipeline...")
+            apply_started = time.perf_counter()
+            apply_lora_state_dict(
+                state_dict,
+                unet=stack.unet,
+                text_encoder_1=stack.text_encoder_1,
+                text_encoder_2=stack.text_encoder_2,
+                config=lora_config,
+            )
+            self._log.info("LoRA weights applied in %.1fs", time.perf_counter() - apply_started)
+            return stack, lora_config, True
+        self._log.info("Loading base model pipeline (no LoRA)")
+        stack = self._load_stack(config, enable_lora=False)
+        return stack, config, False
+
     def _load_stack(self, config: TrainConfig, *, enable_lora: bool) -> _SamplingStack:
         device = torch.device("cuda")
         vae_dtype = resolve_vae_dtype(config.vae_dtype)
+        self._log.info(
+            "Loading SDXL components from %s (lora=%s, attention=%s)...",
+            config.base_model_name,
+            enable_lora,
+            config.attention_mechanism,
+        )
+        load_started = time.perf_counter()
         components = load_sdxl_components(
             config.base_model_name,
             unet_dtype=config.unet.weight_dtype,
@@ -154,6 +219,7 @@ class SDXLLoRASampler:
             text_encoder_2_dtype=config.text_encoder_2.weight_dtype,
             vae_dtype=config.vae_dtype,
         )
+        self._log.info("SDXL components loaded from disk in %.1fs", time.perf_counter() - load_started)
 
         vae = components.vae
         text_encoder_1 = components.text_encoder_1
@@ -166,6 +232,7 @@ class SDXLLoRASampler:
         unet.requires_grad_(False)
 
         if enable_lora:
+            self._log.info("Attaching LoRA adapters (rank=%d)...", config.lora_rank)
             unet = get_peft_model(
                 unet,
                 build_sdxl_lora_config(
@@ -196,11 +263,15 @@ class SDXLLoRASampler:
                 ),
             )
 
+        self._log.info("Moving SDXL models to GPU...")
+        gpu_started = time.perf_counter()
         unet = unet.to(device=device, dtype=_DTYPE_MAP[config.unet.weight_dtype])
         text_encoder_1 = text_encoder_1.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_1.weight_dtype])
         text_encoder_2 = text_encoder_2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
         vae = vae.to(device=device, dtype=vae_dtype)
+        self._log.info("GPU transfer finished in %.1fs", time.perf_counter() - gpu_started)
         configure_unet_attention(unet, config.attention_mechanism, self._log)
+        self._log.info("Pipeline ready for sampling")
 
         return _SamplingStack(
             device=device,
@@ -211,6 +282,66 @@ class SDXLLoRASampler:
             text_encoder_2=text_encoder_2,
             vae=vae,
             unet=unet,
+        )
+
+    def generate_single_cell(
+        self,
+        *,
+        stack: _SamplingStack,
+        lora_config: TrainConfig,
+        sampling_config: TrainConfig,
+        merge_unet: bool,
+        prompt: str,
+        lora_weight: float,
+        output_dir: Path,
+        output_filename: str,
+        completed_images: int,
+        total_steps: int,
+    ) -> None:
+        config = sampling_config
+        device = stack.device
+        width = config.sample_width or config.resolution
+        height = config.sample_height or config.resolution
+        self._log.info(
+            "Generating image: %dx%d, %d steps, prompt=%r",
+            width,
+            height,
+            config.sample_steps,
+            prompt[:120],
+        )
+        reference_add_time_ids = resolve_reference_add_time_ids(
+            self._concept_metadata,
+            dataset_ids=self._reference_dataset_ids(config),
+            width=config.sample_width or config.resolution,
+            height=config.sample_height or config.resolution,
+        )
+
+        def on_step(_prompt_index: int, completed: int, _total: int) -> None:
+            image_offset = completed_images * config.sample_steps
+            self._set_progress(image_offset + completed, total_steps)
+
+        run_merged_adapter_sampling(
+            unet=stack.unet,
+            text_encoder_1=stack.text_encoder_1,
+            text_encoder_2=stack.text_encoder_2,
+            vae=stack.vae,
+            tokenizer_1=stack.tokenizer_1,
+            tokenizer_2=stack.tokenizer_2,
+            noise_scheduler=stack.noise_scheduler,
+            lora_config=lora_config,
+            sampling_config=config,
+            device=device,
+            sample_prompts=[prompt],
+            output_dir=output_dir,
+            output_stem="cell",
+            log=self._log,
+            merge_unet=merge_unet,
+            embed_cache=self._prompt_embed_cache,
+            reference_add_time_ids=reference_add_time_ids,
+            on_step=on_step,
+            lora_weight=lora_weight,
+            output_filenames=[output_filename],
+            clear_embed_cache_on_te_train=True,
         )
 
     def _sample_pass(

@@ -96,10 +96,40 @@ export interface JobSample {
   filename: string;
   path: string;
   url: string;
+  kind?: "cell" | "grid" | "legacy";
+  metadata?: Record<string, unknown>;
 }
 
 export interface JobSamplesResponse {
   samples: JobSample[];
+}
+
+export interface ManifestImageEntry {
+  index: number;
+  file: string;
+  url: string;
+  params: Record<string, unknown>;
+  grid_position?: Record<string, number> | null;
+}
+
+export interface ManifestGridEntry {
+  index: number;
+  file: string;
+  url: string;
+  slice: Record<string, unknown>;
+  x: { param: string; values: unknown[] };
+  y: { param: string; values: unknown[] };
+  cells: (number | null)[][];
+  title: string;
+}
+
+export interface SweepManifestResponse {
+  version: number;
+  config_id: number | null;
+  job_id: number | null;
+  total_images: number;
+  images: ManifestImageEntry[];
+  grids: ManifestGridEntry[];
 }
 
 export interface Dataset {

@@ -40,6 +40,22 @@ class AdapterMergeState:
     models: MergedInferenceModels
 
 
+def apply_lora_weight_to_model(model: Any, weight: float) -> None:
+    """Scale active LoRA adapters before merge."""
+    if abs(weight - 1.0) < 1e-6:
+        return
+    if hasattr(model, "set_adapters") and hasattr(model, "peft_config"):
+        adapter_names = list(getattr(model, "peft_config", {}).keys())
+        if adapter_names:
+            model.set_adapters(adapter_names, weights=[weight] * len(adapter_names))
+            return
+    from peft.tuners.tuners_utils import BaseTunerLayer
+
+    for module in model.modules():
+        if isinstance(module, BaseTunerLayer):
+            module.scale_layer(weight)
+
+
 def merge_adapters_for_inference(
     *,
     unet: Any,
@@ -47,7 +63,14 @@ def merge_adapters_for_inference(
     text_encoder_2: Any,
     lora_config: TrainConfig,
     merge_unet: bool = True,
+    lora_weight: float = 1.0,
 ) -> AdapterMergeState:
+    apply_lora_weight_to_model(unet, lora_weight)
+    if lora_config.text_encoder_1.train:
+        apply_lora_weight_to_model(text_encoder_1, lora_weight)
+    if lora_config.text_encoder_2.train:
+        apply_lora_weight_to_model(text_encoder_2, lora_weight)
+
     unet_merged = False
     te1_merged = False
     te2_merged = False
@@ -120,6 +143,7 @@ def run_sampling_pass_with_embeds(
     on_status: Callable[[int, int], None] | None = None,
     on_step: Callable[[int, int, int], None] | None = None,
     log_step_context: str = "[sample {prompt_index}/{n_prompts}]",
+    output_filenames: list[str] | None = None,
     clear_embed_cache_on_te_train: bool = False,
 ) -> None:
     """Precompute embeds, create session, and run one sampling pass."""
@@ -136,6 +160,20 @@ def run_sampling_pass_with_embeds(
         cache.clear()
 
     negative_prompt = sampling_config.sample_negative_prompt or ""
+    inference_te1 = inference_te1.to(
+        device=device,
+        dtype=_DTYPE_MAP[sampling_config.text_encoder_1.weight_dtype],
+    )
+    inference_te2 = inference_te2.to(
+        device=device,
+        dtype=_DTYPE_MAP[sampling_config.text_encoder_2.weight_dtype],
+    )
+    log.info(
+        "Precomputing prompt embeddings (%d prompt(s), %dx%d)...",
+        len(sample_prompts),
+        width,
+        height,
+    )
     all_embeds = precompute_all_sample_embeds(
         sample_prompts=sample_prompts,
         negative_prompt=negative_prompt,
@@ -153,6 +191,7 @@ def run_sampling_pass_with_embeds(
     if device.type == "cuda":
         torch.cuda.empty_cache()
 
+    log.info("Starting diffusion (%d steps, scheduler=%s)...", sampling_config.sample_steps, sampling_config.sample_scheduler)
     session = SDXLSamplingSession.create(
         unet=inference_unet,
         vae=vae,
@@ -176,6 +215,7 @@ def run_sampling_pass_with_embeds(
         on_status=on_status,
         on_step=on_step,
         log_step_context=log_step_context,
+        output_filenames=output_filenames,
     )
 
 
@@ -202,14 +242,18 @@ def run_merged_adapter_sampling(
     on_step: Callable[[int, int, int], None] | None = None,
     log_step_context: str = "[sample {prompt_index}/{n_prompts}]",
     clear_embed_cache_on_te_train: bool = True,
+    lora_weight: float = 1.0,
+    output_filenames: list[str] | None = None,
 ) -> None:
     """Merge adapters, precompute embeds, run one sampling pass, then unmerge."""
+    log.info("Merging LoRA adapters for inference (weight=%.2f)...", lora_weight)
     merge_state = merge_adapters_for_inference(
         unet=unet,
         text_encoder_1=text_encoder_1,
         text_encoder_2=text_encoder_2,
         lora_config=lora_config,
         merge_unet=merge_unet,
+        lora_weight=lora_weight,
     )
     inference_unet = merge_state.models.unet
     inference_te1 = merge_state.models.text_encoder_1
@@ -235,6 +279,7 @@ def run_merged_adapter_sampling(
             on_status=on_status,
             on_step=on_step,
             log_step_context=log_step_context,
+            output_filenames=output_filenames,
             clear_embed_cache_on_te_train=clear_embed_cache_on_te_train
             and (lora_config.text_encoder_1.train or lora_config.text_encoder_2.train),
         )

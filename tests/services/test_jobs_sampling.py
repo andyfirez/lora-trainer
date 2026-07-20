@@ -56,6 +56,41 @@ async def test_create_from_config_train_linked_resolves_lora_paths(
 
 
 @pytest.mark.asyncio
+async def test_create_from_config_standalone_resolves_lora_paths_from_config(
+    jobs_service: JobsService,
+    config_service: JobConfigService,
+    tmp_path,
+) -> None:
+    lora_a = tmp_path / "a.safetensors"
+    lora_b = tmp_path / "b.safetensors"
+    lora_a.write_bytes(b"a")
+    lora_b.write_bytes(b"b")
+    sampling_config = await config_service.create_config(
+        name="sampling",
+        config_type=ConfigType.SAMPLING,
+        config_yaml=f"""
+output_dir: {tmp_path.as_posix()}
+lora_paths:
+  - {lora_a.as_posix()}
+  - {lora_b.as_posix()}
+parameters:
+  lora_path:
+    mode: vary
+    values:
+      - {lora_a.as_posix()}
+      - {lora_b.as_posix()}
+  prompt:
+    mode: fixed
+    value: test prompt
+""",
+    )
+
+    sampling_job = await jobs_service.create_from_config(sampling_config.id)
+
+    assert [Path(p) for p in jobs_service.get_lora_paths(sampling_job)] == [lora_a, lora_b]
+
+
+@pytest.mark.asyncio
 async def test_create_from_config_standalone_has_empty_lora_paths(
     jobs_service: JobsService,
     config_service: JobConfigService,

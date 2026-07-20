@@ -1,5 +1,5 @@
 import { api } from "@/lib/api/client";
-import type { Job, JobSamplesResponse, JobType } from "@/types";
+import type { Job, JobSamplesResponse, JobType, SweepManifestResponse } from "@/types";
 
 export interface JobLogs {
   lines: string[];
@@ -47,4 +47,5 @@ export const jobsApi = {
     return api.get<JobLossResponse>(`/jobs/${id}/loss${qs ? `?${qs}` : ""}`);
   },
   getSamples: (id: number) => api.get<JobSamplesResponse>(`/jobs/${id}/samples`),
+  getSweepManifest: (id: number) => api.get<SweepManifestResponse>(`/jobs/${id}/sweep-manifest`),
 };

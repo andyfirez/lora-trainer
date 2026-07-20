@@ -4,6 +4,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import JobProgressBar from "@/components/JobProgressBar";
 import LiveLogsPanel from "@/components/LiveLogsPanel";
+import SweepGridViewer from "@/components/sweep/SweepGridViewer";
 import { jobsApi } from "@/lib/api/jobs";
 import type { Job } from "@/types";
 
@@ -20,21 +21,20 @@ function progressPercent(step: number | null, total: number | null): number | nu
   return Math.round((step / total) * 100);
 }
 
-function JobSamples({ jobId, status }: { jobId: number; status: string }) {
+function LegacySamples({ jobId, status }: { jobId: number; status: string }) {
   const { data } = useSWR(
     status === "completed" ? `/jobs/${jobId}/samples` : null,
     () => jobsApi.getSamples(jobId),
   );
 
-  if (!data?.samples.length) {
-    return null;
-  }
+  const legacy = data?.samples.filter((s) => s.kind === "legacy") ?? [];
+  if (!legacy.length) return null;
 
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-medium text-muted">Samples</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {data.samples.map((sample) => (
+        {legacy.map((sample) => (
           <a key={sample.path} href={`${API_BASE_URL}${sample.url}`} target="_blank" rel="noreferrer">
             <img
               src={`${API_BASE_URL}${sample.url}`}
@@ -78,42 +78,32 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
         />
       )}
 
-      {job.status === "failed" && job.error_message && (
-        <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">
-          <strong>Error:</strong> {job.error_message}
-        </div>
-      )}
-
-      <div className="bg-surface rounded-xl border border-border p-4 space-y-3">
-        <div className="text-xs text-muted">
-          {(sampling?.lora_paths.length ?? 0) > 0
-            ? `LoRA files (${sampling?.lora_paths.length})`
-            : "Base model only"}
-        </div>
-        {(sampling?.lora_paths.length ?? 0) > 0 && (
-          <ul className="space-y-1">
-            {sampling?.lora_paths.map((path) => (
-              <li key={path}>
-                <code className="text-success text-sm break-all">{path}</code>
-              </li>
+      {sampling?.lora_paths?.length ? (
+        <div className="space-y-1">
+          <h2 className="text-sm font-medium text-muted">LoRA paths</h2>
+          <ul className="text-sm text-text space-y-1 font-mono break-all">
+            {sampling.lora_paths.map((p) => (
+              <li key={p}>{p}</li>
             ))}
           </ul>
-        )}
-        {sampling?.source_job_id != null && (
-          <div>
-            <div className="text-xs text-muted mb-1">Source Job</div>
-            <Link href={`/jobs/${sampling.source_job_id}`} className="text-sampling text-sm hover:underline">
-              Job #{sampling.source_job_id}
-            </Link>
-          </div>
-        )}
-        {job.output_path && (
-          <div>
-            <div className="text-xs text-muted mb-1">Output</div>
-            <code className="text-success text-sm break-all">{job.output_path}</code>
-          </div>
-        )}
-      </div>
+        </div>
+      ) : null}
+
+      {sampling?.source_job_id != null && (
+        <p className="text-sm text-muted">
+          Source training job:{" "}
+          <Link href={`/jobs/${sampling.source_job_id}`} className="text-accent hover:underline">
+            #{sampling.source_job_id}
+          </Link>
+        </p>
+      )}
+
+      {job.status === "completed" && (
+        <>
+          <SweepGridViewer jobId={id} status={job.status} />
+          <LegacySamples jobId={id} status={job.status} />
+        </>
+      )}
 
       {showLogs && (
         <LiveLogsPanel
@@ -125,8 +115,6 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
           title="Sampling Logs"
         />
       )}
-
-      <JobSamples jobId={id} status={job.status} />
     </div>
   );
 }

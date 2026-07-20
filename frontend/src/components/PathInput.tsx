@@ -48,15 +48,17 @@ export default function PathInput({
   };
 
   return (
-    <div>
-      <div className="flex items-center mb-1">
-        <label className={labelClassName}>{label}</label>
-        {hint && <FieldHint hint={hint} hintAnchor={hintAnchor} />}
-      </div>
-      <div className="flex gap-2">
+    <div className="w-full min-w-0">
+      {label ? (
+        <div className="flex items-center mb-1">
+          <label className={labelClassName}>{label}</label>
+          {hint && <FieldHint hint={hint} hintAnchor={hintAnchor} />}
+        </div>
+      ) : null}
+      <div className="flex gap-2 min-w-0">
         <input
           type="text"
-          className={inputClassName}
+          className={`${inputClassName} flex-1 min-w-0`}
           value={value ?? ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}

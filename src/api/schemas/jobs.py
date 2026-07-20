@@ -1,9 +1,9 @@
 """Pydantic schemas for job API endpoints."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.db.tables.job import JobStatus, JobType
 
@@ -39,14 +39,52 @@ class TaggingJobDetails(BaseModel):
     dataset_id: int
 
 
+SampleKind = Literal["cell", "grid", "legacy"]
+
+
 class JobSampleResponse(BaseModel):
     filename: str
     path: str
     url: str
+    kind: SampleKind = "legacy"
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobSamplesResponse(BaseModel):
     samples: list[JobSampleResponse]
+
+
+class ManifestImageEntryResponse(BaseModel):
+    index: int
+    file: str
+    url: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    grid_position: dict[str, int] | None = None
+
+
+class ManifestGridAxisResponse(BaseModel):
+    param: str
+    values: list[Any] = Field(default_factory=list)
+
+
+class ManifestGridEntryResponse(BaseModel):
+    index: int
+    file: str
+    url: str
+    slice: dict[str, Any] = Field(default_factory=dict)
+    x: ManifestGridAxisResponse
+    y: ManifestGridAxisResponse
+    cells: list[list[int | None]] = Field(default_factory=list)
+    title: str = ""
+
+
+class SweepManifestResponse(BaseModel):
+    version: int = 1
+    config_id: int | None = None
+    job_id: int | None = None
+    total_images: int = 0
+    images: list[ManifestImageEntryResponse] = Field(default_factory=list)
+    grids: list[ManifestGridEntryResponse] = Field(default_factory=list)
 
 
 class JobResponse(BaseModel):

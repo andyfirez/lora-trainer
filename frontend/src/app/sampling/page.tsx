@@ -8,14 +8,13 @@ import { PlusCircle, Loader2, Trash2, Copy } from "lucide-react";
 import { configsApi } from "@/lib/api/configs";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "@/components/ui/Table";
 import Card from "@/components/ui/Card";
 
-export default function ConfigsPage() {
+export default function SamplingPage() {
   const router = useRouter();
   const [cloningId, setCloningId] = useState<number | null>(null);
-  const { data: configs, isLoading, mutate } = useSWR("/configs/training", () => configsApi.list("training"), {
+  const { data: configs, isLoading, mutate } = useSWR("/configs/sampling", () => configsApi.list("sampling"), {
     refreshInterval: 10000,
   });
 
@@ -30,7 +29,7 @@ export default function ConfigsPage() {
     try {
       const cloned = await configsApi.clone(id);
       await mutate();
-      router.push(`/configs/${cloned.id}`);
+      router.push(`/sampling/${cloned.id}`);
     } finally {
       setCloningId(null);
     }
@@ -39,11 +38,11 @@ export default function ConfigsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Configs"
-        description="Reusable SDXL LoRA training configurations"
+        title="Sampling"
+        description="Parameter sweep configs — prompts, LoRA weights, checkpoints, and grid output"
         actions={
           <Link
-            href="/configs/new"
+            href="/sampling/new"
             className="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           >
             <PlusCircle size={15} />
@@ -54,12 +53,12 @@ export default function ConfigsPage() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20 text-muted">
-          <Loader2 className="animate-spin mr-2" size={18} /> Loading configs…
+          <Loader2 className="animate-spin mr-2" size={18} /> Loading sampling configs…
         </div>
       ) : !configs?.length ? (
         <Card className="text-center py-20 text-muted">
-          No training configs yet.{" "}
-          <Link href="/configs/new" className="text-accent hover:underline">
+          No sampling configs yet.{" "}
+          <Link href="/sampling/new" className="text-accent hover:underline">
             Create one
           </Link>
         </Card>
@@ -68,7 +67,6 @@ export default function ConfigsPage() {
           <TableHead>
             <tr>
               <TableHeader>Name</TableHeader>
-              <TableHeader>Version</TableHeader>
               <TableHeader>Description</TableHeader>
               <TableHeader>Updated</TableHeader>
               <TableHeader className="text-right">Actions</TableHeader>
@@ -78,12 +76,9 @@ export default function ConfigsPage() {
             {configs.map((config) => (
               <TableRow key={config.id}>
                 <TableCell>
-                  <Link href={`/configs/${config.id}`} className="text-text hover:text-accent font-medium">
+                  <Link href={`/sampling/${config.id}`} className="text-text hover:text-accent font-medium">
                     {config.name}
                   </Link>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="accent">v{config.active_version ?? 1}</Badge>
                 </TableCell>
                 <TableCell className="text-muted max-w-xs truncate">{config.description || "—"}</TableCell>
                 <TableCell className="text-muted">{new Date(config.updated_at).toLocaleDateString()}</TableCell>

@@ -78,18 +78,54 @@ logging:
 
 export const SamplingConfig = {
   DEFAULT_YAML: `# SDXL LoRA Sampling Configuration
-base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 output_dir: output
-sample_prompts: []
-sample_negative_prompt: ''
-sample_steps: 30
-sample_cfg_scale: 7.5
-# sample_width: 1024
-# sample_height: 1024
-sample_scheduler: euler
+source_type: manual
+lora_paths: []
+include_final_checkpoint: true
+
+grid:
+  x_axis: null
+  y_axis: null
+
+parameters:
+  base_model_name:
+    mode: fixed
+    value: stabilityai/stable-diffusion-xl-base-1.0
+  lora_path:
+    mode: fixed
+    value: null
+  lora_weight:
+    mode: fixed
+    value: 1.0
+  prompt:
+    mode: fixed
+    value: ""
+  negative_prompt:
+    mode: fixed
+    value: ""
+  steps:
+    mode: fixed
+    value: 30
+  cfg_scale:
+    mode: fixed
+    value: 7.5
+  width:
+    mode: fixed
+    value: null
+  height:
+    mode: fixed
+    value: null
+  scheduler:
+    mode: fixed
+    value: euler
+  seed:
+    mode: fixed
+    value: null
+
 attention_mechanism: sdpa
 mixed_precision: float16
 vae_dtype: auto
 tf32: true
+sample_vae_tiling: true
 `,
 };

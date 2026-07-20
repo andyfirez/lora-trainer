@@ -16,6 +16,7 @@ from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import SDXLLoRASampler
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
+from src.services.jobs.sampling_jobs import prepare_sampling_config_lora_paths
 from src.trainer.concept_training_metadata import (
     ConceptTrainingMetadata,
     resolve_concept_training_metadata,
@@ -153,9 +154,19 @@ async def run_sampling_job(job_id: int) -> int:
             source_job_id = job.source_job_id
 
         sampling_config = SamplingConfig.from_yaml(config_yaml)
+        job_lora_paths = [str(p) for p in (yaml.safe_load(lora_paths_yaml or "[]") or [])]
+        sampling_config, effective_lora_paths = prepare_sampling_config_lora_paths(
+            sampling_config,
+            job_lora_paths or None,
+        )
+        if effective_lora_paths and not job_lora_paths:
+            run_logger.info(
+                "LoRA paths taken from sampling config (%d file(s), job record had none)",
+                len(effective_lora_paths),
+            )
+        lora_paths = [Path(p) for p in effective_lora_paths]
         train_config = sampling_config.to_train_config()
         train_config.validate_gpu()
-        lora_paths = [Path(path) for path in (yaml.safe_load(lora_paths_yaml or "[]") or [])]
         source_train_config: TrainConfig | None = None
         if source_job_id is not None:
             async with session_factory() as session:
@@ -191,15 +202,32 @@ async def run_sampling_job(job_id: int) -> int:
                     crop_repo,
                 )
 
-        run_logger.info("Starting sampling job id=%d with %d LoRA file(s)", job_id, len(lora_paths))
+        from src.sampler.sweep.combinations import count_combinations
+
+        combo_count = count_combinations(sampling_config.parameters)
+        run_logger.info(
+            "Starting sampling job id=%d: %d LoRA file(s), %d sweep image(s)",
+            job_id,
+            len(lora_paths),
+            combo_count,
+        )
+        if lora_paths:
+            for index, path in enumerate(lora_paths, start=1):
+                run_logger.info("  LoRA %d/%d: %s", index, len(lora_paths), path)
+        vary_keys = sampling_config.parameters.vary_keys_with_values()
+        if vary_keys:
+            run_logger.info("  Varying parameters: %s", ", ".join(vary_keys))
         sampler = SDXLLoRASampler(
             train_config,
+            sampling_config=sampling_config,
             lora_paths=lora_paths,
             output_dir=Path(output_path),
             progress_status_callback=_make_progress_status_callback(job_id),
             progress_callback=_make_progress_callback(job_id),
             log=run_logger,
             concept_metadata=concept_metadata,
+            job_id=job_id,
+            compose_grids=True,
         )
         sampler.run()
         await _update_progress_status(job_id, None)

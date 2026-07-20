@@ -34,6 +34,7 @@ from src.services.jobs.handlers import get_job_handler
 from src.services.jobs.loss_log_reader import read_loss_log
 from src.services.jobs.sampling_jobs import (
     find_intermediate_checkpoints,
+    prepare_sampling_config_lora_paths,
     resolve_sampling_lora_paths,
     resolve_sampling_output_dir,
     validate_lora_paths,
@@ -113,7 +114,7 @@ class JobsService:
             )
         else:
             sampling_config = SamplingConfig.from_yaml(config.config_yaml)
-            paths = (
+            job_lora_paths = (
                 lora_paths
                 if lora_paths is not None
                 else await resolve_sampling_lora_paths(
@@ -121,6 +122,10 @@ class JobsService:
                     source_job_id,
                     runtime_train_config=self._runtime_train_config,
                 )
+            )
+            sampling_config, paths = prepare_sampling_config_lora_paths(
+                sampling_config,
+                job_lora_paths or None,
             )
             if paths:
                 validate_lora_paths(paths)
@@ -324,13 +329,48 @@ class JobsService:
         data = yaml.safe_load(job.lora_paths_yaml or "[]") or []
         return [str(path) for path in data]
 
-    def list_samples(self, job: Job) -> list[Path]:
+    def list_samples(self, job: Job) -> list[tuple[Path, str, dict]]:
+        """Return (path, kind, metadata) tuples for sample files."""
         if not job.output_path:
             return []
         output_dir = Path(job.output_path)
         if not output_dir.exists():
             return []
-        return sorted(output_dir.glob("*.png"))
+
+        from src.sampler.sweep.manifest import read_manifest
+
+        manifest = read_manifest(output_dir)
+        if manifest is not None:
+            results: list[tuple[Path, str, dict]] = []
+            for grid in manifest.grids:
+                path = output_dir / grid.file
+                if path.is_file():
+                    results.append((path, "grid", {"title": grid.title, "index": grid.index}))
+            for image in manifest.images:
+                path = output_dir / image.file
+                if path.is_file():
+                    results.append((path, "cell", {"params": image.params, "index": image.index}))
+            return results
+
+        return [(path, "legacy", {}) for path in sorted(output_dir.glob("*.png"))]
+
+    def get_sweep_manifest(self, job: Job):
+        if not job.output_path:
+            return None
+        from src.sampler.sweep.manifest import read_manifest
+
+        return read_manifest(Path(job.output_path))
+
+    def sample_file_path(self, job: Job, relative_path: str) -> Path:
+        if not job.output_path:
+            raise JobOperationNotSupportedError(job.id, "sample file")
+        base = Path(job.output_path).resolve()
+        target = (base / relative_path).resolve()
+        if not str(target).startswith(str(base)):
+            raise JobOperationNotSupportedError(job.id, "sample file")
+        if not target.is_file():
+            raise JobOperationNotSupportedError(job.id, "sample file")
+        return target
 
     def can_resume(self, job: Job) -> bool:
         return (
