@@ -25,11 +25,20 @@ from src.sampler.sweep.manifest import (
     grid_image_path,
     write_manifest,
 )
+from src.sampler.sweep.models import parse_trigger_words
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.config import SampleScheduler, TrainConfig
+from src.trainer.sdxl.caption import apply_trigger_words_to_prompt
 
 ProgressStatusCallback = Callable[[str | None], None]
 ProgressCallback = Callable[[int, int], None]
+
+
+def sort_pipeline_groups(
+    groups: dict[tuple[str, str | None], list],
+) -> list[tuple[tuple[str, str | None], list]]:
+    """Order pipeline loads by base model first, then LoRA path, to minimize model switches."""
+    return sorted(groups.items(), key=lambda item: (item[0][0], item[0][1] or ""))
 
 
 class SweepEngine:
@@ -94,21 +103,31 @@ class SweepEngine:
             lora_key = str(lora_path) if lora_path else None
             groups[(base_model, lora_key)].append(combo)
 
+        sorted_groups = sort_pipeline_groups(groups)
         self._log.info(
             "Sweep load plan: %d pipeline group(s) (%d with LoRA, %d base-only)",
-            len(groups),
-            sum(1 for (_, k) in groups if k),
-            sum(1 for (_, k) in groups if not k),
+            len(sorted_groups),
+            sum(1 for (_, k) in sorted_groups if k[1]),
+            sum(1 for (_, k) in sorted_groups if not k[1]),
         )
+        for index, ((base_model, lora_key), group_combos) in enumerate(sorted_groups, start=1):
+            lora_label = Path(lora_key).name if lora_key else "(none)"
+            self._log.info(
+                "  Group %d: base=%s, lora=%s, cells=%d",
+                index,
+                base_model,
+                lora_label,
+                len(group_combos),
+            )
 
-        for group_index, ((base_model, lora_key), group_combos) in enumerate(groups.items(), start=1):
+        for group_index, ((base_model, lora_key), group_combos) in enumerate(sorted_groups, start=1):
             first = group_combos[0]
             lora_path = Path(lora_key) if lora_key else None
             status = f"Sampling {lora_path.name if lora_path else 'base model'}"
             self._log.info(
                 "Pipeline group %d/%d: base=%s, lora=%s, cells=%d",
                 group_index,
-                len(groups),
+                len(sorted_groups),
                 base_model,
                 lora_path if lora_path else "(none)",
                 len(group_combos),
@@ -154,7 +173,9 @@ class SweepEngine:
         total_steps: int,
     ) -> None:
         params = combo.params
-        prompt = str(params.get("prompt") or "")
+        raw_prompt = str(params.get("prompt") or "")
+        trigger = str(params.get("lora_trigger") or "")
+        prompt = apply_trigger_words_to_prompt(raw_prompt, parse_trigger_words(trigger))
         sampling_config = self._build_runtime_config(params)
         lora_weight = float(params.get("lora_weight") or 1.0)
         filename = cell_image_path(self._output_dir, combo.index).name

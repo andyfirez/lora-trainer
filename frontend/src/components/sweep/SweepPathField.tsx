@@ -4,6 +4,7 @@ import { Plus, X } from "lucide-react";
 import PathInput from "@/components/PathInput";
 import ModeToggle from "@/components/sweep/ModeToggle";
 import { labelClassName } from "@/components/ui/Input";
+import type { PickKind } from "@/lib/api/files";
 import type { SweepMode, SweepParameter } from "@/lib/sweepUtils";
 
 interface SweepPathFieldProps {
@@ -12,6 +13,13 @@ interface SweepPathFieldProps {
   onChange: (param: SweepParameter) => void;
   placeholder?: string;
   pickerTitle?: string;
+  kind?: PickKind;
+}
+
+function normalizePathValue(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text || null;
 }
 
 export default function SweepPathField({
@@ -20,30 +28,31 @@ export default function SweepPathField({
   onChange,
   placeholder = "Path to .safetensors",
   pickerTitle = "Select LoRA",
+  kind = "file",
 }: SweepPathFieldProps) {
   const mode = param.mode ?? "fixed";
 
   function setMode(next: SweepMode) {
     if (next === "vary") {
       const existing = param.values?.length
-        ? param.values.map(String)
-        : param.value != null && String(param.value).trim()
+        ? param.values.map((v) => normalizePathValue(v) ?? "")
+        : normalizePathValue(param.value) != null
           ? [String(param.value)]
           : [""];
       onChange({ mode: "vary", values: existing });
     } else {
-      const first = param.values?.find((v) => String(v).trim()) ?? param.value ?? "";
-      onChange({ mode: "fixed", value: first ? String(first) : null });
+      const first = param.values?.find((v) => normalizePathValue(v) != null) ?? param.value ?? "";
+      onChange({ mode: "fixed", value: normalizePathValue(first) ?? "" });
     }
   }
 
   function updateFixed(value: string) {
-    onChange({ mode: "fixed", value: value || null });
+    onChange({ mode: "fixed", value: value.trim() ? value : "" });
   }
 
   function updateValue(i: number, value: string) {
     const values = [...(param.values ?? [])];
-    values[i] = value;
+    values[i] = value.trim() ? value : "";
     onChange({ mode: "vary", values });
   }
 
@@ -53,10 +62,7 @@ export default function SweepPathField({
 
   function removeValue(i: number) {
     const values = (param.values ?? []).filter((_, idx) => idx !== i);
-    onChange({
-      mode: "vary",
-      values: values.length ? values : [""],
-    });
+    onChange({ mode: "vary", values: values.length ? values : [""] });
   }
 
   return (
@@ -72,7 +78,7 @@ export default function SweepPathField({
           onChange={updateFixed}
           placeholder={placeholder}
           pickerTitle={pickerTitle}
-          kind="file"
+          kind={kind}
         />
       ) : (
         <div className="rounded-lg border border-border/60 bg-bg/40 p-3 space-y-2">
@@ -85,7 +91,7 @@ export default function SweepPathField({
                   onChange={(v) => updateValue(i, v)}
                   placeholder={placeholder}
                   pickerTitle={pickerTitle}
-                  kind="file"
+                  kind={kind}
                 />
               </div>
               <button

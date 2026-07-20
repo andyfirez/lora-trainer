@@ -8,10 +8,12 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 
 CELL_SIZE = 512
-LABEL_HEIGHT = 28
-LABEL_WIDTH = 120
+LABEL_HEIGHT = 44
+LABEL_WIDTH = 160
 PADDING = 8
-TITLE_HEIGHT = 36
+TITLE_HEIGHT = 52
+LABEL_FONT_SIZE = 18
+TITLE_FONT_SIZE = 22
 BG_COLOR = (24, 24, 28)
 TEXT_COLOR = (220, 220, 225)
 BORDER_COLOR = (60, 60, 70)
@@ -26,7 +28,7 @@ def _load_font(size: int = 14) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def _truncate(text: str, max_len: int = 36) -> str:
+def _truncate(text: str, max_len: int = 48) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 3] + "..."
@@ -34,12 +36,29 @@ def _truncate(text: str, max_len: int = 36) -> str:
 
 def _format_label(key: str, value: Any) -> str:
     if value is None:
-        return "—"
+        return "base model" if key == "lora_path" else "—"
     if key == "lora_path" and isinstance(value, str):
+        if value == "base model" or " (" in value:
+            return _truncate(value)
         return _truncate(Path(value).stem)
     if isinstance(value, float):
         return f"{value:g}"
     return _truncate(str(value))
+
+
+def _draw_centered_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    box: tuple[int, int, int, int],
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+) -> None:
+    left, top, right, bottom = box
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    x = left + (right - left - text_width) // 2
+    y = top + (bottom - top - text_height) // 2
+    draw.text((x, y), text, fill=TEXT_COLOR, font=font)
 
 
 def compose_grid(
@@ -59,25 +78,35 @@ def compose_grid(
     height = (TITLE_HEIGHT if title else 0) + LABEL_HEIGHT + PADDING + n_rows * (cell_size + PADDING) + PADDING
     canvas = Image.new("RGB", (width, height), BG_COLOR)
     draw = ImageDraw.Draw(canvas)
-    font = _load_font(13)
-    title_font = _load_font(15)
+    font = _load_font(LABEL_FONT_SIZE)
+    title_font = _load_font(TITLE_FONT_SIZE)
 
     y_offset = PADDING
     if title:
-        draw.text((PADDING, y_offset), title, fill=TEXT_COLOR, font=title_font)
+        _draw_centered_text(draw, title, (PADDING, y_offset, width - PADDING, y_offset + TITLE_HEIGHT), title_font)
         y_offset += TITLE_HEIGHT
 
     header_y = y_offset
     for col, x_val in enumerate(x_values):
         x = LABEL_WIDTH + PADDING + col * (cell_size + PADDING)
         label = _format_label(x_axis, x_val)
-        draw.text((x + 4, header_y), label, fill=TEXT_COLOR, font=font)
+        _draw_centered_text(
+            draw,
+            label,
+            (x, header_y, x + cell_size, header_y + LABEL_HEIGHT),
+            font,
+        )
 
     grid_top = header_y + LABEL_HEIGHT
     for row, y_val in enumerate(y_values):
         y = grid_top + row * (cell_size + PADDING)
         label = _format_label(y_axis, y_val)
-        draw.text((PADDING, y + cell_size // 2 - 8), label, fill=TEXT_COLOR, font=font)
+        _draw_centered_text(
+            draw,
+            label,
+            (PADDING, y, PADDING + LABEL_WIDTH, y + cell_size),
+            font,
+        )
         row_paths = cell_paths[row] if row < len(cell_paths) else []
         for col in range(n_cols):
             x = LABEL_WIDTH + PADDING + col * (cell_size + PADDING)

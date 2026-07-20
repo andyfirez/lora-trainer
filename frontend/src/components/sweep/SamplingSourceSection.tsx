@@ -1,7 +1,7 @@
 "use client";
 
 import PathInput from "@/components/PathInput";
-import SweepPathField from "@/components/sweep/SweepPathField";
+import LoraEntryField from "@/components/sweep/LoraEntryField";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import {
   SWEEP_PARAM_LABELS,
@@ -59,7 +59,7 @@ export default function SamplingSourceSection({ config, onChange }: SamplingSour
         </label>
       </div>
       {sourceType === "manual" ? (
-        <SweepPathField
+        <LoraEntryField
           label={SWEEP_PARAM_LABELS.lora_path}
           param={loraPathParam(config)}
           onChange={updateLoraPathParam}
@@ -88,6 +88,14 @@ export default function SamplingSourceSection({ config, onChange }: SamplingSour
               onChange={(e) => set("include_final_checkpoint", e.target.checked)}
             />
             Include final checkpoint
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              checked={(config.include_base_model_sample as boolean) ?? false}
+              onChange={(e) => set("include_base_model_sample", e.target.checked)}
+            />
+            Include base model (no LoRA) in sweep
           </label>
         </div>
       )}

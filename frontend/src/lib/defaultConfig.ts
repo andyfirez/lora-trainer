@@ -82,6 +82,7 @@ output_dir: output
 source_type: manual
 lora_paths: []
 include_final_checkpoint: true
+include_base_model_sample: false
 
 grid:
   x_axis: null
@@ -93,7 +94,9 @@ parameters:
     value: stabilityai/stable-diffusion-xl-base-1.0
   lora_path:
     mode: fixed
-    value: null
+    value:
+      path: null
+      trigger: ""
   lora_weight:
     mode: fixed
     value: 1.0

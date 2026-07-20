@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import PathInput from "@/components/PathInput";
 import ParamGroup from "@/components/sweep/ParamGroup";
 import SweepField from "@/components/sweep/SweepField";
+import SweepPathField from "@/components/sweep/SweepPathField";
 import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
 import { labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
@@ -58,10 +58,10 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
       <section className={sectionClass}>
         <div className={sectionTitleClass}>Parameters</div>
         <div className="space-y-6">
-          <PathInput
-            label="Base Model (default fixed)"
-            value={String(param(config, "base_model_name").value ?? config.base_model_name ?? "")}
-            onChange={(v) => updateParam("base_model_name", { mode: "fixed", value: v })}
+          <SweepPathField
+            label={SWEEP_PARAM_LABELS.base_model_name}
+            param={param(config, "base_model_name")}
+            onChange={(p) => updateParam("base_model_name", p)}
             placeholder="stabilityai/stable-diffusion-xl-base-1.0"
             pickerTitle="Select Base Model"
             kind="model"

@@ -9,10 +9,13 @@ from pydantic import BaseModel, Field, model_validator
 from src.sampler.sweep.models import (
     SWEEP_PARAM_ORDER,
     GridLayout,
+    LoraEntry,
     SourceType,
     SweepMode,
     SweepParameter,
     SweepParameters,
+    lora_entry_to_param_value,
+    parse_lora_entry,
 )
 from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
 from src.trainer.gpu_config_validation import validate_gpu_config
@@ -55,6 +58,7 @@ class SamplingConfig(BaseModel):
     source_job_id: Optional[int] = None
     lora_paths: list[str] = Field(default_factory=list)
     include_final_checkpoint: bool = True
+    include_base_model_sample: bool = False
     grid: GridLayout = Field(default_factory=GridLayout)
     parameters: SweepParameters = Field(default_factory=SweepParameters)
 
@@ -103,9 +107,30 @@ class SamplingConfig(BaseModel):
         if data.get("lora_paths"):
             paths = data["lora_paths"]
             if isinstance(paths, list) and paths and not migrated.lora_path.effective_values():
+                entries = [lora_entry_to_param_value(parse_lora_entry(path)) for path in paths]
                 migrated = migrated.model_copy(
-                    update={"lora_path": SweepParameter(mode=SweepMode.VARY, values=list(paths))}
+                    update={"lora_path": SweepParameter(mode=SweepMode.VARY, values=entries)}
                 )
+
+        lora_param = migrated.lora_path
+        if lora_param.mode == SweepMode.VARY and lora_param.values:
+            migrated = migrated.model_copy(
+                update={
+                    "lora_path": SweepParameter(
+                        mode=SweepMode.VARY,
+                        values=[lora_entry_to_param_value(parse_lora_entry(v)) for v in lora_param.values],
+                    )
+                }
+            )
+        elif lora_param.value is not None:
+            migrated = migrated.model_copy(
+                update={
+                    "lora_path": SweepParameter(
+                        mode=SweepMode.FIXED,
+                        value=lora_entry_to_param_value(parse_lora_entry(lora_param.value)),
+                    )
+                }
+            )
 
         result = {**data, "parameters": migrated.model_dump(mode="json")}
         result["sample_prompts"] = cls._prompts_from_parameters(migrated)
@@ -207,11 +232,23 @@ class SamplingConfig(BaseModel):
         )
         return base.resolve_sampling(self)
 
+    def with_resolved_lora_sweep(
+        self,
+        entries: list[LoraEntry],
+        file_paths: list[str],
+    ) -> "SamplingConfig":
+        if not entries:
+            return self
+        updated_params = self.parameters.set_resolved_lora_sweep_values(entries)
+        return self.model_copy(update={"parameters": updated_params, "lora_paths": file_paths})
+
     def with_resolved_lora_paths(self, paths: list[str]) -> "SamplingConfig":
         if not paths:
             return self
-        updated_params = self.parameters.set_resolved_lora_paths(paths)
-        return self.model_copy(update={"parameters": updated_params, "lora_paths": paths})
+        return self.with_resolved_lora_sweep(
+            [LoraEntry(path=path, trigger="") for path in paths],
+            paths,
+        )
 
     def sweep_enabled(self) -> bool:
         return len(self.parameters.vary_keys_with_values()) > 0 or len(self.effective_prompts()) > 1

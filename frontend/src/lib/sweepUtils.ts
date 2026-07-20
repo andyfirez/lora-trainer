@@ -1,5 +1,10 @@
 export type SweepMode = "fixed" | "vary";
 
+export interface LoraEntry {
+  path?: string | null;
+  trigger?: string;
+}
+
 export interface SweepParameter {
   mode: SweepMode;
   value?: unknown;
@@ -86,23 +91,104 @@ export function getParameters(config: Record<string, unknown>): SweepParameters 
   if (config.sample_scheduler != null) legacy.scheduler = { mode: "fixed", value: config.sample_scheduler };
   if (Array.isArray(config.lora_paths) && config.lora_paths.length) {
     const paths = config.lora_paths.filter((p) => p != null && String(p).trim());
-    if (paths.length === 1) {
-      legacy.lora_path = { mode: "fixed", value: paths[0] };
-    } else if (paths.length > 1) {
-      legacy.lora_path = { mode: "vary", values: paths };
+    const entries = paths.map((path) => ({ path: String(path), trigger: "" }));
+    if (entries.length === 1) {
+      legacy.lora_path = { mode: "fixed", value: entries[0] };
+    } else if (entries.length > 1) {
+      legacy.lora_path = { mode: "vary", values: entries };
     }
   }
   return legacy;
 }
 
-export function loraPathsFromParameter(param: SweepParameter | undefined): string[] {
-  if (!param) return [];
-  if (param.mode === "vary") {
-    return (param.values ?? []).map(String).filter((p) => p.trim());
+export function emptyLoraEntry(): LoraEntry {
+  return { path: null, trigger: "" };
+}
+
+export function parseLoraEntry(value: unknown): LoraEntry {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const path = record.path;
+    const pathText = path == null ? null : String(path).trim();
+    return {
+      path: pathText || null,
+      trigger: String(record.trigger ?? "").trim(),
+    };
   }
-  const value = param.value;
-  if (value == null || value === "") return [];
-  return [String(value).trim()].filter(Boolean);
+  if (value == null || (typeof value === "string" && !value.trim())) {
+    return emptyLoraEntry();
+  }
+  return { path: String(value).trim(), trigger: "" };
+}
+
+export function normalizeLoraEntry(entry: LoraEntry): LoraEntry {
+  const path = entry.path == null ? null : String(entry.path).trim();
+  return {
+    path: path || null,
+    trigger: String(entry.trigger ?? "").trim(),
+  };
+}
+
+function loraEntryPath(entry: LoraEntry): string | null {
+  const path = entry.path == null ? null : String(entry.path).trim();
+  return path || null;
+}
+
+function dedupeLoraEntries(entries: LoraEntry[]): LoraEntry[] {
+  const result: LoraEntry[] = [];
+  let seenEmpty = false;
+  const seenFiles = new Set<string>();
+  for (const entry of entries) {
+    const path = loraEntryPath(entry);
+    if (path == null) {
+      if (!seenEmpty) {
+        seenEmpty = true;
+        result.push(normalizeLoraEntry(entry));
+      }
+      continue;
+    }
+    if (!seenFiles.has(path)) {
+      seenFiles.add(path);
+      result.push(normalizeLoraEntry(entry));
+    }
+  }
+  return result;
+}
+
+function loraEntriesFromParameter(param: SweepParameter | undefined): LoraEntry[] {
+  if (!param) return [emptyLoraEntry()];
+  if (param.mode === "vary" && param.values?.length) {
+    return dedupeLoraEntries(param.values.map((v) => parseLoraEntry(v)));
+  }
+  if (param.value !== undefined && param.value !== null && param.value !== "") {
+    return dedupeLoraEntries([parseLoraEntry(param.value)]);
+  }
+  return [emptyLoraEntry()];
+}
+
+function effectiveValuesForKey(parameters: SweepParameters, key: SweepParamKey): unknown[] {
+  const param = parameters[key];
+  if (!param) return [];
+  if (param.mode === "vary" && param.values?.length) {
+    if (key === "lora_path") {
+      return loraEntriesFromParameter(param).map((entry) => loraEntryPath(entry));
+    }
+    return param.values;
+  }
+  if (param.value !== undefined && param.value !== null && param.value !== "") {
+    if (key === "lora_path") {
+      return [loraEntryPath(parseLoraEntry(param.value))];
+    }
+    return [param.value];
+  }
+  if (key === "lora_path") return [null];
+  return effectiveValues(param);
+}
+
+export function loraPathsFromParameter(param: SweepParameter | undefined): string[] {
+  return loraEntriesFromParameter(param)
+    .map((entry) => loraEntryPath(entry))
+    .filter((path): path is string => path != null);
 }
 
 export function syncLoraPathsToParameters(config: Record<string, unknown>): Record<string, unknown> {
@@ -124,7 +210,10 @@ export function countCombinations(parameters: SweepParameters): number {
     const prompts = effectiveValues(parameters.prompt);
     return prompts.filter((p) => String(p).trim()).length || 0;
   }
-  return keys.reduce((acc, key) => acc * Math.max(effectiveValues(parameters[key]).length, 1), 1);
+  return keys.reduce(
+    (acc, key) => acc * Math.max(effectiveValuesForKey(parameters, key).length, 1),
+    1,
+  );
 }
 
 export interface GridPlanPreview {

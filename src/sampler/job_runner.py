@@ -22,10 +22,7 @@ from src.trainer.concept_training_metadata import (
     resolve_concept_training_metadata,
 )
 from src.trainer.config import TrainConfig
-from src.trainer.sdxl.caption import (
-    apply_trigger_words_to_sample_prompts,
-    collect_trigger_words,
-)
+from src.trainer.sdxl.caption import collect_trigger_words
 
 logger = logging.getLogger(__name__)
 
@@ -155,9 +152,23 @@ async def run_sampling_job(job_id: int) -> int:
 
         sampling_config = SamplingConfig.from_yaml(config_yaml)
         job_lora_paths = [str(p) for p in (yaml.safe_load(lora_paths_yaml or "[]") or [])]
+        default_trigger: str | None = None
+        source_train_config: TrainConfig | None = None
+        if source_job_id is not None:
+            async with session_factory() as session:
+                repo = JobRepository(session)
+                source_job = await repo.get_by_id(source_job_id)
+                if source_job is not None and source_job.job_type == JobType.TRAINING:
+                    source_train_config = TrainConfig.from_yaml(source_job.config_yaml)
+        if source_train_config is not None:
+            words = collect_trigger_words(source_train_config.concepts)
+            if words:
+                default_trigger = ", ".join(words)
+
         sampling_config, effective_lora_paths = prepare_sampling_config_lora_paths(
             sampling_config,
             job_lora_paths or None,
+            default_trigger=default_trigger,
         )
         if effective_lora_paths and not job_lora_paths:
             run_logger.info(
@@ -167,22 +178,9 @@ async def run_sampling_job(job_id: int) -> int:
         lora_paths = [Path(p) for p in effective_lora_paths]
         train_config = sampling_config.to_train_config()
         train_config.validate_gpu()
-        source_train_config: TrainConfig | None = None
-        if source_job_id is not None:
-            async with session_factory() as session:
-                repo = JobRepository(session)
-                source_job = await repo.get_by_id(source_job_id)
-                if source_job is not None and source_job.job_type == JobType.TRAINING:
-                    source_train_config = TrainConfig.from_yaml(source_job.config_yaml)
         if source_train_config is not None:
             train_config = train_config.model_copy(
-                update={
-                    "clip_skip": source_train_config.clip_skip,
-                    "sample_prompts": apply_trigger_words_to_sample_prompts(
-                        train_config.sample_prompts,
-                        collect_trigger_words(source_train_config.concepts),
-                    ),
-                }
+                update={"clip_skip": source_train_config.clip_skip},
             )
         if output_path is None:
             output_path = str(
