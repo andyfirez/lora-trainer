@@ -7,6 +7,7 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.api.dependencies import _get_config_service, _get_jobs_service
 from src.api.main import app
+from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
@@ -14,11 +15,13 @@ from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import register_all_tables
 from src.db.tables.job_config import ConfigType
 from src.services.configs.service import JobConfigService
+from src.services.datasets.service import DatasetsService
 from src.services.jobs.service import JobsService
+from tests.conftest import _prepare_dataset
 
 
 @pytest.fixture
-async def api_client(minimal_training_yaml: str):
+async def api_client(tmp_path):
     register_all_tables()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
@@ -26,6 +29,17 @@ async def api_client(minimal_training_yaml: str):
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with factory() as db_session:
+        datasets_service = DatasetsService(
+            DatasetRepository(db_session),
+            DatasetImageCropRepository(db_session),
+        )
+        image_dir = tmp_path / "images"
+        image_dir.mkdir()
+        dataset = await _prepare_dataset(datasets_service, image_dir)
+        minimal_training_yaml = f"""base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+concepts:
+  - dataset_id: {dataset.id}
+"""
         config_service = JobConfigService(JobConfigRepository(db_session), DatasetRepository(db_session))
         jobs_service = JobsService(
             JobRepository(db_session),
