@@ -32,7 +32,7 @@ from src.api.exception_handlers import (
     sampling_prompts_not_configured_handler,
     trained_lora_not_found_handler,
 )
-from src.api.routers import configs, datasets, files, jobs, loras, queues
+from src.api.routers import datasets, files, jobs, loras, queues, sampling_configs, trainings
 from src.db.session import run_migrations
 from src.services.configs.exceptions import (
     JobConfigNotFoundError,
@@ -121,7 +121,8 @@ app.add_middleware(
 for exc_type, handler in _EXCEPTION_HANDLERS.items():
     app.add_exception_handler(exc_type, handler)  # type: ignore[arg-type]
 
-app.include_router(configs.router)
+app.include_router(trainings.router)
+app.include_router(sampling_configs.router)
 app.include_router(loras.router)
 app.include_router(jobs.router)
 app.include_router(queues.router)

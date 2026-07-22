@@ -15,7 +15,7 @@ import PathInput from "@/components/PathInput";
 import FieldHint from "@/components/FieldHint";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
-import { configsApi } from "@/lib/api/configs";
+import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
 import { datasetsApi } from "@/lib/api/datasets";
 import { trainHint } from "@/lib/trainParameterMetadata";
 import {
@@ -304,8 +304,8 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
   const concepts: Config[] = config.concepts ?? [];
   const { data: datasets, isLoading: datasetsLoading } = useSWR("/datasets", () => datasetsApi.list());
   const { data: samplingConfigs, isLoading: samplingConfigsLoading } = useSWR(
-    "/configs/sampling",
-    () => configsApi.list("sampling"),
+    "/sampling-configs",
+    () => samplingConfigsApi.list(),
   );
 
   function emit(next: Config) {

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Play, Square, Download, Loader2, Images } from "lucide-react";
 import dynamic from "next/dynamic";
 import { jobsApi } from "@/lib/api/jobs";
-import { configsApi } from "@/lib/api/configs";
+import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
 import { useSourceJobChildren } from "@/hooks/useSourceJobChildren";
 import StatusBadge from "@/components/StatusBadge";
 import TrainingJobPanel from "@/components/TrainingJobPanel";
@@ -104,7 +104,7 @@ export default function JobDetailPage({ params }: Props) {
     setSamplingError(null);
     setSamplingLoading(true);
     try {
-      const samplingJob = await configsApi.createJob(samplingConfigId, {
+      const samplingJob = await samplingConfigsApi.createJob(samplingConfigId, {
         name: `${job.name} sampling`,
         source_job_id: job.id,
         enqueue: true,
@@ -132,8 +132,11 @@ export default function JobDetailPage({ params }: Props) {
             <span className="text-xs text-muted capitalize">{job.job_type}</span>
             {job.pid && <span className="text-xs text-muted">PID {job.pid}</span>}
             {job.config_id != null && (
-              <Link href={`/configs/${job.config_id}`} className="text-xs text-accent hover:underline">
-                Config #{job.config_id}
+              <Link
+                href={job.job_type === "sampling" ? `/sampling/${job.config_id}` : `/trainings/${job.config_id}`}
+                className="text-xs text-accent hover:underline"
+              >
+                {job.job_type === "sampling" ? "Sampling" : "Training"} config #{job.config_id}
               </Link>
             )}
           </div>

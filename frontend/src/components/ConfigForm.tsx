@@ -6,7 +6,8 @@ import dynamic from "next/dynamic";
 import { Save } from "lucide-react";
 import { inputClassName } from "@/components/ui/Input";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
-import { configsApi } from "@/lib/api/configs";
+import { trainingsApi } from "@/lib/api/trainings";
+import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
 import { SamplingConfig, TrainConfig } from "@/lib/defaultConfig";
 import TrainConfigForm from "@/components/TrainConfigForm";
 import SamplingConfigForm from "@/components/SamplingConfigForm";
@@ -81,24 +82,25 @@ export default function ConfigForm({
     setSaving(true);
     setError(null);
     try {
+      const api = configType === "training" ? trainingsApi : samplingConfigsApi;
+      const redirectBase = saveRedirectBase ?? (configType === "training" ? "/trainings" : "/sampling");
       if (configId) {
-        const updated = await configsApi.update(configId, {
+        const updated = await api.update(configId, {
           name,
           config_yaml: yaml,
           description: description || null,
         });
         setYaml(updated.config_yaml);
         onSaved?.();
-        router.push(`${saveRedirectBase ?? "/configs"}/${configId}`);
+        router.push(`${redirectBase}/${configId}`);
         return;
       }
-      const created = await configsApi.create({
+      const created = await api.create({
         name,
-        config_type: configType,
         config_yaml: yaml,
         description: description || null,
       });
-      router.push(`${saveRedirectBase ?? "/configs"}/${created.id}`);
+      router.push(`${redirectBase}/${created.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
