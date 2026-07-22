@@ -51,6 +51,7 @@ export default function TrainingJobPanel({ job, lossGraphRunKey }: TrainingJobPa
           total={training.sampling_total}
           percent={samplingPct ?? 0}
           active={isRunning}
+          elapsedSeconds={job.elapsed_seconds}
           barClassName="bg-sampling"
           showSpinner
           showBar={samplingPct != null}
@@ -71,6 +72,7 @@ export default function TrainingJobPanel({ job, lossGraphRunKey }: TrainingJobPa
           total={job.progress_total}
           percent={trainPct}
           active={isRunning}
+          elapsedSeconds={job.elapsed_seconds}
           headerRight={
             <span className="text-muted">
               {training?.progress_epoch != null && training.progress_epoch > 0 && training.progress_epoch_total != null && (
