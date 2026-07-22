@@ -46,3 +46,8 @@ desktop.ini
 *.swp
 *.swo
 *~
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/

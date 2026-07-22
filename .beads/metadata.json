@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "lora_trainer",
+  "project_id": "3b0696f4-eedf-4db3-ab95-fa5e6ab38122"
+}
