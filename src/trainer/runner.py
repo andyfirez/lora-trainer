@@ -21,7 +21,6 @@ from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
-from src.services.configs.versioning import apply_lora_version_to_train_config
 from src.services.datasets.training_validation import validate_dataset_for_training
 from src.services.worker.progress_loop import (
     run_in_progress_loop,
@@ -222,11 +221,9 @@ async def _run(job_id: int) -> None:
             logger.error("Job id=%d not found in DB", job_id)
             sys.exit(1)
         config_yaml = job.config_yaml
-        config_version = job.config_version
         resume_checkpoint_path = job.resume_checkpoint_path
 
     config = TrainConfig.from_yaml(config_yaml)
-    config = apply_lora_version_to_train_config(config, config_version)
     async with session_factory() as session:
         dataset_repo = DatasetRepository(session)
         crop_repo = DatasetImageCropRepository(session)

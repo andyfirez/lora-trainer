@@ -8,14 +8,15 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
-from src.db.repositories.job_config_version_repo import JobConfigVersionRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
+from src.db.repositories.trained_lora_repo import TrainedLoraRepository
 from src.db.session import session_factory
 from src.services.configs.service import JobConfigService
 from src.services.datasets.service import DatasetsService
 from src.services.files.service import FilesService
 from src.services.jobs.service import JobsService
+from src.services.loras.service import TrainedLoraService
 from src.services.queues.service import QueuesService
 
 
@@ -48,17 +49,15 @@ def _get_dataset_repo(session: SessionDep) -> DatasetRepository:
     return DatasetRepository(session)
 
 
+def _get_trained_lora_repo(session: SessionDep) -> TrainedLoraRepository:
+    return TrainedLoraRepository(session)
+
+
 JobRepoDep = Annotated[JobRepository, Depends(_get_job_repo)]
 QueueRepoDep = Annotated[QueueRepository, Depends(_get_queue_repo)]
-
-
-def _get_version_repo(session: SessionDep) -> JobConfigVersionRepository:
-    return JobConfigVersionRepository(session)
-
-
 ConfigRepoDep = Annotated[JobConfigRepository, Depends(_get_config_repo)]
-VersionRepoDep = Annotated[JobConfigVersionRepository, Depends(_get_version_repo)]
 DatasetRepoDep = Annotated[DatasetRepository, Depends(_get_dataset_repo)]
+TrainedLoraRepoDep = Annotated[TrainedLoraRepository, Depends(_get_trained_lora_repo)]
 
 
 def _get_jobs_service(
@@ -73,9 +72,15 @@ def _get_jobs_service(
 def _get_config_service(
     config_repo: ConfigRepoDep,
     dataset_repo: DatasetRepoDep,
-    version_repo: VersionRepoDep,
 ) -> JobConfigService:
-    return JobConfigService(config_repo, dataset_repo, version_repo)
+    return JobConfigService(config_repo, dataset_repo)
+
+
+def _get_trained_lora_service(
+    lora_repo: TrainedLoraRepoDep,
+    job_repo: JobRepoDep,
+) -> TrainedLoraService:
+    return TrainedLoraService(lora_repo, job_repo)
 
 
 def _get_queues_service(
@@ -102,6 +107,7 @@ def _get_files_service() -> FilesService:
 
 JobsServiceDep = Annotated[JobsService, Depends(_get_jobs_service)]
 JobConfigServiceDep = Annotated[JobConfigService, Depends(_get_config_service)]
+TrainedLoraServiceDep = Annotated[TrainedLoraService, Depends(_get_trained_lora_service)]
 QueuesServiceDep = Annotated[QueuesService, Depends(_get_queues_service)]
 DatasetsServiceDep = Annotated[DatasetsService, Depends(_get_datasets_service)]
 FilesServiceDep = Annotated[FilesService, Depends(_get_files_service)]

@@ -21,7 +21,3 @@ class JobConfig(TimestampMixin, SQLModel, table=True):
     description: Optional[str] = Field(default=None)
     config_type: ConfigType = Field(index=True)
     config_yaml: str = Field(description="YAML-serialized training or sampling config")
-    active_version: Optional[int] = Field(
-        default=None,
-        description="Active version number for training configs; null for sampling",
-    )

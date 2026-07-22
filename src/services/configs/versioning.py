@@ -1,4 +1,4 @@
-"""Helpers for training config version history and lora_name suffixes."""
+"""Helpers for training config normalization."""
 
 import re
 
@@ -12,26 +12,12 @@ def strip_lora_version_suffix(name: str) -> str:
     return _LORA_VERSION_SUFFIX_RE.sub("", name)
 
 
-def versioned_lora_name(lora_name: str, version: int) -> str:
-    return f"{strip_lora_version_suffix(lora_name)}_v{version}"
-
-
 def normalize_training_config_yaml(config_yaml: str) -> str:
     config = TrainConfig.from_yaml(config_yaml)
     base_name = strip_lora_version_suffix(config.lora_name)
     if config.lora_name == base_name:
         return config_yaml
     return config.model_copy(update={"lora_name": base_name}).to_yaml()
-
-
-def apply_lora_version_to_train_config(
-    config: TrainConfig,
-    version: int | None,
-) -> TrainConfig:
-    base_name = strip_lora_version_suffix(config.lora_name)
-    if version is None:
-        return config.model_copy(update={"lora_name": base_name})
-    return config.model_copy(update={"lora_name": versioned_lora_name(base_name, version)})
 
 
 def canonical_yaml(yaml_str: str) -> str:

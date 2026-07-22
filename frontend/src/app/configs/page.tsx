@@ -8,7 +8,6 @@ import { PlusCircle, Loader2, Trash2, Copy } from "lucide-react";
 import { configsApi } from "@/lib/api/configs";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "@/components/ui/Table";
 import Card from "@/components/ui/Card";
 
@@ -68,7 +67,6 @@ export default function ConfigsPage() {
           <TableHead>
             <tr>
               <TableHeader>Name</TableHeader>
-              <TableHeader>Version</TableHeader>
               <TableHeader>Description</TableHeader>
               <TableHeader>Updated</TableHeader>
               <TableHeader className="text-right">Actions</TableHeader>
@@ -81,9 +79,6 @@ export default function ConfigsPage() {
                   <Link href={`/configs/${config.id}`} className="text-text hover:text-accent font-medium">
                     {config.name}
                   </Link>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="accent">v{config.active_version ?? 1}</Badge>
                 </TableCell>
                 <TableCell className="text-muted max-w-xs truncate">{config.description || "—"}</TableCell>
                 <TableCell className="text-muted">{new Date(config.updated_at).toLocaleDateString()}</TableCell>

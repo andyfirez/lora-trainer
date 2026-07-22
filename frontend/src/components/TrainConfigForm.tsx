@@ -473,7 +473,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           paramKey="lora_name"
         />
         <p className="text-xs text-muted -mt-2">
-          Version suffix <code className="text-muted">_vN</code> is added to output files automatically when training starts.
+          Each training run gets a unique output folder name automatically.
         </p>
         <SelectInput
           label="Output Format"

@@ -8,7 +8,6 @@ import yaml
 from src.api.schemas.job_loss import JobLossResponse
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
-from src.db.repositories.job_config_version_repo import JobConfigVersionRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.tables.job import Job, JobStatus, JobType
@@ -20,7 +19,6 @@ from src.services.configs.exceptions import (
     JobConfigValidationError,
 )
 from src.services.configs.service import JobConfigService
-from src.services.configs.versioning import apply_lora_version_to_train_config
 from src.services.datasets.training_validation import validate_dataset_for_training
 from src.services.jobs.exceptions import (
     JobAlreadyQueuedError,
@@ -32,6 +30,7 @@ from src.services.jobs.exceptions import (
 )
 from src.services.jobs.handlers import get_job_handler
 from src.services.jobs.loss_log_reader import read_loss_log
+from src.services.jobs.samples import list_samples_for_output_dir
 from src.services.jobs.sampling_jobs import (
     find_intermediate_checkpoints,
     prepare_sampling_config_lora_paths,
@@ -40,6 +39,7 @@ from src.services.jobs.sampling_jobs import (
     validate_lora_paths,
     validate_sample_prompts,
 )
+from src.services.loras.paths import assign_unique_training_job_yaml
 from src.services.sampling.exceptions import SamplingCheckpointsNotFoundError
 from src.tagger.config import TaggingConfig, TaggingMode
 from src.trainer.config import TrainConfig
@@ -62,7 +62,6 @@ class JobsService:
         self._config_service = JobConfigService(
             config_repo,
             dataset_repo,
-            JobConfigVersionRepository(config_repo._session),
         )
 
     async def list_jobs(self, *, job_type: JobType | None = None) -> Sequence[Job]:
@@ -109,51 +108,55 @@ class JobsService:
                 job_type=JobType.TRAINING,
                 name=job_name,
                 config_id=config.id,
-                config_version=config.active_version,
                 config_yaml=config.config_yaml,
             )
-        else:
-            sampling_config = SamplingConfig.from_yaml(config.config_yaml)
-            job_lora_paths = (
-                lora_paths
-                if lora_paths is not None
-                else await resolve_sampling_lora_paths(
+            job = await self._job_repo.add(job)
+            if job.id is not None:
+                job.config_yaml = assign_unique_training_job_yaml(job.config_yaml, job.id)
+                self._job_repo._session.add(job)
+                await self._job_repo._session.flush()
+                await self._job_repo._session.refresh(job)
+            return job
+        sampling_config = SamplingConfig.from_yaml(config.config_yaml)
+        job_lora_paths = (
+            lora_paths
+            if lora_paths is not None
+            else await resolve_sampling_lora_paths(
+                self._job_repo,
+                source_job_id,
+                runtime_train_config=self._runtime_train_config,
+            )
+        )
+        sampling_config, paths = prepare_sampling_config_lora_paths(
+            sampling_config,
+            job_lora_paths or None,
+        )
+        if paths:
+            validate_lora_paths(paths)
+        validate_sample_prompts(sampling_config)
+        job = Job(
+            job_type=JobType.SAMPLING,
+            name=job_name,
+            config_id=config.id,
+            config_yaml=config.config_yaml,
+            lora_paths_yaml=yaml.safe_dump(paths, allow_unicode=True, sort_keys=False),
+            source_job_id=source_job_id,
+        )
+        job = await self._job_repo.add(job)
+        sampling_config = SamplingConfig.from_yaml(job.config_yaml)
+        await self._job_repo.update_output_path(
+            job,
+            str(
+                await resolve_sampling_output_dir(
                     self._job_repo,
+                    sampling_config,
+                    job.id,
                     source_job_id,
                     runtime_train_config=self._runtime_train_config,
                 )
-            )
-            sampling_config, paths = prepare_sampling_config_lora_paths(
-                sampling_config,
-                job_lora_paths or None,
-            )
-            if paths:
-                validate_lora_paths(paths)
-            validate_sample_prompts(sampling_config)
-            job = Job(
-                job_type=JobType.SAMPLING,
-                name=job_name,
-                config_id=config.id,
-                config_yaml=config.config_yaml,
-                lora_paths_yaml=yaml.safe_dump(paths, allow_unicode=True, sort_keys=False),
-                source_job_id=source_job_id,
-            )
-            job = await self._job_repo.add(job)
-            sampling_config = SamplingConfig.from_yaml(job.config_yaml)
-            await self._job_repo.update_output_path(
-                job,
-                str(
-                    await resolve_sampling_output_dir(
-                        self._job_repo,
-                        sampling_config,
-                        job.id,
-                        source_job_id,
-                        runtime_train_config=self._runtime_train_config,
-                    )
-                ),
-            )
-            return job
-        return await self._job_repo.add(job)
+            ),
+        )
+        return job
 
     async def create_tagging_job(
         self,
@@ -333,26 +336,7 @@ class JobsService:
         """Return (path, kind, metadata) tuples for sample files."""
         if not job.output_path:
             return []
-        output_dir = Path(job.output_path)
-        if not output_dir.exists():
-            return []
-
-        from src.sampler.sweep.manifest import read_manifest
-
-        manifest = read_manifest(output_dir)
-        if manifest is not None:
-            results: list[tuple[Path, str, dict]] = []
-            for grid in manifest.grids:
-                path = output_dir / grid.file
-                if path.is_file():
-                    results.append((path, "grid", {"title": grid.title, "index": grid.index}))
-            for image in manifest.images:
-                path = output_dir / image.file
-                if path.is_file():
-                    results.append((path, "cell", {"params": image.params, "index": image.index}))
-            return results
-
-        return [(path, "legacy", {}) for path in sorted(output_dir.glob("*.png"))]
+        return list_samples_for_output_dir(Path(job.output_path))
 
     def get_sweep_manifest(self, job: Job):
         if not job.output_path:
@@ -380,5 +364,4 @@ class JobsService:
         )
 
     def _runtime_train_config(self, job: Job) -> TrainConfig:
-        config = TrainConfig.from_yaml(job.config_yaml)
-        return apply_lora_version_to_train_config(config, job.config_version)
+        return TrainConfig.from_yaml(job.config_yaml)

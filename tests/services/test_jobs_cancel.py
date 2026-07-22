@@ -13,6 +13,7 @@ from src.db.session import register_all_tables
 from src.db.tables.job import Job, JobStatus, JobType
 from src.services.jobs.exceptions import JobNotCancellableError
 from src.services.jobs.service import JobsService
+from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger
 from src.trainer.sdxl.checkpoint_state import save_resume_state
 from src.trainer.training_log import JobTrainingLogger
@@ -105,9 +106,18 @@ async def test_resume_job_queues_with_resume_state(
     tmp_path,
 ) -> None:
     output_dir = tmp_path / "output"
-    work_dir = output_dir / "test_lora_v1"
+    config_yaml = f"""
+output_dir: {output_dir.as_posix()}
+lora_name: test_lora
+base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+concepts:
+  - dataset_id: {training_dataset.id}
+"""
+    job = await create_training_job(config_yaml=config_yaml)
+    train_config = TrainConfig.from_yaml(job.config_yaml)
+    work_dir = output_dir / train_config.lora_name
     work_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = work_dir / "test_lora_v1_epoch3.safetensors"
+    checkpoint_path = work_dir / f"{train_config.lora_name}_epoch3.safetensors"
     checkpoint_path.write_bytes(b"checkpoint")
     save_resume_state(
         checkpoint_path=checkpoint_path,
@@ -118,14 +128,6 @@ async def test_resume_job_queues_with_resume_state(
         global_step=123,
         epoch_step=0,
     )
-    config_yaml = f"""
-output_dir: {output_dir.as_posix()}
-lora_name: test_lora
-base_model_name: stabilityai/stable-diffusion-xl-base-1.0
-concepts:
-  - dataset_id: {training_dataset.id}
-"""
-    job = await create_training_job(config_yaml=config_yaml)
     await jobs_service._job_repo.update_status(job, JobStatus.FAILED, error_message="boom")
 
     await jobs_service.resume_job(job.id)
@@ -183,7 +185,8 @@ concepts:
   - dataset_id: {training_dataset.id}
 """
     job = await create_training_job(config_yaml=config_yaml)
-    loss_log = output_dir / "test_lora_v1" / "loss_log.db"
+    train_config = TrainConfig.from_yaml(job.config_yaml)
+    loss_log = output_dir / train_config.lora_name / "loss_log.db"
     logger = MetricLogger(loss_log)
     logger.log({"loss/loss": 0.9})
     logger.commit(step=10)

@@ -31,10 +31,6 @@ class Job(TimestampMixin, SQLModel, table=True):
     name: str = Field(index=True)
     status: JobStatus = Field(default=JobStatus.PENDING, index=True)
     config_id: Optional[int] = Field(default=None, foreign_key="job_configs.id", index=True)
-    config_version: Optional[int] = Field(
-        default=None,
-        description="Training config version used when the job was created",
-    )
     config_yaml: str = Field(description="YAML-serialized job config")
     output_path: Optional[str] = Field(default=None)
     log_path: Optional[str] = Field(default=None)

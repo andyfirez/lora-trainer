@@ -23,10 +23,10 @@ async def test_create_training_job_from_config(
     assert job.job_type == JobType.TRAINING
     assert job.name == "my training run"
     assert job.config_id == config.id
-    assert job.config_version == 1
-    assert TrainConfig.from_yaml(job.config_yaml).lora_name == "lora"
+    runtime = TrainConfig.from_yaml(job.config_yaml)
+    assert runtime.lora_name.endswith(f"_j{job.id}")
     assert "_v1" not in job.config_yaml
-    assert job.config_yaml == config.config_yaml
+    assert "base_model_name:" in job.config_yaml
     assert job.output_path is None
 
 
@@ -60,7 +60,7 @@ sample_prompts:
 
 
 @pytest.mark.asyncio
-async def test_create_job_from_config_uses_active_version_and_versioned_lora_name(
+async def test_create_job_from_config_assigns_unique_lora_name(
     jobs_service: JobsService,
     config_service: JobConfigService,
     minimal_training_yaml: str,
@@ -75,16 +75,10 @@ async def test_create_job_from_config_uses_active_version_and_versioned_lora_nam
 concepts:
   - dataset_id: {training_dataset.id}
 """
-    config = await config_service.update_config(config.id, config_yaml=updated_yaml)
+    await config_service.update_config(config.id, config_yaml=updated_yaml)
 
     job = await jobs_service.create_from_config(config.id, name="versioned run")
 
-    assert config.active_version == 2
-    assert job.config_version == 2
-    assert TrainConfig.from_yaml(job.config_yaml).lora_name == "lora"
-    assert "_v2" not in job.config_yaml
-
-    from src.services.configs.versioning import apply_lora_version_to_train_config
-
-    runtime = apply_lora_version_to_train_config(TrainConfig.from_yaml(job.config_yaml), job.config_version)
-    assert runtime.lora_name == "lora_v2"
+    runtime = TrainConfig.from_yaml(job.config_yaml)
+    assert runtime.lora_name.endswith(f"_j{job.id}")
+    assert runtime.base_model_name == "changed"

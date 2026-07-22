@@ -12,8 +12,6 @@ from src.api.schemas.configs import (
     JobConfigCreate,
     JobConfigResponse,
     JobConfigUpdate,
-    JobConfigVersionResponse,
-    JobConfigVersionSummary,
 )
 from src.api.schemas.jobs import JobResponse
 from src.db.tables.job_config import ConfigType
@@ -97,34 +95,3 @@ async def create_job_from_config(
         await jobs_service.enqueue_job(job.id)
         job = await jobs_service.get_job(job.id)
     return to_job_response(job, jobs_service)
-
-
-@router.get("/{config_id}/versions", response_model=list[JobConfigVersionSummary])
-async def list_config_versions(
-    config_id: int,
-    service: JobConfigServiceDep,
-) -> list[JobConfigVersionSummary]:
-    summaries = await service.list_versions(config_id)
-    return [
-        JobConfigVersionSummary(
-            version=summary.version,
-            created_at=summary.created_at,
-            lora_name=summary.lora_name,
-        )
-        for summary in summaries
-    ]
-
-
-@router.get("/{config_id}/versions/{version}", response_model=JobConfigVersionResponse)
-async def get_config_version(
-    config_id: int,
-    version: int,
-    service: JobConfigServiceDep,
-) -> JobConfigVersionResponse:
-    entry = await service.get_version(config_id, version)
-    return JobConfigVersionResponse(
-        config_id=entry.config_id,
-        version=entry.version,
-        config_yaml=entry.config_yaml,
-        created_at=entry.created_at,
-    )

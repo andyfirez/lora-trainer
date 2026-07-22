@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 from src.services.configs.exceptions import (
     JobConfigNotFoundError,
     JobConfigValidationError,
-    JobConfigVersionNotFoundError,
 )
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
@@ -27,7 +26,7 @@ from src.services.jobs.exceptions import (
     JobNotResumableError,
     JobOperationNotSupportedError,
 )
-from src.services.queues.exceptions import QueueEntryNotFoundError
+from src.services.loras.exceptions import TrainedLoraNotFoundError
 from src.services.sampling.exceptions import (
     SamplingCheckpointsNotFoundError,
     SamplingLoRAPathNotFoundError,
@@ -74,10 +73,7 @@ async def job_config_validation_handler(request: Request, exc: JobConfigValidati
     return JSONResponse(status_code=422, content={"detail": exc.message})
 
 
-async def job_config_version_not_found_handler(
-    request: Request,
-    exc: JobConfigVersionNotFoundError,
-) -> JSONResponse:
+async def trained_lora_not_found_handler(request: Request, exc: TrainedLoraNotFoundError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 

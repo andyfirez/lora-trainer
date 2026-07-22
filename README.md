@@ -13,7 +13,7 @@ Train SDXL LoRAs on your own GPU with a web UI for dataset management, configura
 - **WD14 auto-tagging** — ONNX GPU tagger writes `.txt` captions
 - **Sampling** — mid-training previews and standalone sampling jobs with LoRA weights
 - **Job queue** — SQLite-backed queue with resume, cancel, and checkpointing
-- **Config versioning** — training configs keep version history
+- **Trained LoRA catalog** — immutable records for completed training runs
 
 ## Architecture
 

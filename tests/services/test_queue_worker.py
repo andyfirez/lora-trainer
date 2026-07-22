@@ -359,9 +359,6 @@ async def test_finalize_job_queues_sampling_when_runner_already_completed(
     tmp_path: Path,
 ) -> None:
     output_dir = tmp_path / "output"
-    work_dir = output_dir / "demo_v1"
-    work_dir.mkdir(parents=True)
-    (work_dir / "demo_v1_epoch1.safetensors").write_bytes(b"epoch")
 
     sampling_config = await config_service.create_config(
         name="post-train sampling",
@@ -383,6 +380,12 @@ concepts:
 """,
     )
     training_job = await jobs_service.create_from_config(training_config.id)
+    from src.trainer.config import TrainConfig
+
+    train_config = TrainConfig.from_yaml(training_job.config_yaml)
+    work_dir = output_dir / train_config.lora_name
+    work_dir.mkdir(parents=True)
+    (work_dir / f"{train_config.lora_name}_epoch1.safetensors").write_bytes(b"epoch")
     await jobs_service._job_repo.update_status(training_job, JobStatus.COMPLETED)
     await session.commit()
 

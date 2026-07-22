@@ -40,7 +40,6 @@ export interface Job {
   name: string;
   status: JobStatus;
   config_id: number | null;
-  config_version: number | null;
   config_yaml: string;
   output_path: string | null;
   log_path: string | null;
@@ -62,22 +61,21 @@ export interface JobConfig {
   config_type: ConfigType;
   config_yaml: string;
   description: string | null;
-  active_version: number | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface JobConfigVersionSummary {
-  version: number;
-  created_at: string;
-  lora_name: string | null;
-}
-
-export interface JobConfigVersion {
-  config_id: number;
-  version: number;
+export interface TrainedLora {
+  id: number;
+  name: string;
+  job_id: number;
+  config_id: number | null;
   config_yaml: string;
+  base_model_name: string;
+  weights_path: string;
+  work_dir: string;
   created_at: string;
+  updated_at: string;
 }
 
 export interface QueueEntry {

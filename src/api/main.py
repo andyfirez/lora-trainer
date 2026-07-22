@@ -22,7 +22,6 @@ from src.api.exception_handlers import (
     job_checkpoint_not_found_handler,
     job_config_not_found_handler,
     job_config_validation_handler,
-    job_config_version_not_found_handler,
     job_not_cancellable_handler,
     job_not_found_handler,
     job_not_resumable_handler,
@@ -31,13 +30,13 @@ from src.api.exception_handlers import (
     sampling_checkpoints_not_found_handler,
     sampling_lora_path_not_found_handler,
     sampling_prompts_not_configured_handler,
+    trained_lora_not_found_handler,
 )
-from src.api.routers import configs, datasets, files, jobs, queues
+from src.api.routers import configs, datasets, files, jobs, loras, queues
 from src.db.session import run_migrations
 from src.services.configs.exceptions import (
     JobConfigNotFoundError,
     JobConfigValidationError,
-    JobConfigVersionNotFoundError,
 )
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
@@ -58,6 +57,7 @@ from src.services.jobs.exceptions import (
     JobNotResumableError,
     JobOperationNotSupportedError,
 )
+from src.services.loras.exceptions import TrainedLoraNotFoundError
 from src.services.queues.exceptions import QueueEntryNotFoundError
 from src.services.sampling.exceptions import (
     SamplingCheckpointsNotFoundError,
@@ -80,7 +80,7 @@ _EXCEPTION_HANDLERS: dict[type[Exception], object] = {
     QueueEntryNotFoundError: queue_entry_not_found_handler,
     JobConfigNotFoundError: job_config_not_found_handler,
     JobConfigValidationError: job_config_validation_handler,
-    JobConfigVersionNotFoundError: job_config_version_not_found_handler,
+    TrainedLoraNotFoundError: trained_lora_not_found_handler,
     SamplingLoRAPathNotFoundError: sampling_lora_path_not_found_handler,
     SamplingCheckpointsNotFoundError: sampling_checkpoints_not_found_handler,
     SamplingPromptsNotConfiguredError: sampling_prompts_not_configured_handler,
@@ -122,6 +122,7 @@ for exc_type, handler in _EXCEPTION_HANDLERS.items():
     app.add_exception_handler(exc_type, handler)  # type: ignore[arg-type]
 
 app.include_router(configs.router)
+app.include_router(loras.router)
 app.include_router(jobs.router)
 app.include_router(queues.router)
 app.include_router(datasets.router)

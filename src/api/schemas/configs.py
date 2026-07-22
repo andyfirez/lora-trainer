@@ -32,24 +32,10 @@ class JobConfigResponse(BaseModel):
     config_type: ConfigType
     config_yaml: str
     description: Optional[str]
-    active_version: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
-
-
-class JobConfigVersionSummary(BaseModel):
-    version: int
-    created_at: datetime
-    lora_name: Optional[str] = None
-
-
-class JobConfigVersionResponse(BaseModel):
-    config_id: int
-    version: int
-    config_yaml: str
-    created_at: datetime
 
 
 class CreateJobFromConfigRequest(BaseModel):

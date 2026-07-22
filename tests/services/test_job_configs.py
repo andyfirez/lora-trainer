@@ -366,17 +366,12 @@ async def test_create_training_config_stores_base_lora_name(
         config_yaml=minimal_training_yaml,
     )
 
-    assert created.active_version == 1
     assert TrainConfig.from_yaml(created.config_yaml).lora_name == "lora"
     assert "_v1" not in created.config_yaml
-    versions = await config_service.list_versions(created.id)  # type: ignore[arg-type]
-    assert len(versions) == 1
-    assert versions[0].version == 1
-    assert versions[0].lora_name == "lora"
 
 
 @pytest.mark.asyncio
-async def test_update_training_config_yaml_creates_new_version(
+async def test_update_training_config_yaml_overwrites_draft(
     config_service: JobConfigService,
     minimal_training_yaml: str,
     training_dataset,
@@ -393,18 +388,13 @@ concepts:
 
     updated = await config_service.update_config(created.id, config_yaml=updated_yaml)
 
-    assert updated.active_version == 2
     assert "base_model_name: changed" in updated.config_yaml
     assert TrainConfig.from_yaml(updated.config_yaml).lora_name == "lora"
     assert "_v2" not in updated.config_yaml
-    versions = await config_service.list_versions(created.id)
-    assert len(versions) == 2
-    assert versions[0].lora_name == "lora"
-    assert versions[1].lora_name == "lora"
 
 
 @pytest.mark.asyncio
-async def test_update_training_config_same_yaml_no_new_version(
+async def test_update_training_config_same_yaml_no_op(
     config_service: JobConfigService,
     minimal_training_yaml: str,
 ) -> None:
@@ -416,13 +406,11 @@ async def test_update_training_config_same_yaml_no_new_version(
 
     updated = await config_service.update_config(created.id, config_yaml=created.config_yaml)
 
-    assert updated.active_version == 1
-    versions = await config_service.list_versions(created.id)  # type: ignore[arg-type]
-    assert len(versions) == 1
+    assert updated.config_yaml == created.config_yaml
 
 
 @pytest.mark.asyncio
-async def test_update_training_config_metadata_only_no_new_version(
+async def test_update_training_config_metadata_only(
     config_service: JobConfigService,
     minimal_training_yaml: str,
 ) -> None:
@@ -436,35 +424,7 @@ async def test_update_training_config_metadata_only_no_new_version(
 
     assert updated.name == "renamed"
     assert updated.description == "notes"
-    assert updated.active_version == 1
-    versions = await config_service.list_versions(created.id)  # type: ignore[arg-type]
-    assert len(versions) == 1
-
-
-@pytest.mark.asyncio
-async def test_training_config_versions_preserved_after_update(
-    config_service: JobConfigService,
-    minimal_training_yaml: str,
-    training_dataset,
-) -> None:
-    created = await config_service.create_config(
-        name="train",
-        config_type=ConfigType.TRAINING,
-        config_yaml=minimal_training_yaml,
-    )
-    await config_service.update_config(
-        created.id,
-        config_yaml=f"""base_model_name: v2
-concepts:
-  - dataset_id: {training_dataset.id}
-""",
-    )
-
-    version_one = await config_service.get_version(created.id, 1)
-
-    assert TrainConfig.from_yaml(version_one.config_yaml).lora_name == "lora"
-    assert "_v1" not in version_one.config_yaml
-    assert "base_model_name: stabilityai/stable-diffusion-xl-base-1.0" in version_one.config_yaml
+    assert updated.config_yaml == created.config_yaml
 
 
 @pytest.mark.asyncio
@@ -482,14 +442,11 @@ async def test_sampling_config_update_still_in_place(
         config_yaml="sample_prompts:\n  - updated prompt\n",
     )
 
-    assert updated.active_version is None
     assert "updated prompt" in updated.config_yaml
-    with pytest.raises(JobConfigValidationError, match="only available for training"):
-        await config_service.list_versions(created.id)  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
-async def test_clone_training_config_resets_versioning(
+async def test_clone_training_config_copies_yaml(
     config_service: JobConfigService,
     minimal_training_yaml: str,
     training_dataset,
@@ -509,36 +466,7 @@ concepts:
 
     cloned = await config_service.clone_config(created.id, name="clone")
 
-    assert cloned.active_version == 1
     assert TrainConfig.from_yaml(cloned.config_yaml).lora_name == "lora"
     assert "_v1" not in cloned.config_yaml
+    assert "base_model_name: changed" in cloned.config_yaml
     assert cloned.id != created.id
-    clone_versions = await config_service.list_versions(cloned.id)  # type: ignore[arg-type]
-    assert len(clone_versions) == 1
-
-
-@pytest.mark.asyncio
-async def test_ensure_training_versioning_backfills_missing_active_version(
-    config_service: JobConfigService,
-    session: AsyncSession,
-    minimal_training_yaml: str,
-) -> None:
-    from src.db.tables.job_config import JobConfig
-
-    legacy = JobConfig(
-        name="legacy",
-        config_type=ConfigType.TRAINING,
-        config_yaml=minimal_training_yaml,
-        active_version=None,
-    )
-    session.add(legacy)
-    await session.commit()
-    await session.refresh(legacy)
-
-    fetched = await config_service.get_config(legacy.id)  # type: ignore[arg-type]
-
-    assert fetched.active_version == 1
-    assert TrainConfig.from_yaml(fetched.config_yaml).lora_name == "lora"
-    assert "_v1" not in fetched.config_yaml
-    versions = await config_service.list_versions(legacy.id)  # type: ignore[arg-type]
-    assert len(versions) == 1

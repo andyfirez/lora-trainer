@@ -49,10 +49,11 @@ async def test_create_from_config_train_linked_resolves_lora_paths(
         source_job_id=training_job.id,
     )
 
+    train_config = TrainConfig.from_yaml(training_job.config_yaml)
     assert sampling_job.job_type == JobType.SAMPLING
     assert sampling_job.source_job_id == training_job.id
     assert jobs_service.get_lora_paths(sampling_job) == [str(lora_path)]
-    assert sampling_job.output_path == str(Path("output") / "lora_v1" / "samples")
+    assert sampling_job.output_path == str(Path(train_config.output_dir) / train_config.lora_name / "samples")
 
 
 @pytest.mark.asyncio
@@ -118,13 +119,6 @@ async def test_create_from_config_train_linked_auto_resolves_checkpoints(
     tmp_path,
 ) -> None:
     output_dir = tmp_path / "output"
-    work_dir = output_dir / "demo_v1"
-    work_dir.mkdir(parents=True)
-    epoch_path = work_dir / "demo_v1_epoch1.safetensors"
-    step_path = work_dir / "demo_v1_step10.safetensors"
-    epoch_path.write_bytes(b"epoch")
-    step_path.write_bytes(b"step")
-
     training_config = await config_service.create_config(
         name="training",
         config_type=ConfigType.TRAINING,
@@ -137,6 +131,13 @@ concepts:
 """,
     )
     training_job = await jobs_service.create_from_config(training_config.id)
+    train_config = TrainConfig.from_yaml(training_job.config_yaml)
+    work_dir = output_dir / train_config.lora_name
+    work_dir.mkdir(parents=True)
+    epoch_path = work_dir / f"{train_config.lora_name}_epoch1.safetensors"
+    step_path = work_dir / f"{train_config.lora_name}_step10.safetensors"
+    epoch_path.write_bytes(b"epoch")
+    step_path.write_bytes(b"step")
 
     sampling_config = await config_service.create_config(
         name="sampling",
@@ -150,7 +151,7 @@ concepts:
     )
 
     assert jobs_service.get_lora_paths(sampling_job) == [str(epoch_path), str(step_path)]
-    assert sampling_job.output_path == str(output_dir / "demo_v1" / "samples")
+    assert sampling_job.output_path == str(work_dir / "samples")
 
 
 @pytest.mark.asyncio
@@ -229,14 +230,6 @@ async def test_auto_sampling_enqueues_intermediate_checkpoints(
     tmp_path,
 ) -> None:
     output_dir = tmp_path / "output"
-    work_dir = output_dir / "demo_v1"
-    work_dir.mkdir(parents=True)
-    epoch_path = work_dir / "demo_v1_epoch1.safetensors"
-    step_path = work_dir / "demo_v1_step10.safetensors"
-    final_path = work_dir / "demo.safetensors"
-    epoch_path.write_bytes(b"epoch")
-    step_path.write_bytes(b"step")
-    final_path.write_bytes(b"final")
 
     sampling_config = await config_service.create_config(
         name="post-train sampling",
@@ -263,6 +256,15 @@ concepts:
         config_yaml=config_yaml,
     )
     training_job = await jobs_service.create_from_config(training_config.id)
+    train_config = TrainConfig.from_yaml(training_job.config_yaml)
+    work_dir = output_dir / train_config.lora_name
+    work_dir.mkdir(parents=True)
+    epoch_path = work_dir / f"{train_config.lora_name}_epoch1.safetensors"
+    step_path = work_dir / f"{train_config.lora_name}_step10.safetensors"
+    final_path = work_dir / f"{train_config.lora_name}.safetensors"
+    epoch_path.write_bytes(b"epoch")
+    step_path.write_bytes(b"step")
+    final_path.write_bytes(b"final")
     await jobs_service._job_repo.update_status(training_job, JobStatus.COMPLETED)
     await session.commit()
 
@@ -271,7 +273,7 @@ concepts:
     assert sampling_job is not None
     assert sampling_job.status == JobStatus.QUEUED
     assert jobs_service.get_lora_paths(sampling_job) == [str(epoch_path), str(step_path)]
-    assert sampling_job.output_path == str(output_dir / "demo_v1" / "samples")
+    assert sampling_job.output_path == str(work_dir / "samples")
     queue_entry = await jobs_service._queue_repo.get_by_job_id(sampling_job.id)
     assert queue_entry is not None
     assert queue_entry.job_id == sampling_job.id

@@ -93,7 +93,6 @@ class JobResponse(BaseModel):
     name: str
     status: JobStatus
     config_id: Optional[int]
-    config_version: Optional[int] = None
     config_yaml: str
     output_path: Optional[str]
     log_path: Optional[str]

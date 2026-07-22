@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import psutil
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
+from src.db.repositories.trained_lora_repo import TrainedLoraRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import session_factory
@@ -15,6 +16,7 @@ from src.db.tables.job import JobStatus, JobType
 from src.db.tables.queue_entry import QueueEntry
 from src.services.jobs.handlers import get_job_handler
 from src.services.jobs.service import JobsService
+from src.services.loras.service import TrainedLoraService
 from src.services.sampling.exceptions import SamplingCheckpointsNotFoundError
 from src.settings.app_settings import settings
 
@@ -200,6 +202,19 @@ class QueueWorker:
                 and final_status == JobStatus.COMPLETED
                 and job.job_type == JobType.TRAINING
             ):
+                job = await job_repo.get_by_id(job_id)
+                if job is not None:
+                    lora_service = TrainedLoraService(
+                        TrainedLoraRepository(session),
+                        job_repo,
+                    )
+                    trained_lora = await lora_service.create_from_completed_job(job)
+                    if trained_lora is not None:
+                        logger.info(
+                            "Registered trained LoRA id=%d for job id=%d",
+                            trained_lora.id,
+                            job_id,
+                        )
                 jobs_service = JobsService(
                     job_repo,
                     queue_repo,

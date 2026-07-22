@@ -77,8 +77,8 @@ def test_run_migrations_applies_initial_schema(tmp_path, monkeypatch) -> None:
         "alembic_version",
         "datasets",
         "dataset_image_crops",
-        "job_config_versions",
         "job_configs",
         "jobs",
         "queue_entries",
+        "trained_loras",
     }

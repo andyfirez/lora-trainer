@@ -9,9 +9,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
-from src.db.repositories.job_config_version_repo import JobConfigVersionRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
+from src.db.repositories.trained_lora_repo import TrainedLoraRepository
 from src.db.session import register_all_tables
 from src.db.tables.dataset import Dataset
 from src.db.tables.job import Job
@@ -19,6 +19,7 @@ from src.db.tables.job_config import ConfigType
 from src.services.configs.service import JobConfigService
 from src.services.datasets.service import DatasetsService
 from src.services.jobs.service import JobsService
+from src.services.loras.service import TrainedLoraService
 
 
 def _write_square_image(path, size: int = 1024) -> None:
@@ -71,7 +72,14 @@ async def config_service(session: AsyncSession) -> JobConfigService:
     return JobConfigService(
         JobConfigRepository(session),
         DatasetRepository(session),
-        JobConfigVersionRepository(session),
+    )
+
+
+@pytest_asyncio.fixture
+async def trained_lora_service(session: AsyncSession) -> TrainedLoraService:
+    return TrainedLoraService(
+        TrainedLoraRepository(session),
+        JobRepository(session),
     )
 
 

@@ -1,23 +1,19 @@
 """Business logic for saved job configs."""
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
+
 from typing import Sequence
 
 import yaml
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_config_repo import JobConfigRepository
-from src.db.repositories.job_config_version_repo import JobConfigVersionRepository
 from src.db.tables.job_config import ConfigType, JobConfig
-from src.db.tables.job_config_version import JobConfigVersion
 from src.sampler.config import SamplingConfig
 from src.services.configs.exceptions import (
     JobConfigNotFoundError,
     JobConfigValidationError,
-    JobConfigVersionNotFoundError,
 )
 from src.services.configs.versioning import (
-    extract_lora_name,
     normalize_training_config_yaml,
     yaml_configs_equal,
 )
@@ -30,36 +26,27 @@ from src.trainer.config import (
 )
 
 
-@dataclass(frozen=True)
-class JobConfigVersionSummary:
-    version: int
-    created_at: datetime
-    lora_name: str | None
-
-
 class JobConfigService:
     def __init__(
         self,
         config_repo: JobConfigRepository,
         dataset_repo: DatasetRepository,
-        version_repo: JobConfigVersionRepository,
     ) -> None:
         self._config_repo = config_repo
         self._dataset_repo = dataset_repo
-        self._version_repo = version_repo
 
     async def list_configs(self, *, config_type: ConfigType | None = None) -> Sequence[JobConfig]:
         if config_type is not None:
-            configs = await self._config_repo.get_by_type(config_type)
-        else:
-            configs = await self._config_repo.get_all()
-        return [await self._ensure_training_versioning(config) for config in configs]
+            return await self._config_repo.get_by_type(config_type)
+        return await self._config_repo.get_all()
 
     async def get_config(self, config_id: int) -> JobConfig:
         config = await self._config_repo.get_by_id(config_id)
         if config is None:
             raise JobConfigNotFoundError(config_id)
-        return await self._ensure_training_versioning(config)
+        if config.config_type == ConfigType.TRAINING:
+            return await self._normalize_training_config_record(config)
+        return config
 
     async def create_config(
         self,
@@ -70,28 +57,15 @@ class JobConfigService:
         description: str | None = None,
     ) -> JobConfig:
         await self._validate_config_yaml(config_type, config_yaml)
-        if config_type == ConfigType.TRAINING:
-            stored_yaml = normalize_training_config_yaml(config_yaml)
-            job_config = JobConfig(
-                name=name,
-                config_type=config_type,
-                config_yaml=stored_yaml,
-                description=description,
-                active_version=1,
-            )
-            job_config = await self._config_repo.add(job_config)
-            await self._version_repo.add(
-                JobConfigVersion(
-                    config_id=job_config.id,  # type: ignore[arg-type]
-                    version=1,
-                    config_yaml=stored_yaml,
-                )
-            )
-            return job_config
+        stored_yaml = (
+            normalize_training_config_yaml(config_yaml)
+            if config_type == ConfigType.TRAINING
+            else config_yaml
+        )
         job_config = JobConfig(
             name=name,
             config_type=config_type,
-            config_yaml=config_yaml,
+            config_yaml=stored_yaml,
             description=description,
         )
         return await self._config_repo.add(job_config)
@@ -133,76 +107,12 @@ class JobConfigService:
         description: str | None = None,
     ) -> JobConfig:
         source = await self.get_config(config_id)
-        if source.config_type == ConfigType.TRAINING:
-            return await self.create_config(
-                name=name or f"{source.name} (copy)",
-                config_type=source.config_type,
-                config_yaml=source.config_yaml,
-                description=description if description is not None else source.description,
-            )
         return await self.create_config(
             name=name or f"{source.name} (copy)",
             config_type=source.config_type,
             config_yaml=source.config_yaml,
             description=description if description is not None else source.description,
         )
-
-    async def list_versions(self, config_id: int) -> list[JobConfigVersionSummary]:
-        config = await self.get_config(config_id)
-        if config.config_type != ConfigType.TRAINING:
-            raise JobConfigValidationError("Version history is only available for training configs")
-        versions = await self._version_repo.get_by_config_id(config_id)
-        return [
-            JobConfigVersionSummary(
-                version=entry.version,
-                created_at=entry.created_at,
-                lora_name=extract_lora_name(entry.config_yaml),
-            )
-            for entry in versions
-        ]
-
-    async def get_version(self, config_id: int, version: int) -> JobConfigVersion:
-        config = await self.get_config(config_id)
-        if config.config_type != ConfigType.TRAINING:
-            raise JobConfigValidationError("Version history is only available for training configs")
-        entry = await self._version_repo.get_by_config_and_version(config_id, version)
-        if entry is None:
-            raise JobConfigVersionNotFoundError(config_id, version)
-        normalized_yaml = normalize_training_config_yaml(entry.config_yaml)
-        if normalized_yaml != entry.config_yaml:
-            entry.config_yaml = normalized_yaml
-            self._version_repo._session.add(entry)
-            await self._version_repo._session.flush()
-            await self._version_repo._session.refresh(entry)
-        return entry
-
-    async def _ensure_training_versioning(self, config: JobConfig) -> JobConfig:
-        if config.config_type != ConfigType.TRAINING or config.id is None:
-            return config
-        versions = await self._version_repo.get_by_config_id(config.id)
-        if versions and config.active_version is not None:
-            active_entry = await self._version_repo.get_by_config_and_version(
-                config.id,
-                config.active_version,
-            )
-            if active_entry is not None:
-                return await self._normalize_training_config_record(config)
-        if versions:
-            latest = max(versions, key=lambda entry: entry.version)
-            config.active_version = latest.version
-            config.config_yaml = latest.config_yaml
-        else:
-            stored_yaml = normalize_training_config_yaml(config.config_yaml)
-            await self._version_repo.add(
-                JobConfigVersion(
-                    config_id=config.id,
-                    version=1,
-                    config_yaml=stored_yaml,
-                )
-            )
-            config.active_version = 1
-            config.config_yaml = stored_yaml
-        return await self._normalize_training_config_record(config)
 
     async def _normalize_training_config_record(self, config: JobConfig) -> JobConfig:
         normalized_yaml = normalize_training_config_yaml(config.config_yaml)
@@ -219,18 +129,7 @@ class JobConfigService:
         await self._validate_config_yaml(ConfigType.TRAINING, config_yaml)
         if yaml_configs_equal(config_yaml, config.config_yaml):
             return
-        current_version = config.active_version or 1
-        new_version = current_version + 1
-        stored_yaml = normalize_training_config_yaml(config_yaml)
-        await self._version_repo.add(
-            JobConfigVersion(
-                config_id=config.id,  # type: ignore[arg-type]
-                version=new_version,
-                config_yaml=stored_yaml,
-            )
-        )
-        config.active_version = new_version
-        config.config_yaml = stored_yaml
+        config.config_yaml = normalize_training_config_yaml(config_yaml)
 
     async def _validate_config_yaml(self, config_type: ConfigType, config_yaml: str) -> None:
         try:

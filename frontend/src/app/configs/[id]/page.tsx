@@ -7,9 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Play, Loader2, Copy } from "lucide-react";
 import { configsApi } from "@/lib/api/configs";
 import ConfigForm from "@/components/ConfigForm";
-import ConfigVersionHistory from "@/components/ConfigVersionHistory";
 import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
 import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Checkbox from "@/components/ui/Checkbox";
@@ -90,12 +88,7 @@ export default function ConfigDetailPage({ params }: Props) {
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-2xl font-bold text-text font-display">{config.name}</h1>
-            {config.config_type === "training" && (
-              <Badge variant="accent">v{config.active_version ?? 1}</Badge>
-            )}
-          </div>
+          <h1 className="text-2xl font-bold text-text font-display">{config.name}</h1>
           <p className="text-muted mt-1 capitalize">{config.config_type} config</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -112,7 +105,7 @@ export default function ConfigDetailPage({ params }: Props) {
       </div>
 
       <ConfigForm
-        key={config.active_version ?? config.updated_at}
+        key={config.updated_at}
         configType={config.config_type}
         configId={configId}
         initialName={config.name}
@@ -121,15 +114,11 @@ export default function ConfigDetailPage({ params }: Props) {
         onSaved={handleSaved}
       />
 
-      {config.config_type === "training" && (
-        <ConfigVersionHistory configId={configId} activeVersion={config.active_version} />
-      )}
-
       <Modal
         open={showRunModal}
         onClose={() => setShowRunModal(false)}
         title="Run Job"
-        description={`Create a new job from version ${config.active_version ?? 1} and optionally add it to the queue.`}
+        description="Create a new training job from the current config and optionally add it to the queue."
       >
         {runError && <ModalError>{runError}</ModalError>}
         <Input
