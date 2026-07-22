@@ -1,0 +1,15 @@
+#!/bin/bash
+# @cursor-managed
+# Appends the invoking user as co-author on commits made by the agent.
+
+CO_AUTHOR='andyfirez <andyfirez@users.noreply.github.com>'
+
+if grep -q "Co-authored-by:" "$1"; then
+    exit 0
+fi
+
+echo "" >> "$1"
+echo "" >> "$1"
+echo "Co-authored-by: $CO_AUTHOR" >> "$1"
+
+exit 0
