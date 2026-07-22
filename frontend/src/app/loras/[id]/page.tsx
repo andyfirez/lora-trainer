@@ -108,7 +108,7 @@ export default function LoraDetailPage({ params }: Props) {
         {lora.config_id != null && (
           <div>
             <span className="text-muted">Source config:</span>{" "}
-            <Link href={`/configs/${lora.config_id}`} className="text-accent hover:underline">
+            <Link href={`/trainings/${lora.config_id}`} className="text-accent hover:underline">
               #{lora.config_id}
             </Link>
           </div>
