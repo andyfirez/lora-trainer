@@ -5,7 +5,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Play, Loader2, Copy } from "lucide-react";
-import { configsApi } from "@/lib/api/configs";
+import { trainingsApi } from "@/lib/api/trainings";
 import ConfigForm from "@/components/ConfigForm";
 import Button from "@/components/ui/Button";
 import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
@@ -16,11 +16,11 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-export default function ConfigDetailPage({ params }: Props) {
+export default function TrainingDetailPage({ params }: Props) {
   const { id: idParam } = use(params);
   const configId = Number(idParam);
   const router = useRouter();
-  const { data: config, isLoading, mutate } = useSWR(`/configs/${configId}`, () => configsApi.get(configId));
+  const { data: config, isLoading, mutate } = useSWR(`/trainings/${configId}`, () => trainingsApi.get(configId));
 
   const [showRunModal, setShowRunModal] = useState(false);
   const [jobName, setJobName] = useState("");
@@ -39,8 +39,8 @@ export default function ConfigDetailPage({ params }: Props) {
   const handleClone = async () => {
     setCloning(true);
     try {
-      const cloned = await configsApi.clone(configId);
-      router.push(`/configs/${cloned.id}`);
+      const cloned = await trainingsApi.clone(configId);
+      router.push(`/trainings/${cloned.id}`);
     } finally {
       setCloning(false);
     }
@@ -54,8 +54,7 @@ export default function ConfigDetailPage({ params }: Props) {
     setSubmitting(true);
     setRunError(null);
     try {
-      const body: Parameters<typeof configsApi.createJob>[1] = { name: jobName.trim(), enqueue };
-      const job = await configsApi.createJob(configId, body);
+      const job = await trainingsApi.createJob(configId, { name: jobName.trim(), enqueue });
       setShowRunModal(false);
       router.push(`/jobs/${job.id}`);
     } catch (err: unknown) {
@@ -78,39 +77,42 @@ export default function ConfigDetailPage({ params }: Props) {
   }
 
   if (!config) {
-    return <div className="text-error py-20">Config not found</div>;
+    return <div className="text-error py-20">Training config not found</div>;
   }
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <Link href="/configs" className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-text" aria-label="Back to configs">
+        <Link
+          href="/trainings"
+          className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-text"
+          aria-label="Back to trainings"
+        >
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-text font-display">{config.name}</h1>
-          <p className="text-muted mt-1 capitalize">{config.config_type} config</p>
+          <p className="text-muted mt-1">Training config</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="secondary" onClick={() => void handleClone()} disabled={cloning}>
             {cloning ? <Loader2 className="animate-spin" size={14} /> : <Copy size={14} />}
             {cloning ? "Duplicating…" : "Duplicate"}
           </Button>
-          {config.config_type === "training" && (
-            <Button variant="success" onClick={openRunModal}>
-              <Play size={14} /> Run Job
-            </Button>
-          )}
+          <Button variant="success" onClick={openRunModal}>
+            <Play size={14} /> Run Job
+          </Button>
         </div>
       </div>
 
       <ConfigForm
         key={config.updated_at}
-        configType={config.config_type}
+        configType="training"
         configId={configId}
         initialName={config.name}
         initialDescription={config.description ?? ""}
         initialYaml={config.config_yaml}
+        saveRedirectBase="/trainings"
         onSaved={handleSaved}
       />
 
@@ -121,16 +123,8 @@ export default function ConfigDetailPage({ params }: Props) {
         description="Create a new training job from the current config and optionally add it to the queue."
       >
         {runError && <ModalError>{runError}</ModalError>}
-        <Input
-          label="Job Name"
-          value={jobName}
-          onChange={(e) => setJobName(e.target.value)}
-        />
-        <Checkbox
-          label="Enqueue immediately"
-          checked={enqueue}
-          onChange={(e) => setEnqueue(e.target.checked)}
-        />
+        <Input label="Job Name" value={jobName} onChange={(e) => setJobName(e.target.value)} />
+        <Checkbox label="Enqueue immediately" checked={enqueue} onChange={(e) => setEnqueue(e.target.checked)} />
         <ModalFooter>
           <Button variant="secondary" onClick={() => setShowRunModal(false)}>
             Cancel

@@ -15,6 +15,18 @@ class JobConfigCreate(BaseModel):
     description: Optional[str] = None
 
 
+class TrainingConfigCreate(BaseModel):
+    name: str
+    config_yaml: str
+    description: Optional[str] = None
+
+
+class SamplingConfigCreate(BaseModel):
+    name: str
+    config_yaml: str
+    description: Optional[str] = None
+
+
 class JobConfigUpdate(BaseModel):
     name: Optional[str] = None
     config_yaml: Optional[str] = None

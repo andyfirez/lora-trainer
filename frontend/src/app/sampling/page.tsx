@@ -5,7 +5,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PlusCircle, Loader2, Trash2, Copy } from "lucide-react";
-import { configsApi } from "@/lib/api/configs";
+import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "@/components/ui/Table";
@@ -14,20 +14,20 @@ import Card from "@/components/ui/Card";
 export default function SamplingPage() {
   const router = useRouter();
   const [cloningId, setCloningId] = useState<number | null>(null);
-  const { data: configs, isLoading, mutate } = useSWR("/configs/sampling", () => configsApi.list("sampling"), {
+  const { data: configs, isLoading, mutate } = useSWR("/sampling-configs", () => samplingConfigsApi.list(), {
     refreshInterval: 10000,
   });
 
   const handleDelete = async (id: number, name: string) => {
     if (!confirm(`Delete config "${name}"?`)) return;
-    await configsApi.delete(id);
+    await samplingConfigsApi.delete(id);
     mutate();
   };
 
   const handleClone = async (id: number) => {
     setCloningId(id);
     try {
-      const cloned = await configsApi.clone(id);
+      const cloned = await samplingConfigsApi.clone(id);
       await mutate();
       router.push(`/sampling/${cloned.id}`);
     } finally {
