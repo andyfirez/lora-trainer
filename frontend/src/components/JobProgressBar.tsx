@@ -10,6 +10,7 @@ interface Props {
   total: number | null;
   percent: number;
   active: boolean;
+  elapsedSeconds?: number | null;
   barClassName?: string;
   titleExtra?: ReactNode;
   headerRight?: ReactNode;
@@ -24,6 +25,7 @@ export default function JobProgressBar({
   total,
   percent,
   active,
+  elapsedSeconds = null,
   barClassName = "bg-accent",
   titleExtra,
   headerRight,
@@ -49,7 +51,12 @@ export default function JobProgressBar({
           />
         </div>
       )}
-      <ProgressTimingInfo step={step} total={total} active={active} />
+      <ProgressTimingInfo
+        step={step}
+        total={total}
+        active={active}
+        elapsedSeconds={elapsedSeconds}
+      />
       {footer}
     </div>
   );

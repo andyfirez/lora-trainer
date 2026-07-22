@@ -48,8 +48,20 @@ class JobRepository(BaseRepository[Job]):
         pid: Optional[int] = None,
         error_message: Optional[str] = None,
     ) -> Job:
+        old_status = job.status
+        now = datetime.now(timezone.utc)
+        if old_status == JobStatus.RUNNING and status != JobStatus.RUNNING:
+            if job.running_started_at is not None:
+                started_at = job.running_started_at
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
+                job.accumulated_elapsed_seconds += (now - started_at).total_seconds()
+                job.running_started_at = None
+        elif old_status != JobStatus.RUNNING and status == JobStatus.RUNNING:
+            job.running_started_at = now
+
         job.status = status
-        job.updated_at = datetime.now(timezone.utc)
+        job.updated_at = now
         if pid is not None:
             job.pid = pid
         if error_message is not None:
@@ -197,6 +209,8 @@ class JobRepository(BaseRepository[Job]):
     async def clear_runtime_state(self, job: Job) -> Job:
         job.pid = None
         job.error_message = None
+        job.running_started_at = None
+        job.accumulated_elapsed_seconds = 0.0
         if job.job_type == JobType.TRAINING:
             job.progress_step = None
             job.progress_total = None
