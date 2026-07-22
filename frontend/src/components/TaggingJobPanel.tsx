@@ -35,6 +35,7 @@ export default function TaggingJobPanel({ job }: TaggingJobPanelProps) {
           total={job.progress_total}
           percent={percent ?? (job.status === "completed" ? 100 : 0)}
           active={isRunning}
+          elapsedSeconds={job.elapsed_seconds}
           barClassName="bg-accent"
           showSpinner={isRunning}
           showBar={percent != null || job.status === "completed"}

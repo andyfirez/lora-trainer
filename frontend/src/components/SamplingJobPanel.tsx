@@ -65,6 +65,7 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
           total={job.progress_total}
           percent={percent ?? 0}
           active={isRunning}
+          elapsedSeconds={job.elapsed_seconds}
           barClassName="bg-sampling"
           showSpinner={isRunning}
           showBar={percent != null}
