@@ -138,7 +138,7 @@ Single product: **LoRA Trainer** — FastAPI backend (with an embedded queue wor
 
 ### Running (see README for exact commands)
 - Backend: `uv run uvicorn src.api.main:app --reload --host 127.0.0.1 --port 8000` (runs Alembic migrations + starts the embedded worker on startup). Frontend: `cd frontend && npm run dev` (port 3000, proxies `/api/*` to the backend).
-- API routers are mounted at root (`/datasets`, `/configs`, `/jobs`, ...), NOT under `/api`. The `/api` prefix only exists via the frontend's Next.js rewrite. Collection endpoints require a trailing slash (e.g. `/datasets/`); without it FastAPI returns a 307 redirect.
+- API routers are mounted at root (`/datasets`, `/trainings`, `/sampling-configs`, `/jobs`, ...), NOT under `/api`. The `/api` prefix only exists via the frontend's Next.js rewrite. Collection endpoints require a trailing slash (e.g. `/datasets/`); without it FastAPI returns a 307 redirect.
 - Gotcha: `--reload` watches the whole repo root, and the app writes runtime files there (`lora_trainer.db`, `logs/`, and any dataset dirs placed under `/workspace`), which triggers reload churn. Keep dataset directories outside the repo, or run without `--reload`, for long/heavy operations.
 
 ### Lint / test

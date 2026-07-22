@@ -5,31 +5,31 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PlusCircle, Loader2, Trash2, Copy } from "lucide-react";
-import { configsApi } from "@/lib/api/configs";
+import { trainingsApi } from "@/lib/api/trainings";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "@/components/ui/Table";
 import Card from "@/components/ui/Card";
 
-export default function ConfigsPage() {
+export default function TrainingsPage() {
   const router = useRouter();
   const [cloningId, setCloningId] = useState<number | null>(null);
-  const { data: configs, isLoading, mutate } = useSWR("/configs/training", () => configsApi.list("training"), {
+  const { data: configs, isLoading, mutate } = useSWR("/trainings", () => trainingsApi.list(), {
     refreshInterval: 10000,
   });
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Delete config "${name}"?`)) return;
-    await configsApi.delete(id);
+    if (!confirm(`Delete training config "${name}"?`)) return;
+    await trainingsApi.delete(id);
     mutate();
   };
 
   const handleClone = async (id: number) => {
     setCloningId(id);
     try {
-      const cloned = await configsApi.clone(id);
+      const cloned = await trainingsApi.clone(id);
       await mutate();
-      router.push(`/configs/${cloned.id}`);
+      router.push(`/trainings/${cloned.id}`);
     } finally {
       setCloningId(null);
     }
@@ -38,27 +38,27 @@ export default function ConfigsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Configs"
+        title="Trainings"
         description="Reusable SDXL LoRA training configurations"
         actions={
           <Link
-            href="/configs/new"
+            href="/trainings/new"
             className="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           >
             <PlusCircle size={15} />
-            New Config
+            New training config
           </Link>
         }
       />
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20 text-muted">
-          <Loader2 className="animate-spin mr-2" size={18} /> Loading configs…
+          <Loader2 className="animate-spin mr-2" size={18} /> Loading training configs…
         </div>
       ) : !configs?.length ? (
         <Card className="text-center py-20 text-muted">
           No training configs yet.{" "}
-          <Link href="/configs/new" className="text-accent hover:underline">
+          <Link href="/trainings/new" className="text-accent hover:underline">
             Create one
           </Link>
         </Card>
@@ -76,7 +76,7 @@ export default function ConfigsPage() {
             {configs.map((config) => (
               <TableRow key={config.id}>
                 <TableCell>
-                  <Link href={`/configs/${config.id}`} className="text-text hover:text-accent font-medium">
+                  <Link href={`/trainings/${config.id}`} className="text-text hover:text-accent font-medium">
                     {config.name}
                   </Link>
                 </TableCell>
@@ -90,7 +90,7 @@ export default function ConfigsPage() {
                       onClick={() => void handleClone(config.id)}
                       disabled={cloningId === config.id}
                       title="Duplicate"
-                      aria-label="Duplicate config"
+                      aria-label="Duplicate training config"
                     >
                       {cloningId === config.id ? (
                         <Loader2 size={14} className="animate-spin" />
@@ -103,7 +103,7 @@ export default function ConfigsPage() {
                       size="icon"
                       onClick={() => void handleDelete(config.id, config.name)}
                       title="Delete"
-                      aria-label="Delete config"
+                      aria-label="Delete training config"
                       className="text-error hover:text-error"
                     >
                       <Trash2 size={14} />

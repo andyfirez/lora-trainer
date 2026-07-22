@@ -6,7 +6,8 @@ import dynamic from "next/dynamic";
 import { Save } from "lucide-react";
 import { inputClassName } from "@/components/ui/Input";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
-import { configsApi } from "@/lib/api/configs";
+import { trainingsApi } from "@/lib/api/trainings";
+import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
 import { SamplingConfig, TrainConfig } from "@/lib/defaultConfig";
 import TrainConfigForm from "@/components/TrainConfigForm";
 import SamplingConfigForm from "@/components/SamplingConfigForm";
@@ -82,23 +83,30 @@ export default function ConfigForm({
     setError(null);
     try {
       if (configId) {
-        const updated = await configsApi.update(configId, {
+        const updateBody = {
           name,
           config_yaml: yaml,
           description: description || null,
-        });
+        };
+        const updated =
+          configType === "training"
+            ? await trainingsApi.update(configId, updateBody)
+            : await samplingConfigsApi.update(configId, updateBody);
         setYaml(updated.config_yaml);
         onSaved?.();
-        router.push(`${saveRedirectBase ?? "/configs"}/${configId}`);
+        router.push(`${saveRedirectBase ?? (configType === "training" ? "/trainings" : "/sampling")}/${configId}`);
         return;
       }
-      const created = await configsApi.create({
+      const createBody = {
         name,
-        config_type: configType,
         config_yaml: yaml,
         description: description || null,
-      });
-      router.push(`${saveRedirectBase ?? "/configs"}/${created.id}`);
+      };
+      const created =
+        configType === "training"
+          ? await trainingsApi.create(createBody)
+          : await samplingConfigsApi.create(createBody);
+      router.push(`${saveRedirectBase ?? (configType === "training" ? "/trainings" : "/sampling")}/${created.id}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {

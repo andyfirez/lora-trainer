@@ -83,8 +83,8 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
     return (
       <div className="text-center py-20 text-muted rounded-xl border border-border">
         No jobs yet.{" "}
-        <Link href="/configs" className="text-accent hover:underline">
-          Create a config and run a job
+        <Link href="/trainings" className="text-accent hover:underline">
+          Create a training config and run a job
         </Link>
       </div>
     );

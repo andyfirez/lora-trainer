@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
   ListOrdered,
   Database,
   FileCog,
@@ -19,11 +18,10 @@ import {
 import { cn } from "@/lib/cn";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/configs", label: "Configs", icon: FileCog },
+  { href: "/jobs", label: "Jobs", icon: ListOrdered },
+  { href: "/trainings", label: "Trainings", icon: FileCog },
   { href: "/loras", label: "LoRAs", icon: Sparkles },
   { href: "/sampling", label: "Sampling", icon: ImageIcon },
-  { href: "/jobs", label: "Jobs", icon: ListOrdered },
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/parameters", label: "Parameters", icon: BookOpen },
 ];
@@ -55,7 +53,7 @@ export default function Sidebar() {
   const navContent = (compact: boolean) => (
     <nav className="flex-1 px-2 py-4 space-y-1">
       {NAV.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+        const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
             key={href}

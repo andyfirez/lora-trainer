@@ -126,7 +126,7 @@ Override the config file path with the `APP_CONFIG_FILE` environment variable.
 
 ### Training config (YAML)
 
-Training hyperparameters are defined in YAML and managed through the `/configs` UI. The schema lives in `src/trainer/config.py` (`TrainConfig`). Key fields include:
+Training hyperparameters are defined in YAML and managed through the `/trainings` UI. The schema lives in `src/trainer/config.py` (`TrainConfig`). Key fields include:
 
 - **Model** — `base_model_name`, `output_dir`, `lora_name`
 - **LoRA** — `lora_rank`, `lora_alpha`, `lora_dropout`

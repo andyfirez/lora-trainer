@@ -5,7 +5,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Play, Loader2, Copy } from "lucide-react";
-import { configsApi } from "@/lib/api/configs";
+import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
 import ConfigForm from "@/components/ConfigForm";
 import Button from "@/components/ui/Button";
 import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
@@ -20,7 +20,7 @@ export default function SamplingDetailPage({ params }: Props) {
   const { id: idParam } = use(params);
   const configId = Number(idParam);
   const router = useRouter();
-  const { data: config, isLoading, mutate } = useSWR(`/configs/${configId}`, () => configsApi.get(configId));
+  const { data: config, isLoading, mutate } = useSWR(`/sampling-configs/${configId}`, () => samplingConfigsApi.get(configId));
 
   const [showRunModal, setShowRunModal] = useState(false);
   const [jobName, setJobName] = useState("");
@@ -39,7 +39,7 @@ export default function SamplingDetailPage({ params }: Props) {
   const handleClone = async () => {
     setCloning(true);
     try {
-      const cloned = await configsApi.clone(configId);
+      const cloned = await samplingConfigsApi.clone(configId);
       router.push(`/sampling/${cloned.id}`);
     } finally {
       setCloning(false);
@@ -54,7 +54,7 @@ export default function SamplingDetailPage({ params }: Props) {
     setSubmitting(true);
     setRunError(null);
     try {
-      const job = await configsApi.createJob(configId, { name: jobName.trim(), enqueue });
+      const job = await samplingConfigsApi.createJob(configId, { name: jobName.trim(), enqueue });
       setShowRunModal(false);
       router.push(`/jobs/${job.id}`);
     } catch (err: unknown) {
@@ -73,7 +73,7 @@ export default function SamplingDetailPage({ params }: Props) {
   }
 
   if (!config) {
-    return <div className="text-error py-20">Config not found</div>;
+    return <div className="text-error py-20">Sampling config not found</div>;
   }
 
   return (
