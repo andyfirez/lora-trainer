@@ -15,6 +15,7 @@ from src.db.tables.job import Job, JobStatus, JobType
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import SDXLLoRASampler
+from src.services.datasets.service import reconcile_datasets_for_training
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
 from src.services.jobs.sampling_jobs import prepare_sampling_config_lora_paths
 from src.trainer.concept_training_metadata import (
@@ -194,6 +195,7 @@ async def run_sampling_job(job_id: int) -> int:
             async with session_factory() as session:
                 dataset_repo = DatasetRepository(session)
                 crop_repo = DatasetImageCropRepository(session)
+                await reconcile_datasets_for_training(dataset_ids, dataset_repo, crop_repo)
                 concept_metadata = await resolve_concept_training_metadata(
                     dataset_ids,
                     dataset_repo,
