@@ -39,6 +39,17 @@ async def api_client(tmp_path):
             DatasetRepository(db_session), DatasetImageCropRepository(db_session)
         )
         dataset = await datasets_service.create_dataset(name="cats", image_dir=str(image_dir))
+        dataset = await datasets_service.update_dataset(
+            dataset.id,
+            name=None,
+            image_dir=None,
+            caption_dir=None,
+            description=None,
+            target_resolution=1024,
+            update_target_resolution=True,
+        )
+        await datasets_service.save_crop(dataset, "cat.png", 0.5, 0.5)
+        await datasets_service.bake_image(dataset, "cat.png")
         await db_session.commit()
 
         training_yaml = f"""base_model_name: stabilityai/stable-diffusion-xl-base-1.0
