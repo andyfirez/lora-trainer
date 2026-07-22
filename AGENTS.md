@@ -126,3 +126,21 @@ bd prime                # Refresh Beads context
 
 **Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
 <!-- END BEADS CODEX SETUP -->
+
+## Cursor Cloud specific instructions
+
+Single product: **LoRA Trainer** — FastAPI backend (with an embedded queue worker) + Next.js frontend + a file-based SQLite DB. Standard commands live in `README.md`; only non-obvious caveats are captured here.
+
+### Environment
+- Python deps use `uv` (managed Python 3.14, pinned by `.python-version`); frontend uses `npm`. The update script runs `uv sync` and `npm install --prefix frontend`.
+- `config.toml` is optional — settings fall back to defaults matching `config.example.toml`. Copy `config.example.toml` to `config.toml` only to customize host/port/db/worker.
+- No NVIDIA GPU is available in this VM. Real training/sampling/tagging jobs (PyTorch CUDA + `onnxruntime-gpu`) cannot execute here, but everything else works on CPU: API, DB/migrations, worker, full UI, dataset CRUD/preprocess, config CRUD, and the entire `pytest` suite.
+
+### Running (see README for exact commands)
+- Backend: `uv run uvicorn src.api.main:app --reload --host 127.0.0.1 --port 8000` (runs Alembic migrations + starts the embedded worker on startup). Frontend: `cd frontend && npm run dev` (port 3000, proxies `/api/*` to the backend).
+- API routers are mounted at root (`/datasets`, `/configs`, `/jobs`, ...), NOT under `/api`. The `/api` prefix only exists via the frontend's Next.js rewrite. Collection endpoints require a trailing slash (e.g. `/datasets/`); without it FastAPI returns a 307 redirect.
+- Gotcha: `--reload` watches the whole repo root, and the app writes runtime files there (`lora_trainer.db`, `logs/`, and any dataset dirs placed under `/workspace`), which triggers reload churn. Keep dataset directories outside the repo, or run without `--reload`, for long/heavy operations.
+
+### Lint / test
+- Backend lint: `uv run ruff check src` (the repo currently has pre-existing import-ordering findings — not an env issue). Tests: `uv run pytest` (CPU-only is fine).
+- Frontend: `npm run test:unit` validates parameter metadata. `npm run lint` (`next lint`) is interactive because no ESLint config is committed — avoid it in automation.
