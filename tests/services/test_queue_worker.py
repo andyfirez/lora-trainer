@@ -76,9 +76,7 @@ async def _session_with_job(job_id: int, job_type: JobType = JobType.TRAINING):
 @pytest.mark.asyncio
 async def test_queue_worker_start_stop() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
-    with patch.object(worker, "_is_any_job_running", AsyncMock(return_value=False)), patch.object(
-        worker, "_get_next_queued_entry", AsyncMock(return_value=None)
-    ):
+    with patch.object(worker, "_get_next_queued_entry", AsyncMock(return_value=None)):
         await worker.start()
         await asyncio.sleep(0.05)
         await worker.stop()
@@ -183,9 +181,11 @@ async def test_finalize_job_does_not_dequeue(
 @pytest.mark.asyncio
 async def test_poll_loop_skips_active_job() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
-    worker._active_jobs[42] = MagicMock()
+    active = MagicMock()
+    active.is_running.return_value = True
+    worker._active_jobs[42] = active
 
-    with patch.object(worker, "_is_any_job_running", AsyncMock(return_value=False)), patch.object(
+    with patch.object(
         worker, "_get_next_queued_entry", AsyncMock(
             return_value=QueueEntry(id=1, job_id=42, position=1)
         )
