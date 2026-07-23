@@ -34,6 +34,7 @@ from src.trainer.concept_training_metadata import resolve_concept_training_metad
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 from src.trainer.sampling_resolution import resolve_sampling_config
+from src.trainer.sdxl.checkpoint_state import delete_all_resume_states
 from src.trainer.sdxl.trainer import (
     SDXLLoRATrainer,
     TrainingCancelledAfterSave,
@@ -332,6 +333,7 @@ async def _run(job_id: int) -> None:
             concept_metadata=concept_metadata,
         )
         trainer.train()
+        delete_all_resume_states(Path(config.output_dir) / config.lora_name)
         await _update_status(job_id, JobStatus.COMPLETED)
         training_logger.logger.info("Job id=%d completed successfully", job_id)
     except TrainingCancelledAfterSave:
