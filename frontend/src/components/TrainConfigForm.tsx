@@ -1110,16 +1110,11 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                   />
                   {samplingEnabled && selectedSamplingPreview && (
                     <p className="text-xs text-muted">
-                      {selectedSamplingPreview.promptCount} image(s) per checkpoint,{" "}
+                      After training: {selectedSamplingPreview.promptCount} image(s) per checkpoint,{" "}
                       {selectedSamplingPreview.steps} steps, {selectedSamplingPreview.scheduler} scheduler
                       {selectedSamplingPreview.summary !== "all fixed"
                         ? ` · vary: ${selectedSamplingPreview.summary}`
                         : ""}
-                    </p>
-                  )}
-                  {samplingEnabled && selectedSamplingPreview?.hasVaryingExceptPrompt && (
-                    <p className="text-xs text-amber-400/90">
-                      Mid-training sampling uses the first value of varying parameters (except prompts).
                     </p>
                   )}
                   {samplingEnabled && config.sampling_config_id != null && !selectedSamplingConfig && (

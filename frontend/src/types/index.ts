@@ -10,9 +10,6 @@ export interface TrainingJobDetails {
   progress_epoch_total: number | null;
   cache_progress_step: number | null;
   cache_progress_total: number | null;
-  sampling_status: string | null;
-  sampling_step: number | null;
-  sampling_total: number | null;
   last_checkpoint_path: string | null;
   last_checkpoint_epoch: number | null;
   last_checkpoint_step: number | null;

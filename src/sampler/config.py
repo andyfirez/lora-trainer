@@ -194,13 +194,10 @@ class SamplingConfig(BaseModel):
                 return True
         return False
 
-    def mid_training_prompts(self) -> list[str]:
-        return self.effective_prompts()
-
-    def mid_training_field_updates(self) -> dict[str, object]:
+    def train_config_field_updates(self) -> dict[str, object]:
         params = self.parameters
         return {
-            "sample_prompts": self.mid_training_prompts(),
+            "sample_prompts": self.effective_prompts(),
             "sample_negative_prompt": str(params.negative_prompt.first_value() or ""),
             "sample_steps": int(params.steps.first_value() or 30),
             "sample_cfg_scale": float(params.cfg_scale.first_value() or 7.5),
@@ -213,7 +210,7 @@ class SamplingConfig(BaseModel):
         }
 
     def build_sampling_field_updates(self) -> dict[str, object]:
-        return self.mid_training_field_updates()
+        return self.train_config_field_updates()
 
     def to_train_config(self) -> "TrainConfig":
         from src.trainer.config import ModelPartConfig, TrainConfig

@@ -185,8 +185,6 @@ class TrainConfig(BaseModel):
     # Sampling
     sampling_enabled: bool = False
     sampling_config_id: Optional[int] = None
-    sample_every_n_epochs: Optional[int] = None
-    sample_before_training: bool = False
     sample_prompts: list[str] = Field(default_factory=list)
     sample_negative_prompt: str = ""
     sample_steps: int = Field(default=30, ge=1)

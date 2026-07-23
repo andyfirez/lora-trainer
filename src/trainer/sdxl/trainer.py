@@ -4,24 +4,18 @@ import contextlib
 import logging
 import math
 import random
-import time
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 import torch
-from diffusers import DDPMScheduler
 from peft import get_peft_model
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
-from transformers import CLIPTokenizer
 
 from src.trainer.attention import configure_unet_attention
-from src.trainer.concept_training_metadata import (
-    ConceptTrainingMetadata,
-    resolve_reference_add_time_ids,
-)
+from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.config import TrainConfig, WeightDtype
-from src.trainer.optimizer_config import Optimizer, build_optimizer
+from src.trainer.optimizer_config import build_optimizer
 from src.trainer.training_log import resolve_part_learning_rates
 from src.trainer.progress import TrainProgress
 from src.trainer.sdxl.bucket_batch_sampler import build_bucket_batch_sampler
@@ -32,11 +26,6 @@ from src.trainer.sdxl.dataset import (
     collect_bucket_keys,
     count_latent_cache_items,
     count_te_cache_items,
-)
-from src.trainer.sdxl.inference_context import (
-    merge_adapters_for_inference,
-    run_sampling_pass_with_embeds,
-    unmerge_adapters,
 )
 from src.trainer.sdxl.latent_cache import build_latent_cache
 from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
@@ -54,9 +43,8 @@ from src.trainer.sdxl.mixed_precision import (
     cast_trainable_params_to_fp32,
     create_grad_scaler,
 )
-from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
+from src.trainer.sdxl.model_loader import load_sdxl_components
 from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
-from src.trainer.sdxl.sampling import PromptEmbedCache
 from src.trainer.sdxl.te_cache import build_te_cache
 from src.trainer.training_log import JobTrainingLogger
 
@@ -82,8 +70,6 @@ class SDXLLoRATrainer:
         self,
         config: TrainConfig,
         progress_callback: Optional[Callable[..., None]] = None,
-        sampling_status_callback: Optional[Callable[[Optional[str]], None]] = None,
-        sampling_progress_callback: Optional[Callable[[int, int], None]] = None,
         training_logger: Optional[JobTrainingLogger] = None,
         checkpoint_callback: Optional[Callable[[str, int, int], None]] = None,
         save_checkpoint_requested_callback: Optional[Callable[[], bool]] = None,
@@ -93,8 +79,6 @@ class SDXLLoRATrainer:
         self._config = config
         self._concept_metadata = concept_metadata or {}
         self._progress_callback = progress_callback
-        self._sampling_status_callback = sampling_status_callback
-        self._sampling_progress_callback = sampling_progress_callback
         self._training_logger = training_logger
         self._checkpoint_callback = checkpoint_callback
         self._save_checkpoint_requested_callback = save_checkpoint_requested_callback
@@ -683,188 +667,3 @@ class SDXLLoRATrainer:
         ext = f".{config.output_format.value}"
         final_path = self._work_dir(config) / f"{config.lora_name}{ext}"
         export_lora_weights(unet, text_encoder_1, text_encoder_2, config, final_path)
-
-    def _offload_to_cpu(
-        self,
-        unet: torch.nn.Module,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        config: TrainConfig,
-        log: logging.Logger,
-    ) -> None:
-        log.info("Offloading training state to CPU for sampling...")
-        unet.to("cpu")
-        if not config.cache_text_encoder_outputs:
-            text_encoder_1.to("cpu")
-            text_encoder_2.to("cpu")
-        if config.optimizer.type != Optimizer.ADAMW_8BIT and self._optimizer is not None:
-            for state in self._optimizer.state.values():
-                for k, v in state.items():
-                    if isinstance(v, torch.Tensor):
-                        state[k] = v.cpu()
-        torch.cuda.empty_cache()
-        free_gb = torch.cuda.mem_get_info()[0] / 1e9
-        log.info("VRAM freed. Available: %.1f GB", free_gb)
-
-    def _restore_to_gpu(
-        self,
-        unet: torch.nn.Module,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        config: TrainConfig,
-        log: logging.Logger,
-    ) -> None:
-        assert self._device is not None
-        log.info("Restoring training state to GPU...")
-        unet.to(self._device)
-        if not config.cache_text_encoder_outputs:
-            text_encoder_1.to(self._device)
-            text_encoder_2.to(self._device)
-        if config.optimizer.type != Optimizer.ADAMW_8BIT and self._optimizer is not None:
-            for state in self._optimizer.state.values():
-                for k, v in state.items():
-                    if isinstance(v, torch.Tensor):
-                        state[k] = v.to(self._device)
-        log.info("Training state restored to GPU.")
-
-    def _run_sampling(
-        self,
-        epoch: int,
-        unet: torch.nn.Module,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        vae: torch.nn.Module,
-        tokenizer_1: CLIPTokenizer,
-        tokenizer_2: CLIPTokenizer,
-        noise_scheduler: DDPMScheduler,
-        config: TrainConfig,
-        device: torch.device,
-        training_logger: Optional[JobTrainingLogger],
-        sampling_status_callback: Optional[Callable[[Optional[str]], None]] = None,
-        sampling_progress_callback: Optional[Callable[[int, int], None]] = None,
-    ) -> None:
-        if not config.sample_prompts:
-            return
-
-        log = training_logger.logger if training_logger is not None else logger
-        sampling_started_at = time.perf_counter()
-
-        if training_logger is not None:
-            training_logger.close_progress_bar()
-
-        sample_dir = self._work_dir(config) / "samples"
-        sample_dir.mkdir(parents=True, exist_ok=True)
-        sample_prompts = config.sample_prompts
-        n_prompts = len(sample_prompts)
-        log.info("Sampling %d image(s) for epoch %d...", n_prompts, epoch)
-
-        if sampling_status_callback is not None:
-            sampling_status_callback(f"Sampling epoch {epoch} — preparing")
-
-        vae_device = next(vae.parameters()).device
-        te1_device = next(text_encoder_1.parameters()).device
-        te2_device = next(text_encoder_2.parameters()).device
-
-        offload_started_at = time.perf_counter()
-        self._offload_to_cpu(unet, text_encoder_1, text_encoder_2, config, log)
-        log.info("[sampling e%d] offload: %.2fs", epoch, time.perf_counter() - offload_started_at)
-
-        inference_unet: Optional[torch.nn.Module] = None
-        inference_te1: Optional[torch.nn.Module] = None
-        inference_te2: Optional[torch.nn.Module] = None
-        merge_state = None
-
-        try:
-            merge_started_at = time.perf_counter()
-            merge_state = merge_adapters_for_inference(
-                unet=unet,
-                text_encoder_1=text_encoder_1,
-                text_encoder_2=text_encoder_2,
-                lora_config=config,
-                merge_unet=True,
-            )
-            inference_unet = merge_state.models.unet
-            inference_te1 = merge_state.models.text_encoder_1
-            inference_te2 = merge_state.models.text_encoder_2
-            log.info("[sampling e%d] merge adapters: %.2fs", epoch, time.perf_counter() - merge_started_at)
-
-            build_started_at = time.perf_counter()
-            inference_unet = inference_unet.to(device=device, dtype=_DTYPE_MAP[config.unet.weight_dtype])
-            inference_te1 = inference_te1.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_1.weight_dtype])
-            inference_te2 = inference_te2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
-            vae = vae.to(device=device, dtype=resolve_vae_dtype(config.vae_dtype))
-            log.info("[sampling e%d] move inference models: %.2fs", epoch, time.perf_counter() - build_started_at)
-
-            reference_add_time_ids = resolve_reference_add_time_ids(
-                self._concept_metadata,
-                dataset_ids=[c.dataset_id for c in config.concepts],
-                width=config.sample_width or config.resolution,
-                height=config.sample_height or config.resolution,
-            )
-            if reference_add_time_ids is not None:
-                log.info(
-                    "Sampling e%d: using aligned add_time_ids %s (bucket match)",
-                    epoch,
-                    reference_add_time_ids,
-                )
-
-            embed_started_at = time.perf_counter()
-
-            def _on_status(prompt_index: int, total_prompts: int) -> None:
-                if sampling_status_callback is not None:
-                    sampling_status_callback(
-                        f"Sampling epoch {epoch} — image {prompt_index + 1}/{total_prompts}",
-                    )
-
-            def _on_step(_prompt_index: int, completed: int, total: int) -> None:
-                if sampling_progress_callback is not None:
-                    sampling_progress_callback(completed, total)
-
-            run_sampling_pass_with_embeds(
-                inference_unet=inference_unet,
-                inference_te1=inference_te1,
-                inference_te2=inference_te2,
-                vae=vae,
-                tokenizer_1=tokenizer_1,
-                tokenizer_2=tokenizer_2,
-                noise_scheduler=noise_scheduler,
-                sampling_config=config,
-                device=device,
-                sample_prompts=sample_prompts,
-                output_dir=sample_dir,
-                output_stem=f"{config.lora_name}_epoch{epoch}",
-                log=log,
-                embed_cache=PromptEmbedCache(),
-                reference_add_time_ids=reference_add_time_ids,
-                on_status=_on_status,
-                on_step=_on_step,
-                log_step_context=f"[sample {{prompt_index}}/{{n_prompts}} e{epoch}]",
-            )
-            log.info("[sampling e%d] precompute embeds + TE offload: %.2fs", epoch, time.perf_counter() - embed_started_at)
-        finally:
-            restore_started_at = time.perf_counter()
-            if inference_unet is not None:
-                inference_unet.to("cpu")
-            if inference_te1 is not None:
-                inference_te1.to(te1_device)
-            if inference_te2 is not None:
-                inference_te2.to(te2_device)
-            vae.to(vae_device)
-            if merge_state is not None:
-                unmerge_adapters(
-                    unet=unet,
-                    text_encoder_1=text_encoder_1,
-                    text_encoder_2=text_encoder_2,
-                    state=merge_state,
-                )
-            self._restore_to_gpu(unet, text_encoder_1, text_encoder_2, config, log)
-            log.info("[sampling e%d] restore: %.2fs", epoch, time.perf_counter() - restore_started_at)
-            log.info("[sampling e%d] total: %.2fs", epoch, time.perf_counter() - sampling_started_at)
-            if sampling_status_callback is not None:
-                sampling_status_callback(None)
-            if training_logger is not None:
-                training_logger.create_progress_bar(
-                    self._total_steps,
-                    initial=self._progress.global_step,
-                    desc="steps",
-                )

@@ -17,7 +17,6 @@ from typing import Any
 
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
-from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
@@ -33,7 +32,6 @@ from src.trainer.concept_resolution import resolve_concept_paths
 from src.trainer.concept_training_metadata import resolve_concept_training_metadata
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
-from src.trainer.sampling_resolution import resolve_sampling_config
 from src.trainer.sdxl.trainer import (
     SDXLLoRATrainer,
     TrainingCancelledAfterSave,
@@ -80,24 +78,6 @@ async def _update_progress(
                 epoch=epoch,
                 epoch_total=epoch_total,
             )
-            await session.commit()
-
-
-async def _update_sampling_status(job_id: int, status: str | None) -> None:
-    async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await _get_active_job(repo, job_id)
-        if job is not None:
-            await repo.update_sampling_status(job, status)
-            await session.commit()
-
-
-async def _update_sampling_progress(job_id: int, step: int, total: int) -> None:
-    async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await _get_active_job(repo, job_id)
-        if job is not None:
-            await repo.update_sampling_progress(job, step, total)
             await session.commit()
 
 
@@ -198,20 +178,6 @@ def _make_progress_callback(job_id: int):
     return callback
 
 
-def _make_sampling_status_callback(job_id: int):
-    def callback(status: str | None) -> None:
-        _submit_to_progress_loop(_update_sampling_status(job_id, status))
-
-    return callback
-
-
-def _make_sampling_progress_callback(job_id: int):
-    def callback(step: int, total: int) -> None:
-        _submit_to_progress_loop(_update_sampling_progress(job_id, step, total))
-
-    return callback
-
-
 def _build_log_path(job_id: int) -> Path:
     logs_dir = Path(settings.training.logs_dir)
     logs_dir.mkdir(parents=True, exist_ok=True)
@@ -232,7 +198,6 @@ async def _run(job_id: int) -> None:
     async with session_factory() as session:
         dataset_repo = DatasetRepository(session)
         crop_repo = DatasetImageCropRepository(session)
-        config_repo = JobConfigRepository(session)
         dataset_ids = [concept.dataset_id for concept in config.concepts]
         await reconcile_datasets_for_training(dataset_ids, dataset_repo, crop_repo)
         concept_paths = await resolve_concept_paths(dataset_ids, dataset_repo)
@@ -258,9 +223,6 @@ async def _run(job_id: int) -> None:
                 logger.error("Dataset validation failed: %s", exc)
                 sys.exit(1)
         config = config.resolve_concepts(concept_paths)
-        sampling = await resolve_sampling_config(config.sampling_config_id, config_repo)
-        if sampling is not None:
-            config = config.resolve_sampling(sampling)
     if resume_checkpoint_path:
         config.resume_from_checkpoint = resume_checkpoint_path
     is_resume_run = bool(config.resume_from_checkpoint)
@@ -323,8 +285,6 @@ async def _run(job_id: int) -> None:
         trainer = SDXLLoRATrainer(
             config,
             progress_callback=_make_progress_callback(job_id),
-            sampling_status_callback=_make_sampling_status_callback(job_id),
-            sampling_progress_callback=_make_sampling_progress_callback(job_id),
             training_logger=training_logger,
             checkpoint_callback=_checkpoint_callback,
             save_checkpoint_requested_callback=_save_checkpoint_requested,
