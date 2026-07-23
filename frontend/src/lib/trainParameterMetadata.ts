@@ -932,13 +932,13 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Checkpointing",
     shortHint: "Save intermediate LoRA weights during training.",
     description:
-      "When enabled, saves LoRA checkpoints at regular epoch intervals. Required for mid-training sampling and resume. Disabling also disables sampling during training.",
+      "When enabled, saves LoRA checkpoints at regular epoch intervals. Required for post-train auto sampling and resume.",
     defaultValue: "true",
     showInlineHint: false,
     recommendedValue: "true",
     valueOptions: [
-      { value: "true", description: "Save intermediate weights; required for sampling and resume." },
-      { value: "false", description: "Only save final LoRA; disables mid-training sampling." },
+      { value: "true", description: "Save intermediate weights; required for post-train sampling and resume." },
+      { value: "false", description: "Only save final LoRA; disables post-train auto sampling." },
     ],
   },
   {
@@ -972,15 +972,15 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     key: "sampling_enabled",
     label: "Sampling Enabled",
     section: "Sampling",
-    shortHint: "Generate preview images at checkpoints using a linked sampling config.",
+    shortHint: "Queue sampling jobs after training completes using a linked sampling config.",
     description:
-      "Runs image generation after checkpoint saves using prompts from the linked sampling config. Helps monitor training quality without manual inference. Requires checkpointing enabled.",
+      "When enabled, automatically queues standalone sampling jobs for intermediate checkpoints after training finishes. Requires checkpointing enabled and a linked sampling config.",
     defaultValue: "false",
     showInlineHint: false,
     recommendedValue: "false",
     valueOptions: [
-      { value: "true", description: "Generate preview images at checkpoints." },
-      { value: "false", description: "No mid-training previews." },
+      { value: "true", description: "Queue post-train sampling jobs for saved checkpoints." },
+      { value: "false", description: "No automatic sampling after training." },
     ],
   },
   {
@@ -989,41 +989,16 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Reference to a saved sampling config with prompts and sampler settings.",
     description:
-      "ID of a sampling configuration stored in the app database. Its prompts, steps, CFG, and scheduler settings are used for mid-training preview generation.",
+      "ID of a sampling configuration stored in the app database. Its prompts, steps, CFG, and scheduler settings are used for post-train auto sampling jobs.",
     recommendedValue: "linked sampling config",
-  },
-  {
-    key: "sample_every_n_epochs",
-    label: "Sample Every N Epochs",
-    section: "Sampling",
-    shortHint: "Override checkpoint interval specifically for sampling.",
-    description:
-      "If set, controls sampling frequency independently of save_every_n_epochs. When null, sampling runs on every checkpoint save.",
-    yamlOnly: true,
-    recommendedValue: "null (uses save_every_n_epochs)",
-  },
-  {
-    key: "sample_before_training",
-    label: "Sample Before Training",
-    section: "Sampling",
-    shortHint: "Generate baseline images before any training steps.",
-    description:
-      "When true, runs sampling once before training begins to capture base-model output for comparison with trained checkpoints.",
-    defaultValue: "false",
-    yamlOnly: true,
-    recommendedValue: "false",
-    valueOptions: [
-      { value: "true", description: "Capture base-model baseline before training." },
-      { value: "false", description: "Skip pre-training preview." },
-    ],
   },
   {
     key: "sample_prompts",
     label: "Sample Prompts",
     section: "Sampling",
-    shortHint: "Prompts used for mid-training preview images (resolved from sampling config).",
+    shortHint: "Prompts used by standalone sampling jobs (resolved from sampling config).",
     description:
-      "List of text prompts for checkpoint preview generation. In the web UI these come from the linked sampling config via resolve_sampling(); inline YAML values are merged at job start. Trigger words from concepts are appended automatically.",
+      "List of text prompts for post-train sampling jobs. In the web UI these come from the linked sampling config via resolve_sampling(); inline YAML values are merged when creating sampling jobs. Trigger words from concepts are appended automatically.",
     defaultValue: "[]",
     yamlOnly: true,
     recommendedValue: "[]",
@@ -1032,9 +1007,9 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     key: "sample_negative_prompt",
     label: "Sample Negative Prompt",
     section: "Sampling",
-    shortHint: "Negative prompt for mid-training preview generation.",
+    shortHint: "Negative prompt for post-train sampling jobs.",
     description:
-      "Negative prompt text applied during checkpoint sampling. Typically resolved from the linked sampling config rather than set inline in training YAML.",
+      "Negative prompt text applied during post-train sampling. Typically resolved from the linked sampling config rather than set inline in training YAML.",
     defaultValue: '""',
     yamlOnly: true,
     recommendedValue: '""',
@@ -1045,7 +1020,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Number of denoising steps for preview images.",
     description:
-      "Inference steps for mid-training sample generation. Higher values improve preview quality at the cost of slower sampling after each checkpoint. Resolved from the linked sampling config in normal workflows.",
+      "Inference steps for post-train sampling jobs. Higher values improve output quality at the cost of slower generation. Resolved from the linked sampling config in normal workflows.",
     defaultValue: "30",
     constraints: "≥ 1",
     yamlOnly: true,
@@ -1062,7 +1037,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Classifier-free guidance scale for preview images.",
     description:
-      "CFG scale controlling prompt adherence during checkpoint sampling. SDXL commonly uses 5–8. Resolved from the linked sampling config in normal workflows.",
+      "CFG scale controlling prompt adherence during post-train sampling. SDXL commonly uses 5–8. Resolved from the linked sampling config in normal workflows.",
     defaultValue: "7.5",
     constraints: "> 0",
     yamlOnly: true,
@@ -1079,7 +1054,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Output width for preview images; null uses training resolution.",
     description:
-      "Width in pixels for generated preview images. When null, the trainer uses the training resolution. Resolved from the linked sampling config in normal workflows.",
+      "Width in pixels for post-train sampling output. When null, the sampler uses the training resolution. Resolved from the linked sampling config in normal workflows.",
     defaultValue: "null (uses resolution)",
     constraints: "64–2048",
     yamlOnly: true,
@@ -1096,7 +1071,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Output height for preview images; null uses training resolution.",
     description:
-      "Height in pixels for generated preview images. When null, the trainer uses the training resolution. Resolved from the linked sampling config in normal workflows.",
+      "Height in pixels for post-train sampling output. When null, the sampler uses the training resolution. Resolved from the linked sampling config in normal workflows.",
     defaultValue: "null (uses resolution)",
     constraints: "64–2048",
     yamlOnly: true,
@@ -1113,7 +1088,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Noise scheduler for preview image generation.",
     description:
-      "Sampler algorithm for mid-training previews. euler is the default and matches most SDXL workflows. Resolved from the linked sampling config in normal workflows.",
+      "Sampler algorithm for post-train sampling jobs. euler is the default and matches most SDXL workflows. Resolved from the linked sampling config in normal workflows.",
     defaultValue: "euler",
     constraints: "euler | euler_a | ddim | dpm++",
     yamlOnly: true,
@@ -1131,7 +1106,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Tile VAE decode to reduce VRAM during preview generation.",
     description:
-      "Enables tiled VAE decoding during checkpoint sampling, trading a small speed penalty for lower peak VRAM usage when generating large preview images.",
+      "Enables tiled VAE decoding during post-train sampling, trading a small speed penalty for lower peak VRAM usage when generating large images.",
     defaultValue: "true",
     yamlOnly: true,
     recommendedValue: "true",
@@ -1161,7 +1136,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Move UNet off GPU before VAE decode to free VRAM.",
     description:
-      "Offloads the UNet from GPU memory before VAE decoding during checkpoint sampling. Helps avoid OOM on consumer GPUs when generating previews at full resolution.",
+      "Offloads the UNet from GPU memory before VAE decoding during post-train sampling. Helps avoid OOM on consumer GPUs when generating images at full resolution.",
     defaultValue: "true",
     yamlOnly: true,
     recommendedValue: "true",
@@ -1176,7 +1151,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Deprecated — use sampling_config_id with sampling_enabled instead.",
     description:
-      "Legacy field for linking a sampling config after training completes. Rejected by config validation in favor of sampling_enabled + sampling_config_id for mid-training previews. Do not use in new configs.",
+      "Legacy field for linking a sampling config after training completes. Rejected by config validation in favor of sampling_enabled + sampling_config_id for post-train auto sampling. Do not use in new configs.",
     yamlOnly: true,
     deprecated: true,
     recommendedValue: "do not use (use sampling_config_id + sampling_enabled)",
@@ -1187,7 +1162,7 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     section: "Sampling",
     shortHint: "Deprecated — removed; use sampling_enabled for preview generation.",
     description:
-      "Deprecated boolean flag for post-training sampling. Config validation rejects this key. Use sampling_enabled with a linked sampling config for preview images during training.",
+      "Deprecated boolean flag for post-training sampling. Config validation rejects this key. Use sampling_enabled with a linked sampling config for post-train auto sampling.",
     yamlOnly: true,
     deprecated: true,
     recommendedValue: "do not use (use sampling_enabled)",

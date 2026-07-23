@@ -31,10 +31,6 @@ export default function TrainingJobPanel({ job, lossGraphRunKey }: TrainingJobPa
     job.progress_total != null && job.progress_total > 0
       ? progressPercent(trainStep, job.progress_total)
       : null;
-  const samplingPct =
-    training?.sampling_step != null && training?.sampling_total != null && training.sampling_total > 0
-      ? Math.round((training.sampling_step / training.sampling_total) * 100)
-      : null;
 
   return (
     <div className="space-y-6">
@@ -42,27 +38,6 @@ export default function TrainingJobPanel({ job, lossGraphRunKey }: TrainingJobPa
         <div className="rounded-lg bg-warning/10 border border-warning/30 text-warning px-4 py-3 text-sm">
           Saving checkpoint before stopping…
         </div>
-      )}
-
-      {isRunning && training?.sampling_status != null && (
-        <JobProgressBar
-          title={training.sampling_status}
-          step={training.sampling_step}
-          total={training.sampling_total}
-          percent={samplingPct ?? 0}
-          active={isRunning}
-          elapsedSeconds={job.elapsed_seconds}
-          barClassName="bg-sampling"
-          showSpinner
-          showBar={samplingPct != null}
-          headerRight={
-            samplingPct != null ? (
-              <span className="text-muted">
-                step {training.sampling_step} / {training.sampling_total} ({samplingPct}%)
-              </span>
-            ) : undefined
-          }
-        />
       )}
 
       {isRunning && trainPct != null && (

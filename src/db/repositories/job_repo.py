@@ -110,26 +110,6 @@ class JobRepository(BaseRepository[Job]):
         await self._session.refresh(job)
         return job
 
-    async def update_sampling_status(self, job: Job, status: Optional[str]) -> Job:
-        job.sampling_status = status
-        if status is None:
-            job.sampling_step = None
-            job.sampling_total = None
-        job.updated_at = datetime.now(timezone.utc)
-        self._session.add(job)
-        await self._session.flush()
-        await self._session.refresh(job)
-        return job
-
-    async def update_sampling_progress(self, job: Job, step: int, total: int) -> Job:
-        job.sampling_step = step
-        job.sampling_total = total
-        job.updated_at = datetime.now(timezone.utc)
-        self._session.add(job)
-        await self._session.flush()
-        await self._session.refresh(job)
-        return job
-
     async def update_progress_status(self, job: Job, status: Optional[str]) -> Job:
         job.progress_status = status
         if status is None:
@@ -222,7 +202,6 @@ class JobRepository(BaseRepository[Job]):
             job.cache_progress_step = None
             job.cache_progress_total = None
             job.save_checkpoint_requested = False
-            await self.update_sampling_status(job, None)
         elif job.job_type in (JobType.SAMPLING, JobType.TAGGING):
             job.progress_step = None
             job.progress_total = None
@@ -235,7 +214,6 @@ class JobRepository(BaseRepository[Job]):
         job.pid = None
         if job.job_type == JobType.TRAINING:
             job.save_checkpoint_requested = False
-            await self.update_sampling_status(job, None)
         elif job.job_type in (JobType.SAMPLING, JobType.TAGGING):
             job.progress_step = None
             job.progress_total = None

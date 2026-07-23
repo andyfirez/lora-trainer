@@ -1117,11 +1117,6 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                         : ""}
                     </p>
                   )}
-                  {samplingEnabled && selectedSamplingPreview?.hasVaryingExceptPrompt && (
-                    <p className="text-xs text-amber-400/90">
-                      Mid-training sampling uses the first value of varying parameters (except prompts).
-                    </p>
-                  )}
                   {samplingEnabled && config.sampling_config_id != null && !selectedSamplingConfig && (
                     <p className="text-xs text-error">Sampling config not found</p>
                   )}
