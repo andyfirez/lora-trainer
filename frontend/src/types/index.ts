@@ -66,12 +66,15 @@ export interface JobConfig {
 export interface TrainedLora {
   id: number;
   name: string;
-  job_id: number;
+  relative_path: string;
+  weights_relpath: string;
+  resolved_work_dir: string;
+  resolved_weights_path: string;
+  path_missing: boolean;
+  job_id: number | null;
   config_id: number | null;
-  config_yaml: string;
+  config_yaml: string | null;
   base_model_name: string;
-  weights_path: string;
-  work_dir: string;
   created_at: string;
   updated_at: string;
 }

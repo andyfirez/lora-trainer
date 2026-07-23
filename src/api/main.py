@@ -31,6 +31,7 @@ from src.api.exception_handlers import (
     sampling_lora_path_not_found_handler,
     sampling_prompts_not_configured_handler,
     trained_lora_not_found_handler,
+    trained_lora_reproduce_handler,
 )
 from src.api.routers import datasets, files, jobs, loras, queues, sampling_configs, settings as settings_router, storage, trainings
 from src.db.session import run_migrations
@@ -57,7 +58,7 @@ from src.services.jobs.exceptions import (
     JobNotResumableError,
     JobOperationNotSupportedError,
 )
-from src.services.loras.exceptions import TrainedLoraNotFoundError
+from src.services.loras.exceptions import TrainedLoraNotFoundError, TrainedLoraReproduceError
 from src.services.queues.exceptions import QueueEntryNotFoundError
 from src.services.sampling.exceptions import (
     SamplingCheckpointsNotFoundError,
@@ -81,6 +82,7 @@ _EXCEPTION_HANDLERS: dict[type[Exception], object] = {
     JobConfigNotFoundError: job_config_not_found_handler,
     JobConfigValidationError: job_config_validation_handler,
     TrainedLoraNotFoundError: trained_lora_not_found_handler,
+    TrainedLoraReproduceError: trained_lora_reproduce_handler,
     SamplingLoRAPathNotFoundError: sampling_lora_path_not_found_handler,
     SamplingCheckpointsNotFoundError: sampling_checkpoints_not_found_handler,
     SamplingPromptsNotConfiguredError: sampling_prompts_not_configured_handler,

@@ -452,6 +452,6 @@ concepts:
     assert len(loras) == 1
     assert loras[0].job_id == training_job.id
     assert loras[0].name == train_config.lora_name
-    assert loras[0].weights_path == str(work_dir / f"{train_config.lora_name}.safetensors")
+    assert loras[0].weights_relpath.endswith(f"{train_config.lora_name}.safetensors")
     sampling_jobs = await jobs_service.list_jobs_by_source(training_job.id)
     assert sampling_jobs == []
