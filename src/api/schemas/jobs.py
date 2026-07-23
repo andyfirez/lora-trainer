@@ -104,6 +104,7 @@ class JobResponse(BaseModel):
     sampling: Optional[SamplingJobDetails] = None
     tagging: Optional[TaggingJobDetails] = None
     can_resume: bool = False
+    elapsed_seconds: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 

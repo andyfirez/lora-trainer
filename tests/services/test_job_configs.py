@@ -1,8 +1,11 @@
 from unittest.mock import patch
 
 import pytest
+import yaml
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.db.tables.job_config import ConfigType
+from src.db.migrations.training_yaml import migrate_training_yaml
+from src.db.repositories.job_config_repo import JobConfigRepository
+from src.db.tables.job_config import ConfigType, JobConfig
 from src.services.configs.exceptions import (
     JobConfigNotFoundError,
     JobConfigValidationError,
@@ -238,6 +241,38 @@ async def test_clone_config_creates_copy(
     assert cloned.config_type == ConfigType.TRAINING
     assert cloned.config_yaml == created.config_yaml
     assert cloned.description == "demo"
+
+
+@pytest.mark.asyncio
+async def test_clone_config_after_legacy_yaml_migration(
+    config_service: JobConfigService,
+    session: AsyncSession,
+    training_dataset,
+) -> None:
+    legacy_yaml = f"""learning_rate: 0.0003
+base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+concepts:
+  - dataset_id: {training_dataset.id}
+"""
+    repo = JobConfigRepository(session)
+    legacy_config = await repo.add(
+        JobConfig(
+            name="legacy",
+            config_type=ConfigType.TRAINING,
+            config_yaml=legacy_yaml,
+        )
+    )
+    migrated_yaml = migrate_training_yaml(legacy_yaml)
+    assert migrated_yaml is not None
+    legacy_config.config_yaml = migrated_yaml
+    session.add(legacy_config)
+    await session.flush()
+
+    cloned = await config_service.clone_config(legacy_config.id)  # type: ignore[arg-type]
+
+    assert cloned.id != legacy_config.id
+    assert cloned.name == "legacy (copy)"
+    assert "learning_rate" not in (yaml.safe_load(cloned.config_yaml) or {})
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ from src.db.repositories.job_config_repo import JobConfigRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus
+from src.services.datasets.service import reconcile_datasets_for_training
 from src.services.datasets.training_validation import validate_dataset_for_training
 from src.services.worker.progress_loop import (
     run_in_progress_loop,
@@ -33,7 +34,11 @@ from src.trainer.concept_training_metadata import resolve_concept_training_metad
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 from src.trainer.sampling_resolution import resolve_sampling_config
-from src.trainer.sdxl.trainer import SDXLLoRATrainer, TrainingCancelledAfterSave, TrainingCancelledDuringCache
+from src.trainer.sdxl.trainer import (
+    SDXLLoRATrainer,
+    TrainingCancelledAfterSave,
+    TrainingCancelledDuringCache,
+)
 from src.trainer.training_log import JobTrainingLogger, setup_tensorboard_writer
 
 logging.basicConfig(
@@ -229,6 +234,7 @@ async def _run(job_id: int) -> None:
         crop_repo = DatasetImageCropRepository(session)
         config_repo = JobConfigRepository(session)
         dataset_ids = [concept.dataset_id for concept in config.concepts]
+        await reconcile_datasets_for_training(dataset_ids, dataset_repo, crop_repo)
         concept_paths = await resolve_concept_paths(dataset_ids, dataset_repo)
         concept_metadata = await resolve_concept_training_metadata(
             dataset_ids,

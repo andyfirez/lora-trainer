@@ -162,6 +162,7 @@ export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
                         step={job.progress_step}
                         total={job.progress_total}
                         active={job.status === "running"}
+                        elapsedSeconds={job.elapsed_seconds}
                         compact
                       />
                     </div>

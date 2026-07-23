@@ -7,6 +7,7 @@ from src.api.schemas.jobs import (
     TaggingJobDetails,
     TrainingJobDetails,
 )
+from src.db.elapsed import compute_elapsed_seconds
 from src.db.tables.job import Job, JobType
 from src.services.jobs.service import JobsService
 from src.tagger.config import TaggingConfig
@@ -28,6 +29,7 @@ def to_job_response(job: Job, service: JobsService) -> JobResponse:
         "progress_step": job.progress_step,
         "progress_total": job.progress_total,
         "can_resume": service.can_resume(job),
+        "elapsed_seconds": compute_elapsed_seconds(job),
         "created_at": job.created_at,
         "updated_at": job.updated_at,
     }

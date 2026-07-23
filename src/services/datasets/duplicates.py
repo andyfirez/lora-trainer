@@ -1,10 +1,13 @@
 """Detect and remove exact duplicate images in a dataset directory."""
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.services.datasets.captions import DEFAULT_CAPTION_EXTENSION, list_image_filenames
+from src.services.datasets.captions import (
+    DEFAULT_CAPTION_EXTENSION,
+    list_image_filenames,
+)
+from src.services.datasets.hashing import file_sha256
 
 
 @dataclass(frozen=True)
@@ -13,19 +16,11 @@ class DuplicateScanResult:
     duplicate_filenames: tuple[str, ...]
 
 
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def scan_duplicates(image_dir: Path) -> DuplicateScanResult:
     hash_to_filenames: dict[str, list[str]] = {}
     for filename in list_image_filenames(image_dir):
         path = image_dir / filename
-        file_hash = _file_sha256(path)
+        file_hash = file_sha256(path)
         hash_to_filenames.setdefault(file_hash, []).append(filename)
 
     duplicate_filenames: list[str] = []

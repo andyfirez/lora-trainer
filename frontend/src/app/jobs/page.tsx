@@ -96,6 +96,7 @@ export default function JobsPage() {
                       step={job.progress_step}
                       total={job.progress_total}
                       active
+                      elapsedSeconds={job.elapsed_seconds}
                       compact
                       className="mt-1"
                     />

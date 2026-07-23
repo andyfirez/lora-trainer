@@ -48,6 +48,21 @@ class JobRepository(BaseRepository[Job]):
         pid: Optional[int] = None,
         error_message: Optional[str] = None,
     ) -> Job:
+        now = datetime.now(timezone.utc)
+        previous_status = job.status
+
+        if previous_status == JobStatus.RUNNING and status != JobStatus.RUNNING:
+            if job.running_started_at is not None:
+                started_at = job.running_started_at
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
+                session_delta = (now - started_at).total_seconds()
+                job.accumulated_elapsed_seconds = (job.accumulated_elapsed_seconds or 0.0) + session_delta
+                job.running_started_at = None
+
+        if status == JobStatus.RUNNING and previous_status != JobStatus.RUNNING:
+            job.running_started_at = now
+
         job.status = status
         job.updated_at = datetime.now(timezone.utc)
         if pid is not None:
