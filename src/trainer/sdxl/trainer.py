@@ -25,7 +25,11 @@ from src.trainer.optimizer_config import Optimizer, build_optimizer
 from src.trainer.training_log import resolve_part_learning_rates
 from src.trainer.progress import TrainProgress
 from src.trainer.sdxl.bucket_batch_sampler import build_bucket_batch_sampler
-from src.trainer.sdxl.checkpoint_state import load_resume_state, save_resume_state
+from src.trainer.sdxl.checkpoint_state import (
+    load_resume_state,
+    prune_stale_resume_states,
+    save_resume_state,
+)
 from src.trainer.sdxl.dataset import (
     build_training_dataset,
     collect_all_image_paths_and_captions,
@@ -658,7 +662,7 @@ class SDXLLoRATrainer:
         export_lora_weights(unet, text_encoder_1, text_encoder_2, config, checkpoint_path)
         lora_state_dict = collect_lora_state_dict(unet, text_encoder_1, text_encoder_2, config)
         grad_scaler_state_dict = grad_scaler.state_dict() if grad_scaler is not None else None
-        save_resume_state(
+        state_path = save_resume_state(
             checkpoint_path=checkpoint_path,
             lora_state_dict=lora_state_dict,
             optimizer_state_dict=optimizer.state_dict(),
@@ -668,6 +672,7 @@ class SDXLLoRATrainer:
             epoch_step=epoch_step,
             grad_scaler_state_dict=grad_scaler_state_dict,
         )
+        prune_stale_resume_states(self._work_dir(config), keep=state_path)
         if self._checkpoint_callback is not None:
             self._checkpoint_callback(str(checkpoint_path), epoch, checkpoint_step)
         log.info("Checkpoint saved to %s", checkpoint_path)

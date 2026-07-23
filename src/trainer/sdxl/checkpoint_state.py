@@ -80,6 +80,23 @@ def save_resume_state(
     return state_path
 
 
+def list_resume_state_paths(work_dir: Path) -> list[Path]:
+    return sorted(work_dir.glob("*.state.pt"))
+
+
+def prune_stale_resume_states(work_dir: Path, *, keep: Path) -> None:
+    keep_resolved = keep.resolve()
+    for state_path in list_resume_state_paths(work_dir):
+        if state_path.resolve() != keep_resolved and state_path.is_file():
+            state_path.unlink()
+
+
+def delete_all_resume_states(work_dir: Path) -> None:
+    for state_path in list_resume_state_paths(work_dir):
+        if state_path.is_file():
+            state_path.unlink()
+
+
 def load_resume_state(checkpoint_path: Path) -> ResumeState:
     state_path = state_path_for_checkpoint(checkpoint_path)
     if not state_path.is_file():
