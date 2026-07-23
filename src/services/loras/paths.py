@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.db.tables.job import Job
+from src.storage.paths import StoragePaths
 from src.trainer.config import TrainConfig
 
 
@@ -21,7 +22,10 @@ def runtime_train_config(job: Job) -> TrainConfig:
 
 def resolve_trained_lora_paths(job: Job) -> TrainedLoraPaths | None:
     config = runtime_train_config(job)
-    work_dir = Path(job.output_path) if job.output_path else Path(config.output_dir) / config.lora_name
+    if job.output_path:
+        work_dir = Path(job.output_path)
+    else:
+        work_dir = StoragePaths.resolve_training_work_dir(config.output_dir, config.lora_name)
     ext = config.output_format.value
     weights_path = work_dir / f"{config.lora_name}.{ext}"
     if not weights_path.is_file():

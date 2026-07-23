@@ -9,6 +9,7 @@ from PIL import Image
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.services.datasets.captions import list_image_filenames
+from src.services.datasets.paths import dataset_image_dir
 from src.services.datasets.exceptions import DatasetNotFoundError
 from src.trainer.sdxl.buckets import assignment_from_stored, compute_add_time_ids
 
@@ -42,7 +43,7 @@ async def resolve_concept_training_metadata(
         if dataset.target_resolution is None:
             raise ValueError(f"Dataset with id={dataset_id} has no target_resolution")
         crops = await crop_repo.list_by_dataset(dataset_id)
-        image_dir = Path(dataset.image_dir)
+        image_dir = dataset_image_dir(dataset)
         disk_filenames = set(list_image_filenames(image_dir))
         by_filename: dict[str, ImageTrainingMeta] = {}
         resolution = dataset.target_resolution

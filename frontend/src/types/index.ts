@@ -131,8 +131,9 @@ export interface SweepManifestResponse {
 export interface Dataset {
   id: number;
   name: string;
-  image_dir: string;
-  caption_dir: string | null;
+  relative_path: string;
+  resolved_path: string;
+  path_missing: boolean;
   description: string | null;
   target_resolution: number | null;
   preprocess_ready: boolean;
@@ -147,7 +148,8 @@ export interface Dataset {
 
 export interface DatasetImages {
   dataset_id: number;
-  image_dir: string;
+  relative_path: string;
+  resolved_path: string;
   images: string[];
 }
 

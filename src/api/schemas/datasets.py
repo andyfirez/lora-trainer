@@ -3,20 +3,25 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DatasetCreate(BaseModel):
     name: str
-    image_dir: str
-    caption_dir: Optional[str] = None
+    relative_path: str
+    description: Optional[str] = None
+
+
+class DatasetImport(BaseModel):
+    name: str
+    source_dir: str
+    relative_path: str
     description: Optional[str] = None
 
 
 class DatasetUpdate(BaseModel):
     name: Optional[str] = None
-    image_dir: Optional[str] = None
-    caption_dir: Optional[str] = None
+    relative_path: Optional[str] = None
     description: Optional[str] = None
     target_resolution: Optional[int] = Field(default=None, ge=64, le=2048)
     enable_bucket: Optional[bool] = None
@@ -29,8 +34,9 @@ class DatasetUpdate(BaseModel):
 class DatasetResponse(BaseModel):
     id: int
     name: str
-    image_dir: str
-    caption_dir: Optional[str]
+    relative_path: str
+    resolved_path: str
+    path_missing: bool = False
     description: Optional[str]
     target_resolution: Optional[int]
     preprocess_ready: bool
@@ -43,6 +49,25 @@ class DatasetResponse(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_paths(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        from src.storage.paths import StoragePaths
+
+        relative_path = data.get("relative_path", "")
+        missing = not StoragePaths.dataset_dir_exists(relative_path)
+        resolved = ""
+        if not missing:
+            try:
+                resolved = str(StoragePaths.resolve_dataset_path(relative_path))
+            except (ValueError, OSError):
+                missing = True
+        data.setdefault("resolved_path", resolved)
+        data.setdefault("path_missing", missing)
+        return data
 
 
 class PreprocessStatusResponse(BaseModel):
@@ -96,7 +121,8 @@ class DuplicatesResponse(BaseModel):
 
 class DatasetImagesResponse(BaseModel):
     dataset_id: int
-    image_dir: str
+    relative_path: str
+    resolved_path: str
     images: list[str]
 
 

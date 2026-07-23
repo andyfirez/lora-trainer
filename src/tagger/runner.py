@@ -17,6 +17,7 @@ from src.services.datasets.captions import (
     write_tags,
 )
 from src.services.datasets.training_cache import invalidate_te_cache_for_image
+from src.services.datasets.paths import dataset_image_dir
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
 from src.services.worker.progress_loop import (
     start_progress_loop,
@@ -80,8 +81,16 @@ async def _load_job(job_id: int) -> Job:
         return job
 
 
-def _resolve_targets(config: TaggingConfig) -> list[str]:
-    image_dir = Path(config.image_dir)
+async def _resolve_image_dir(config: TaggingConfig) -> Path:
+    async with session_factory() as session:
+        repo = DatasetRepository(session)
+        dataset = await repo.get_by_id(config.dataset_id)
+        if dataset is None:
+            raise RuntimeError(f"Dataset id={config.dataset_id} not found")
+        return dataset_image_dir(dataset)
+
+
+def _resolve_targets(image_dir: Path, config: TaggingConfig) -> list[str]:
     if config.filenames:
         return list(config.filenames)
     return list_image_filenames(image_dir)
@@ -104,7 +113,8 @@ async def run_tagging_job(job_id: int) -> int:
     job = await _load_job(job_id)
     config = TaggingConfig.from_yaml(job.config_yaml)
     target_resolution = await _load_dataset_target_resolution(config.dataset_id)
-    targets = _resolve_targets(config)
+    image_dir = await _resolve_image_dir(config)
+    targets = _resolve_targets(image_dir, config)
     total = len(targets)
 
     if total == 0:
@@ -112,7 +122,6 @@ async def run_tagging_job(job_id: int) -> int:
         await _update_status(job_id, JobStatus.COMPLETED)
         return 0
 
-    image_dir = Path(config.image_dir)
     model_repo = config.resolve_model_repo()
     run_logger.info(
         "Starting tagging job id=%d: %d image(s), model=%s, mode=%s, threshold=%.2f",

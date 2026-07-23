@@ -18,6 +18,8 @@ from src.services.configs.versioning import (
     yaml_configs_equal,
 )
 from src.services.datasets.training_validation import validate_dataset_for_training
+from src.storage.config_paths import resolve_config_base_model
+from src.storage.paths import StoragePaths
 from src.trainer.config import (
     FORBIDDEN_DEPRECATED_CONCEPT_KEYS,
     FORBIDDEN_DEPRECATED_TRAIN_KEYS,
@@ -155,6 +157,16 @@ class JobConfigService:
             raise JobConfigValidationError(str(exc)) from exc
 
     async def _validate_training_config(self, config: TrainConfig) -> None:
+        if not config.base_model_name:
+            raise JobConfigValidationError("base_model_name is required")
+        try:
+            resolve_config_base_model(config.base_model_name)
+        except ValueError as exc:
+            raise JobConfigValidationError(str(exc)) from exc
+        try:
+            StoragePaths.resolve_lora_path(config.output_dir or "")
+        except ValueError as exc:
+            raise JobConfigValidationError(str(exc)) from exc
         await self._validate_training_concepts(config)
         sampling_active = config.sampling_enabled
         if config.sampling_enabled and not config.checkpointing_enabled:

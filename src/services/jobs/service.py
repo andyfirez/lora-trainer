@@ -163,7 +163,6 @@ class JobsService:
         *,
         dataset_id: int,
         dataset_name: str,
-        image_dir: str,
         mode: str = "if_empty",
         threshold: float = 0.35,
         model: str = "wd-v1-4-convnextv2-tagger-v2",
@@ -173,7 +172,6 @@ class JobsService:
     ) -> Job:
         config = TaggingConfig(
             dataset_id=dataset_id,
-            image_dir=image_dir,
             mode=TaggingMode(mode),
             threshold=threshold,
             model=model,

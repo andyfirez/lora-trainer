@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.tables.dataset import Dataset
-from src.services.datasets.captions import list_image_filenames
+from src.services.datasets.paths import dataset_image_dir, dataset_image_dir_str
 from src.services.datasets.formats import IMAGE_EXTENSIONS, PREPARED_EXTENSION
 from src.services.datasets.hashing import file_sha256
 from src.services.datasets.preprocess import (
@@ -117,7 +117,7 @@ async def reconcile_dataset_records(
 ) -> DatasetReconcileResult:
     """Sync crop records and prepared artifacts with files on disk."""
     result = DatasetReconcileResult()
-    image_dir = Path(dataset.image_dir)
+    image_dir = dataset_image_dir(dataset)
     if not image_dir.is_dir():
         return result
 
@@ -175,7 +175,7 @@ async def reconcile_dataset_records(
             crop.updated_at = now
             crop_repo._session.add(crop)
             _remove_prepared_artifacts_for_stem(
-                image_dir=dataset.image_dir,
+                image_dir=dataset_image_dir_str(dataset),
                 target_resolution=dataset.target_resolution,
                 stem=Path(old_filename).stem,
                 filename_hint=old_filename,

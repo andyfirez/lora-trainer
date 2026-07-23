@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { PlusCircle, Trash2, Image as ImageIcon } from "lucide-react";
 import PathInput from "@/components/PathInput";
+import StoragePathInput from "@/components/StoragePathInput";
 import { datasetsApi } from "@/lib/api/datasets";
 import type { Dataset } from "@/types";
 import PageHeader from "@/components/ui/PageHeader";
@@ -13,22 +14,29 @@ import Card from "@/components/ui/Card";
 import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Badge from "@/components/ui/Badge";
+import Tabs from "@/components/ui/Tabs";
 
 function CreateDatasetModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [mode, setMode] = useState<"register" | "import">("register");
   const [name, setName] = useState("");
-  const [imageDir, setImageDir] = useState("");
+  const [relativePath, setRelativePath] = useState("");
+  const [sourceDir, setSourceDir] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !imageDir) {
-      setError("Name and image directory are required");
+    if (!name || !relativePath || (mode === "import" && !sourceDir)) {
+      setError("Fill in all required fields");
       return;
     }
     setSaving(true);
     try {
-      await datasetsApi.create({ name, image_dir: imageDir });
+      if (mode === "import") {
+        await datasetsApi.import({ name, source_dir: sourceDir, relative_path: relativePath });
+      } else {
+        await datasetsApi.create({ name, relative_path: relativePath });
+      }
       onCreated();
       onClose();
     } catch (err: unknown) {
@@ -42,26 +50,44 @@ function CreateDatasetModal({ onClose, onCreated }: { onClose: () => void; onCre
     <Modal open title="Add Dataset" onClose={onClose}>
       {error && <ModalError>{error}</ModalError>}
       <form onSubmit={handleSubmit} className="space-y-3">
+        <Tabs
+          tabs={[
+            { value: "register", label: "Existing folder" },
+            { value: "import", label: "Import & copy" },
+          ]}
+          value={mode}
+          onChange={setMode}
+        />
         <Input
           label="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="my-dataset"
         />
-        <PathInput
-          label="Image Directory"
-          value={imageDir}
-          onChange={setImageDir}
-          placeholder="/path/to/images"
-          pickerTitle="Select Image Directory"
-          kind="directory"
+        <StoragePathInput
+          label="Path inside datasets root"
+          value={relativePath}
+          onChange={setRelativePath}
+          kind="datasets"
+          placeholder="anime/girl_01"
+          hint={mode === "register" ? "Folder must already exist under datasets root" : "Destination path for copied files"}
         />
+        {mode === "import" && (
+          <PathInput
+            label="Source folder (external)"
+            value={sourceDir}
+            onChange={setSourceDir}
+            placeholder="/path/to/source"
+            pickerTitle="Select folder to import"
+            kind="directory"
+          />
+        )}
         <ModalFooter>
           <Button variant="secondary" onClick={onClose} className="flex-1">
             Cancel
           </Button>
           <Button type="submit" disabled={saving} className="flex-1">
-            {saving ? "Adding…" : "Add Dataset"}
+            {saving ? "Adding…" : mode === "import" ? "Import" : "Add Dataset"}
           </Button>
         </ModalFooter>
       </form>
@@ -80,7 +106,7 @@ function DatasetCard({ dataset, onDelete }: { dataset: Dataset; onDelete: () => 
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-semibold text-text">{dataset.name}</div>
-          <div className="text-xs text-muted mt-0.5 break-all">{dataset.image_dir}</div>
+          <div className="text-xs text-muted mt-0.5 break-all">{dataset.relative_path}</div>
           <div className="flex flex-wrap gap-2 mt-2">
             {dataset.target_resolution != null && (
               <Badge>{dataset.target_resolution}px</Badge>
@@ -138,7 +164,7 @@ export default function DatasetsPage() {
         <div className="text-muted">Loading…</div>
       ) : !datasets?.length ? (
         <Card className="text-center py-20 text-muted">
-          No datasets yet. Add one to get started.
+          No datasets yet. Add one or place images under the datasets root to auto-discover.
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -148,9 +174,7 @@ export default function DatasetsPage() {
         </div>
       )}
 
-      {showCreate && (
-        <CreateDatasetModal onClose={() => setShowCreate(false)} onCreated={() => mutate()} />
-      )}
+      {showCreate && <CreateDatasetModal onClose={() => setShowCreate(false)} onCreated={() => mutate()} />}
     </div>
   );
 }
