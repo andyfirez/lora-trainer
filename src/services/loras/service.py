@@ -8,13 +8,17 @@ from src.db.repositories.trained_lora_repo import TrainedLoraRepository
 from src.db.tables.job import Job, JobStatus, JobType
 from src.db.tables.trained_lora import TrainedLora
 from src.services.loras.discovery import LoraDiscoveryService
-from src.services.loras.exceptions import TrainedLoraNotFoundError, TrainedLoraReproduceError
+from src.services.loras.exceptions import (
+    TrainedLoraNotFoundError,
+    TrainedLoraReproduceError,
+)
 from src.services.loras.paths import (
     assign_unique_training_job_yaml,
     lora_artifacts_exist,
     resolve_trained_lora_paths,
     resolve_work_dir,
 )
+from src.services.loras.relocation import find_relocated_lora
 from src.storage.paths import StorageKind, StoragePaths
 
 
@@ -29,7 +33,6 @@ class TrainedLoraService:
 
     async def _link_jobs_to_loras(self) -> None:
         from sqlmodel import select
-
         from src.db.tables.job import Job
 
         result = await self._lora_repo._exec(
@@ -93,16 +96,38 @@ class TrainedLoraService:
 
     async def _sync_discovered_loras(self) -> None:
         discovered = LoraDiscoveryService().discover_lora_work_dirs()
+        all_loras = list(await self._lora_repo.list_all())
         existing_paths: set[str] = set()
-        for lora in await self._lora_repo.list_all():
+        for lora in all_loras:
             existing_paths.add(lora.relative_path)
             canonical = StoragePaths.to_relative(StorageKind.LORA, lora.relative_path)
             if canonical is not None:
                 existing_paths.add(canonical)
 
+        stale_loras = [lora for lora in all_loras if not lora_artifacts_exist(lora)]
+        changed = False
+
         for item in discovered:
             if item.relative_path in existing_paths:
                 continue
+
+            relocated = find_relocated_lora(stale_loras, item)
+            if relocated is not None:
+                relocated.relative_path = item.relative_path
+                relocated.weights_relpath = item.weights_relpath
+                self._lora_repo._session.add(relocated)
+                if relocated.job_id is not None:
+                    job = await self._job_repo.get_by_id(relocated.job_id)
+                    if job is not None:
+                        job.output_path = str(
+                            StoragePaths.resolve(StorageKind.LORA, item.relative_path)
+                        )
+                        self._job_repo._session.add(job)
+                stale_loras.remove(relocated)
+                existing_paths.add(item.relative_path)
+                changed = True
+                continue
+
             name = item.name
             candidate = name
             suffix = 2
@@ -118,6 +143,9 @@ class TrainedLoraService:
                 )
             )
             existing_paths.add(item.relative_path)
+
+        if changed:
+            await self._lora_repo._session.flush()
 
     async def create_from_completed_job(self, job: Job) -> TrainedLora | None:
         if job.id is None or job.job_type != JobType.TRAINING or job.status != JobStatus.COMPLETED:

@@ -40,6 +40,8 @@ from src.services.datasets.exceptions import (
 )
 from src.services.datasets.formats import IMAGE_EXTENSIONS
 from src.services.datasets.hashing import file_sha256
+from src.services.datasets.import_dataset import copy_dataset_import
+from src.services.datasets.paths import dataset_image_dir, dataset_image_dir_str
 from src.services.datasets.preprocess import (
     BucketPreprocessConfig,
     CropMeta,
@@ -61,12 +63,11 @@ from src.services.datasets.preprocess import (
     source_mtime,
     validate_target_resolution,
 )
-from src.services.datasets.paths import dataset_image_dir, dataset_image_dir_str
-from src.services.datasets.import_dataset import copy_dataset_import
 from src.services.datasets.reconcile import (
     DatasetReconcileResult,
     reconcile_dataset_records,
 )
+from src.services.datasets.relocation import find_relocated_dataset
 from src.services.datasets.training_cache import invalidate_te_cache_for_image
 from src.services.storage.browse import StorageBrowseService
 from src.storage.paths import StorageKind, StoragePaths
@@ -99,15 +100,50 @@ class DatasetsService:
     async def _sync_discovered_datasets(self) -> None:
         browse = StorageBrowseService()
         discovered = browse.discover_dataset_folders()
+        all_datasets = list(await self._repo.get_all())
         existing_paths: set[str] = set()
-        for dataset in await self._repo.get_all():
+        for dataset in all_datasets:
             existing_paths.add(dataset.relative_path)
             canonical = StoragePaths.to_relative(StorageKind.DATASETS, dataset.relative_path)
             if canonical is not None:
                 existing_paths.add(canonical)
+
+        stale_datasets = [
+            dataset
+            for dataset in all_datasets
+            if not StoragePaths.dataset_dir_exists(dataset.relative_path)
+        ]
+        crop_filenames_by_dataset_id: dict[int, frozenset[str]] = {}
+        for dataset in stale_datasets:
+            if dataset.id is None:
+                continue
+            crops = await self._crop_repo.list_by_dataset(dataset.id)
+            if crops:
+                crop_filenames_by_dataset_id[dataset.id] = frozenset(
+                    crop.filename for crop in crops
+                )
+
+        changed = False
         for relative_path in discovered:
             if relative_path in existing_paths:
                 continue
+
+            disk_path = StoragePaths.resolve(StorageKind.DATASETS, relative_path)
+            disk_image_filenames = frozenset(list_image_filenames(disk_path))
+            relocated = find_relocated_dataset(
+                stale_datasets,
+                relative_path,
+                disk_image_filenames=disk_image_filenames,
+                crop_filenames_by_dataset_id=crop_filenames_by_dataset_id,
+            )
+            if relocated is not None:
+                relocated.relative_path = relative_path
+                self._repo._session.add(relocated)
+                stale_datasets.remove(relocated)
+                existing_paths.add(relative_path)
+                changed = True
+                continue
+
             name = _slug_from_relative_path(relative_path)
             candidate = name
             suffix = 1
@@ -115,6 +151,9 @@ class DatasetsService:
                 suffix += 1
                 candidate = f"{name}-{suffix}"
             await self._repo.add(Dataset(name=candidate, relative_path=relative_path))
+
+        if changed:
+            await self._repo._session.flush()
 
     async def get_dataset(self, dataset_id: int) -> Dataset:
         dataset = await self._repo.get_by_id(dataset_id)

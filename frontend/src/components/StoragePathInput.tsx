@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight, FolderOpen, Loader2 } from "lucide-react";
+import { FolderOpen, Loader2 } from "lucide-react";
 import FieldHint from "@/components/FieldHint";
+import StorageBreadcrumbs from "@/components/storage/StorageBreadcrumbs";
 import Modal, { ModalFooter } from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
@@ -90,23 +91,11 @@ export default function StoragePathInput({
       <Modal open={open} title={`Browse ${kind.replace("_", " ")}`} onClose={() => setOpen(false)}>
         <div className="space-y-3">
           <p className="text-xs text-muted break-all">Root: {root || "…"}</p>
-          <div className="flex items-center gap-1 text-sm text-muted">
-            <button type="button" className="hover:text-text" onClick={() => void loadEntries("")}>
-              /
-            </button>
-            {currentPath &&
-              currentPath.split("/").map((part, index, parts) => {
-                const path = parts.slice(0, index + 1).join("/");
-                return (
-                  <span key={path} className="flex items-center gap-1">
-                    <ChevronRight size={12} />
-                    <button type="button" className="hover:text-text" onClick={() => void loadEntries(path)}>
-                      {part}
-                    </button>
-                  </span>
-                );
-              })}
-          </div>
+          <StorageBreadcrumbs
+            currentPath={currentPath}
+            onNavigate={(path) => void loadEntries(path)}
+            rootLabel="Root"
+          />
           {loading ? (
             <div className="flex items-center gap-2 text-muted py-6 justify-center">
               <Loader2 size={16} className="animate-spin" />
