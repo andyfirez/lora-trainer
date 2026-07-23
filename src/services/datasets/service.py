@@ -40,6 +40,8 @@ from src.services.datasets.exceptions import (
 )
 from src.services.datasets.formats import IMAGE_EXTENSIONS
 from src.services.datasets.hashing import file_sha256
+from src.services.datasets.import_dataset import copy_dataset_import
+from src.services.datasets.paths import dataset_image_dir, dataset_image_dir_str
 from src.services.datasets.preprocess import (
     BucketPreprocessConfig,
     CropMeta,
@@ -65,7 +67,15 @@ from src.services.datasets.reconcile import (
     DatasetReconcileResult,
     reconcile_dataset_records,
 )
+from src.services.datasets.relocation import find_relocated_dataset
 from src.services.datasets.training_cache import invalidate_te_cache_for_image
+from src.services.storage.browse import StorageBrowseService
+from src.storage.paths import StorageKind, StoragePaths
+
+
+def _slug_from_relative_path(relative_path: str) -> str:
+    name = Path(relative_path).name
+    return name or relative_path.replace("/", "-").replace("\\", "-") or "dataset"
 
 
 class DatasetsService:
@@ -78,35 +88,113 @@ class DatasetsService:
         self._crop_repo = crop_repo
 
     async def list_datasets(self) -> Sequence[Dataset]:
-        return await self._repo.get_all()
+        StoragePaths.ensure_root(StorageKind.DATASETS)
+        await self._sync_discovered_datasets()
+        datasets = await self._repo.get_all()
+        visible: list[Dataset] = []
+        for dataset in datasets:
+            if StoragePaths.dataset_dir_exists(dataset.relative_path):
+                visible.append(dataset)
+        return visible
+
+    async def _sync_discovered_datasets(self) -> None:
+        browse = StorageBrowseService()
+        discovered = browse.discover_dataset_folders()
+        all_datasets = list(await self._repo.get_all())
+        existing_paths: set[str] = set()
+        for dataset in all_datasets:
+            existing_paths.add(dataset.relative_path)
+            canonical = StoragePaths.to_relative(StorageKind.DATASETS, dataset.relative_path)
+            if canonical is not None:
+                existing_paths.add(canonical)
+
+        stale_datasets = [
+            dataset
+            for dataset in all_datasets
+            if not StoragePaths.dataset_dir_exists(dataset.relative_path)
+        ]
+        crop_filenames_by_dataset_id: dict[int, frozenset[str]] = {}
+        for dataset in stale_datasets:
+            if dataset.id is None:
+                continue
+            crops = await self._crop_repo.list_by_dataset(dataset.id)
+            if crops:
+                crop_filenames_by_dataset_id[dataset.id] = frozenset(
+                    crop.filename for crop in crops
+                )
+
+        changed = False
+        for relative_path in discovered:
+            if relative_path in existing_paths:
+                continue
+
+            disk_path = StoragePaths.resolve(StorageKind.DATASETS, relative_path)
+            disk_image_filenames = frozenset(list_image_filenames(disk_path))
+            relocated = find_relocated_dataset(
+                stale_datasets,
+                relative_path,
+                disk_image_filenames=disk_image_filenames,
+                crop_filenames_by_dataset_id=crop_filenames_by_dataset_id,
+            )
+            if relocated is not None:
+                relocated.relative_path = relative_path
+                self._repo._session.add(relocated)
+                stale_datasets.remove(relocated)
+                existing_paths.add(relative_path)
+                changed = True
+                continue
+
+            name = _slug_from_relative_path(relative_path)
+            candidate = name
+            suffix = 1
+            while await self._repo.get_by_name(candidate) is not None:
+                suffix += 1
+                candidate = f"{name}-{suffix}"
+            await self._repo.add(Dataset(name=candidate, relative_path=relative_path))
+
+        if changed:
+            await self._repo._session.flush()
 
     async def get_dataset(self, dataset_id: int) -> Dataset:
         dataset = await self._repo.get_by_id(dataset_id)
         if dataset is None:
             raise DatasetNotFoundError(dataset_id)
+        if not StoragePaths.dataset_dir_exists(dataset.relative_path):
+            raise DatasetDirectoryNotFoundError(dataset.relative_path)
         return dataset
 
     async def create_dataset(
         self,
         name: str,
-        image_dir: str,
-        caption_dir: Optional[str] = None,
+        relative_path: str,
         description: Optional[str] = None,
     ) -> Dataset:
-        if not Path(image_dir).is_dir():
-            raise DatasetDirectoryNotFoundError(image_dir)
+        validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, relative_path)
+        if not StoragePaths.dataset_dir_exists(validated):
+            raise DatasetDirectoryNotFoundError(validated)
         existing = await self._repo.get_by_name(name)
         if existing is not None:
             raise DatasetNameConflictError(name)
-        dataset = Dataset(name=name, image_dir=image_dir, caption_dir=caption_dir, description=description)
+        dataset = Dataset(name=name, relative_path=validated, description=description)
         return await self._repo.add(dataset)
+
+    async def import_dataset(
+        self,
+        *,
+        name: str,
+        source_dir: str,
+        relative_path: str,
+        description: Optional[str] = None,
+    ) -> Dataset:
+        validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, relative_path)
+        copy_dataset_import(Path(source_dir), validated)
+        return await self.create_dataset(name=name, relative_path=validated, description=description)
 
     async def update_dataset(
         self,
         dataset_id: int,
         name: Optional[str],
-        image_dir: Optional[str],
-        caption_dir: Optional[str],
+        relative_path: Optional[str],
         description: Optional[str],
         target_resolution: Optional[int] = None,
         *,
@@ -124,15 +212,14 @@ class DatasetsService:
             if existing is not None:
                 raise DatasetNameConflictError(name)
             dataset.name = name
-        if image_dir is not None:
-            if not Path(image_dir).is_dir():
-                raise DatasetDirectoryNotFoundError(image_dir)
-            if image_dir != dataset.image_dir:
-                dataset.image_dir = image_dir
+        if relative_path is not None:
+            validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, relative_path)
+            if not StoragePaths.dataset_dir_exists(validated):
+                raise DatasetDirectoryNotFoundError(validated)
+            if validated != dataset.relative_path:
+                dataset.relative_path = validated
                 dataset.preprocess_ready = False
                 await self._crop_repo.delete_by_dataset(dataset_id)
-        if caption_dir is not None:
-            dataset.caption_dir = caption_dir
         if description is not None:
             dataset.description = description
         if update_target_resolution:
@@ -173,14 +260,14 @@ class DatasetsService:
         await self._repo.delete(dataset)
 
     def list_images(self, dataset: Dataset) -> list[str]:
-        return list_image_filenames(Path(dataset.image_dir))
+        return list_image_filenames(Path(dataset_image_dir(dataset)))
 
     def list_items(
         self,
         dataset: Dataset,
         caption_extension: str = DEFAULT_CAPTION_EXTENSION,
     ) -> list[DatasetItem]:
-        return list_dataset_items(Path(dataset.image_dir), caption_extension)
+        return list_dataset_items(Path(dataset_image_dir(dataset)), caption_extension)
 
     def get_tags(
         self,
@@ -193,13 +280,13 @@ class DatasetsService:
         except ValueError as exc:
             raise InvalidDatasetFilenameError(filename) from exc
         try:
-            return read_tags(Path(dataset.image_dir), filename, caption_extension)
+            return read_tags(Path(dataset_image_dir(dataset)), filename, caption_extension)
         except FileNotFoundError as exc:
             raise DatasetImageNotFoundError(filename) from exc
 
     def _invalidate_te_cache(self, dataset: Dataset, filename: str) -> None:
         invalidate_te_cache_for_image(
-            dataset.image_dir,
+            dataset_image_dir_str(dataset),
             filename,
             dataset.target_resolution,
         )
@@ -217,7 +304,7 @@ class DatasetsService:
             raise InvalidDatasetFilenameError(filename) from exc
         normalized = parse_tags(", ".join(tags))
         try:
-            write_tags(Path(dataset.image_dir), filename, normalized, caption_extension)
+            write_tags(Path(dataset_image_dir(dataset)), filename, normalized, caption_extension)
         except FileNotFoundError as exc:
             raise DatasetImageNotFoundError(filename) from exc
         self._invalidate_te_cache(dataset, filename)
@@ -228,7 +315,7 @@ class DatasetsService:
         dataset: Dataset,
         caption_extension: str = DEFAULT_CAPTION_EXTENSION,
     ) -> list[TagStat]:
-        return collect_tag_stats(Path(dataset.image_dir), caption_extension)
+        return collect_tag_stats(Path(dataset_image_dir(dataset)), caption_extension)
 
     def bulk_add_tag(
         self,
@@ -240,7 +327,7 @@ class DatasetsService:
         normalized_tag = tag.strip()
         if not normalized_tag:
             return 0
-        image_dir = Path(dataset.image_dir)
+        image_dir = Path(dataset_image_dir(dataset))
         targets = filenames if filenames else list_image_filenames(image_dir)
         updated = 0
         for filename in targets:
@@ -268,7 +355,7 @@ class DatasetsService:
         normalized_tag = tag.strip()
         if not normalized_tag:
             return 0
-        image_dir = Path(dataset.image_dir)
+        image_dir = Path(dataset_image_dir(dataset))
         targets = filenames if filenames else list_image_filenames(image_dir)
         updated = 0
         for filename in targets:
@@ -299,7 +386,7 @@ class DatasetsService:
     ) -> tuple[bytes, str]:
         try:
             safe_filename(filename)
-            path = image_path(Path(dataset.image_dir), filename)
+            path = image_path(Path(dataset_image_dir(dataset)), filename)
         except ValueError as exc:
             raise InvalidDatasetFilenameError(filename) from exc
         except FileNotFoundError as exc:
@@ -322,7 +409,7 @@ class DatasetsService:
     def _resolve_prepared_path(self, dataset: Dataset, filename: str) -> Path:
         if dataset.target_resolution is None:
             raise DatasetTargetResolutionNotSetError(dataset.id)  # type: ignore[arg-type]
-        prepared_dir = prepared_dir_path(dataset.image_dir, dataset.target_resolution)
+        prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), dataset.target_resolution)
         path = resolve_prepared_path(prepared_dir, filename)
         if path is None:
             raise DatasetImageNotFoundError(filename)
@@ -383,7 +470,7 @@ class DatasetsService:
     async def _invalidate_prepared_outputs(self, dataset: Dataset) -> None:
         if dataset.target_resolution is None:
             return
-        prepared_dir = prepared_dir_path(dataset.image_dir, dataset.target_resolution)
+        prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), dataset.target_resolution)
         if not prepared_dir.is_dir():
             return
         for path in prepared_dir.iterdir():
@@ -497,7 +584,7 @@ class DatasetsService:
         if crop is None:
             raise DatasetPreprocessError(f"No crop defined for {filename}")
         path = self._resolve_image_path(dataset, filename)
-        prepared_dir = prepared_dir_path(dataset.image_dir, bucket_config.resolution)
+        prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), bucket_config.resolution)
         stored = self._stored_crop_record(crop)
         prepared_path, assignment = bake_image_to_prepared(
             source_path=path,
@@ -558,8 +645,8 @@ class DatasetsService:
     async def bake_all(self, dataset: Dataset, filenames: list[str] | None = None) -> int:
         await self.reconcile_dataset(dataset)
         bucket_config = self._require_bucket_config(dataset)
-        all_filenames = filenames if filenames else list_image_filenames(Path(dataset.image_dir))
-        image_dir = Path(dataset.image_dir)
+        all_filenames = filenames if filenames else list_image_filenames(Path(dataset_image_dir(dataset)))
+        image_dir = Path(dataset_image_dir(dataset))
         baked = 0
         errors: list[str] = []
         for filename in all_filenames:
@@ -600,7 +687,7 @@ class DatasetsService:
     def _resolve_image_path(self, dataset: Dataset, filename: str) -> Path:
         try:
             safe_filename(filename)
-            return image_path(Path(dataset.image_dir), filename)
+            return image_path(Path(dataset_image_dir(dataset)), filename)
         except ValueError as exc:
             raise InvalidDatasetFilenameError(filename) from exc
         except FileNotFoundError as exc:
@@ -649,7 +736,7 @@ class DatasetsService:
         ).state
 
     def scan_duplicates(self, dataset: Dataset) -> DuplicateScanResult:
-        return scan_duplicates(Path(dataset.image_dir))
+        return scan_duplicates(Path(dataset_image_dir(dataset)))
 
     async def remove_duplicates(
         self,
@@ -674,20 +761,20 @@ class DatasetsService:
     ) -> None:
         try:
             safe_filename(filename)
-            image_path(Path(dataset.image_dir), filename)
+            image_path(Path(dataset_image_dir(dataset)), filename)
         except ValueError as exc:
             raise InvalidDatasetFilenameError(filename) from exc
         except FileNotFoundError as exc:
             raise DatasetImageNotFoundError(filename) from exc
 
-        remove_duplicate_files(Path(dataset.image_dir), [filename], caption_extension)
+        remove_duplicate_files(Path(dataset_image_dir(dataset)), [filename], caption_extension)
         await self._purge_image_artifacts(dataset, filename)
         await self._update_preprocess_ready_flag(dataset)
 
     def _remove_prepared_for_image(self, dataset: Dataset, filename: str) -> None:
         if dataset.target_resolution is None:
             return
-        prepared_dir = prepared_dir_path(dataset.image_dir, dataset.target_resolution)
+        prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), dataset.target_resolution)
         prepared_path = resolve_prepared_path(prepared_dir, filename)
         if prepared_path is None or not prepared_path.is_file():
             return

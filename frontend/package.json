@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:unit": "node scripts/validate-parameter-metadata.mjs && node --experimental-strip-types --test src/lib/progressTiming.test.ts"
+    "test:unit": "node scripts/validate-parameter-metadata.mjs && node --experimental-strip-types --test src/lib/progressTiming.test.ts src/lib/storagePaths.test.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

@@ -15,6 +15,8 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from pathlib import Path
 from typing import Any
 
+from src.storage.paths import StoragePaths
+
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_repo import JobRepository
@@ -251,7 +253,8 @@ async def _run(job_id: int) -> None:
     if config.logging.log_dir:
         training_logger.logger.info("TensorBoard log dir: %s", tensorboard_dir)
     await _set_log_path(job_id, str(log_path))
-    await _set_output_path(job_id, str(Path(config.output_dir) / config.lora_name))
+    work_dir = StoragePaths.resolve_training_work_dir(config.output_dir, config.lora_name)
+    await _set_output_path(job_id, str(work_dir))
     if not is_resume_run:
         await _clear_resume_state(job_id)
     training_logger.logger.info(

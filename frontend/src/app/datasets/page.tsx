@@ -1,45 +1,59 @@
 "use client";
 
 import useSWR from "swr";
-import Link from "next/link";
-import { useState } from "react";
-import { PlusCircle, Trash2, Image as ImageIcon } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useState } from "react";
+import { PlusCircle } from "lucide-react";
 import PathInput from "@/components/PathInput";
+import StorageFolderBrowser from "@/components/storage/StorageFolderBrowser";
+import DatasetFolderItem from "@/components/dataset/DatasetFolderItem";
 import { datasetsApi } from "@/lib/api/datasets";
-import type { Dataset } from "@/types";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
-import Badge from "@/components/ui/Badge";
+import { joinRelativePath, normalizeRelativePath } from "@/lib/storagePaths";
 
-function CreateDatasetModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function ImportDatasetModal({
+  parentPath,
+  onClose,
+  onCreated,
+}: {
+  parentPath: string;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const [name, setName] = useState("");
-  const [imageDir, setImageDir] = useState("");
+  const [sourceDir, setSourceDir] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const importPath = name ? joinRelativePath(parentPath, name) : "";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !imageDir) {
-      setError("Name and image directory are required");
+    if (!name || !sourceDir) {
+      setError("Fill in all required fields");
       return;
     }
     setSaving(true);
     try {
-      await datasetsApi.create({ name, image_dir: imageDir });
+      await datasetsApi.import({
+        name,
+        source_dir: sourceDir,
+        relative_path: joinRelativePath(parentPath, name),
+      });
       onCreated();
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Error creating dataset");
+      setError(err instanceof Error ? err.message : "Error importing dataset");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal open title="Add Dataset" onClose={onClose}>
+    <Modal open title="Import Dataset" onClose={onClose}>
       {error && <ModalError>{error}</ModalError>}
       <form onSubmit={handleSubmit} className="space-y-3">
         <Input
@@ -48,12 +62,17 @@ function CreateDatasetModal({ onClose, onCreated }: { onClose: () => void; onCre
           onChange={(e) => setName(e.target.value)}
           placeholder="my-dataset"
         />
+        {importPath ? (
+          <p className="text-xs text-muted">Will import to: {importPath}</p>
+        ) : (
+          <p className="text-xs text-muted">Enter a name to see the import destination.</p>
+        )}
         <PathInput
-          label="Image Directory"
-          value={imageDir}
-          onChange={setImageDir}
-          placeholder="/path/to/images"
-          pickerTitle="Select Image Directory"
+          label="Source folder (external)"
+          value={sourceDir}
+          onChange={setSourceDir}
+          placeholder="/path/to/source"
+          pickerTitle="Select folder to import"
           kind="directory"
         />
         <ModalFooter>
@@ -61,7 +80,7 @@ function CreateDatasetModal({ onClose, onCreated }: { onClose: () => void; onCre
             Cancel
           </Button>
           <Button type="submit" disabled={saving} className="flex-1">
-            {saving ? "Adding…" : "Add Dataset"}
+            {saving ? "Importing…" : "Import"}
           </Button>
         </ModalFooter>
       </form>
@@ -69,51 +88,44 @@ function CreateDatasetModal({ onClose, onCreated }: { onClose: () => void; onCre
   );
 }
 
-function DatasetCard({ dataset, onDelete }: { dataset: Dataset; onDelete: () => void }) {
-  const { data: images } = useSWR(`/datasets/${dataset.id}/images`, () => datasetsApi.listImages(dataset.id));
-
-  return (
-    <Link
-      href={`/datasets/${dataset.id}`}
-      className="block rounded-xl border border-border bg-surface p-5 space-y-3 hover:border-accent transition-colors shadow-sm"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="font-semibold text-text">{dataset.name}</div>
-          <div className="text-xs text-muted mt-0.5 break-all">{dataset.image_dir}</div>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {dataset.target_resolution != null && (
-              <Badge>{dataset.target_resolution}px</Badge>
-            )}
-            <Badge variant={dataset.preprocess_ready ? "success" : "warning"}>
-              {dataset.preprocess_ready ? "Ready" : "Not prepared"}
-            </Badge>
-          </div>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={(event) => {
-            event.preventDefault();
-            onDelete();
-          }}
-          className="text-error hover:text-error shrink-0"
-          aria-label="Delete dataset"
-        >
-          <Trash2 size={14} />
-        </Button>
-      </div>
-      <div className="flex items-center gap-2 text-sm text-muted">
-        <ImageIcon size={14} />
-        <span>{images?.images.length ?? "…"} images</span>
-      </div>
-    </Link>
-  );
-}
-
-export default function DatasetsPage() {
+function DatasetsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentPath = normalizeRelativePath(searchParams.get("path") ?? "");
   const { data: datasets, isLoading, mutate } = useSWR("/datasets", () => datasetsApi.list());
-  const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+
+  const navigateToPath = useCallback(
+    (path: string, replace = false) => {
+      const normalized = normalizeRelativePath(path);
+      const params = new URLSearchParams(searchParams.toString());
+      if (normalized) {
+        params.set("path", normalized);
+      } else {
+        params.delete("path");
+      }
+      const query = params.toString();
+      const href = query ? `/datasets?${query}` : "/datasets";
+      if (replace) {
+        router.replace(href);
+      } else {
+        router.push(href);
+      }
+    },
+    [router, searchParams]
+  );
+
+  const handleNavigate = useCallback(
+    (path: string) => {
+      const normalized = normalizeRelativePath(path);
+      const current = normalizeRelativePath(currentPath);
+      const isBack =
+        normalized === "" ||
+        (current.startsWith(`${normalized}/`) && normalized.split("/").length < current.split("/").length);
+      navigateToPath(path, isBack);
+    },
+    [currentPath, navigateToPath]
+  );
 
   const handleDelete = async (id: number, name: string) => {
     if (!confirm(`Delete dataset "${name}"?`)) return;
@@ -127,30 +139,40 @@ export default function DatasetsPage() {
         title="Datasets"
         description="Manage your training image datasets and tags"
         actions={
-          <Button onClick={() => setShowCreate(true)}>
+          <Button onClick={() => setShowImport(true)}>
             <PlusCircle size={15} />
-            Add Dataset
+            Import Dataset
           </Button>
         }
       />
 
-      {isLoading ? (
-        <div className="text-muted">Loading…</div>
-      ) : !datasets?.length ? (
-        <Card className="text-center py-20 text-muted">
-          No datasets yet. Add one to get started.
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {datasets.map((d) => (
-            <DatasetCard key={d.id} dataset={d} onDelete={() => handleDelete(d.id, d.name)} />
-          ))}
-        </div>
-      )}
+      <StorageFolderBrowser
+        kind="datasets"
+        items={datasets ?? []}
+        currentPath={currentPath}
+        onNavigate={handleNavigate}
+        catalogLoading={isLoading}
+        emptyHint="Import a dataset or place images under the datasets root to auto-discover."
+        renderItem={(dataset) => (
+          <DatasetFolderItem dataset={dataset} onDelete={() => void handleDelete(dataset.id, dataset.name)} />
+        )}
+      />
 
-      {showCreate && (
-        <CreateDatasetModal onClose={() => setShowCreate(false)} onCreated={() => mutate()} />
+      {showImport && (
+        <ImportDatasetModal
+          parentPath={currentPath}
+          onClose={() => setShowImport(false)}
+          onCreated={() => mutate()}
+        />
       )}
     </div>
+  );
+}
+
+export default function DatasetsPage() {
+  return (
+    <Suspense fallback={<div className="text-muted py-20">Loading…</div>}>
+      <DatasetsPageContent />
+    </Suspense>
   );
 }

@@ -23,6 +23,8 @@ from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
 )
+from src.storage.config_paths import resolve_config_lora_file
+from src.storage.paths import StoragePaths
 from src.trainer.config import TrainConfig
 
 
@@ -43,7 +45,7 @@ def validate_sample_prompts(config: SamplingConfig) -> None:
 
 def validate_lora_paths(lora_paths: list[str]) -> None:
     for lora_path in lora_paths:
-        path = Path(lora_path)
+        path = resolve_config_lora_file(lora_path)
         if not path.is_file():
             raise SamplingLoRAPathNotFoundError(lora_path)
 
@@ -127,7 +129,7 @@ def prepare_sampling_config_lora_paths(
 
 
 def find_intermediate_checkpoints(config: TrainConfig) -> list[Path]:
-    work_dir = Path(config.output_dir) / config.lora_name
+    work_dir = StoragePaths.resolve_training_work_dir(config.output_dir, config.lora_name)
     ext = config.output_format.value
     epoch_paths = list(work_dir.glob(f"{config.lora_name}_epoch*.{ext}"))
     step_paths = list(work_dir.glob(f"{config.lora_name}_step*.{ext}"))

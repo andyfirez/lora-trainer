@@ -82,7 +82,7 @@ def _write_state_file(work_dir: Path, checkpoint_name: str) -> Path:
 
 
 def test_prune_stale_resume_states_keeps_latest_only(tmp_path: Path) -> None:
-    work_dir = tmp_path / "lora"
+    work_dir = tmp_path / "work"
     work_dir.mkdir()
     kept = _write_state_file(work_dir, "lora_epoch1.safetensors")
     stale = _write_state_file(work_dir, "lora_epoch2.safetensors")
@@ -96,7 +96,7 @@ def test_prune_stale_resume_states_keeps_latest_only(tmp_path: Path) -> None:
 
 
 def test_delete_all_resume_states_preserves_checkpoints(tmp_path: Path) -> None:
-    work_dir = tmp_path / "lora"
+    work_dir = tmp_path / "work"
     work_dir.mkdir()
     checkpoint_one = work_dir / "lora_epoch1.safetensors"
     checkpoint_two = work_dir / "lora_epoch2.safetensors"
@@ -113,7 +113,7 @@ def test_delete_all_resume_states_preserves_checkpoints(tmp_path: Path) -> None:
 
 
 def test_save_resume_state_then_prune_allows_resume(tmp_path: Path) -> None:
-    work_dir = tmp_path / "lora"
+    work_dir = tmp_path / "work"
     work_dir.mkdir()
     first_checkpoint = work_dir / "lora_epoch1.safetensors"
     second_checkpoint = work_dir / "lora_epoch2.safetensors"

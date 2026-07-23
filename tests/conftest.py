@@ -2,6 +2,7 @@
 
 from collections.abc import Awaitable, Callable
 
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
@@ -20,6 +21,7 @@ from src.services.configs.service import JobConfigService
 from src.services.datasets.service import DatasetsService
 from src.services.jobs.service import JobsService
 from src.services.loras.service import TrainedLoraService
+from src.settings.app_settings import settings
 
 
 def _write_square_image(path, size: int = 1024) -> None:
@@ -28,14 +30,40 @@ def _write_square_image(path, size: int = 1024) -> None:
     Image.new("RGB", (size, size), (100, 100, 100)).save(path)
 
 
-async def _prepare_dataset(datasets_service: DatasetsService, image_dir, name: str = "test-dataset") -> Dataset:
+@pytest.fixture(autouse=True)
+def storage_roots(tmp_path):
+    datasets = tmp_path / "datasets"
+    base_models = tmp_path / "base-models"
+    lora = tmp_path / "lora"
+    for path in (datasets, base_models, lora):
+        path.mkdir()
+    (base_models / "test-model").mkdir()
+    for name in ("alt-model", "changed"):
+        (base_models / name).mkdir()
+    settings.storage = settings.storage.model_copy(
+        update={
+            "datasets_root": str(datasets),
+            "base_models_root": str(base_models),
+            "lora_root": str(lora),
+        }
+    )
+    return {"datasets": datasets, "base_models": base_models, "lora": lora}
+
+
+async def _prepare_dataset(
+    datasets_service: DatasetsService,
+    image_dir,
+    name: str = "test-dataset",
+    *,
+    relative_path: str | None = None,
+) -> Dataset:
+    rel = relative_path or image_dir.name
     _write_square_image(image_dir / "test.png")
-    dataset = await datasets_service.create_dataset(name=name, image_dir=str(image_dir))
+    dataset = await datasets_service.create_dataset(name=name, relative_path=rel)
     dataset = await datasets_service.update_dataset(
         dataset.id,
         name=None,
-        image_dir=None,
-        caption_dir=None,
+        relative_path=None,
         description=None,
         target_resolution=1024,
         update_target_resolution=True,
@@ -89,15 +117,16 @@ async def datasets_service(session: AsyncSession) -> DatasetsService:
 
 
 @pytest_asyncio.fixture
-async def training_dataset(datasets_service: DatasetsService, tmp_path) -> Dataset:
-    image_dir = tmp_path / "images"
+async def training_dataset(datasets_service: DatasetsService, storage_roots) -> Dataset:
+    image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
-    return await _prepare_dataset(datasets_service, image_dir)
+    return await _prepare_dataset(datasets_service, image_dir, relative_path="images")
 
 
 @pytest_asyncio.fixture
-async def minimal_training_yaml(training_dataset: Dataset) -> str:
-    return f"""base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+async def minimal_training_yaml(training_dataset: Dataset, storage_roots) -> str:
+    return f"""base_model_name: test-model
+output_dir: ""
 concepts:
   - dataset_id: {training_dataset.id}
 """
@@ -108,10 +137,12 @@ async def create_training_job(
     jobs_service: JobsService,
     config_service: JobConfigService,
     training_dataset: Dataset,
+    storage_roots,
 ) -> Callable[..., Awaitable[Job]]:
     async def _create(name: str = "test", config_yaml: str | None = None) -> Job:
         if config_yaml is None:
-            config_yaml = f"""base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+            config_yaml = f"""base_model_name: test-model
+output_dir: ""
 concepts:
   - dataset_id: {training_dataset.id}
 """

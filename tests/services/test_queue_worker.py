@@ -356,9 +356,9 @@ async def test_finalize_job_queues_sampling_when_runner_already_completed(
     jobs_service: JobsService,
     config_service: JobConfigService,
     training_dataset: Dataset,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    output_dir = tmp_path / "output"
+    output_rel = "output"
 
     sampling_config = await config_service.create_config(
         name="post-train sampling",
@@ -369,7 +369,8 @@ async def test_finalize_job_queues_sampling_when_runner_already_completed(
         name="training",
         config_type=ConfigType.TRAINING,
         config_yaml=f"""
-output_dir: {output_dir.as_posix()}
+base_model_name: test-model
+output_dir: {output_rel}
 lora_name: demo
 output_format: safetensors
 checkpointing_enabled: true
@@ -383,7 +384,7 @@ concepts:
     from src.trainer.config import TrainConfig
 
     train_config = TrainConfig.from_yaml(training_job.config_yaml)
-    work_dir = output_dir / train_config.lora_name
+    work_dir = storage_roots["lora"] / output_rel / train_config.lora_name
     work_dir.mkdir(parents=True)
     (work_dir / f"{train_config.lora_name}_epoch1.safetensors").write_bytes(b"epoch")
     await jobs_service._job_repo.update_status(training_job, JobStatus.COMPLETED)
@@ -411,14 +412,15 @@ async def test_finalize_job_registers_trained_lora_without_sampling(
     jobs_service: JobsService,
     config_service: JobConfigService,
     training_dataset: Dataset,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    output_dir = tmp_path / "output"
+    output_rel = "output"
     training_config = await config_service.create_config(
         name="training",
         config_type=ConfigType.TRAINING,
         config_yaml=f"""
-output_dir: {output_dir.as_posix()}
+base_model_name: test-model
+output_dir: {output_rel}
 lora_name: demo
 output_format: safetensors
 sampling_enabled: false
@@ -431,7 +433,7 @@ concepts:
     from src.trainer.config import TrainConfig
 
     train_config = TrainConfig.from_yaml(training_job.config_yaml)
-    work_dir = output_dir / train_config.lora_name
+    work_dir = storage_roots["lora"] / output_rel / train_config.lora_name
     work_dir.mkdir(parents=True)
     (work_dir / f"{train_config.lora_name}.safetensors").write_bytes(b"weights")
     await jobs_service._job_repo.update_output_path(training_job, str(work_dir))
@@ -450,6 +452,6 @@ concepts:
     assert len(loras) == 1
     assert loras[0].job_id == training_job.id
     assert loras[0].name == train_config.lora_name
-    assert loras[0].weights_path == str(work_dir / f"{train_config.lora_name}.safetensors")
+    assert loras[0].weights_relpath.endswith(f"{train_config.lora_name}.safetensors")
     sampling_jobs = await jobs_service.list_jobs_by_source(training_job.id)
     assert sampling_jobs == []

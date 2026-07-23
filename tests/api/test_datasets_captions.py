@@ -17,20 +17,20 @@ from src.services.jobs.service import JobsService
 
 
 @pytest.mark.asyncio
-async def test_dataset_caption_api(tmp_path) -> None:
+async def test_dataset_caption_api(storage_roots) -> None:
     register_all_tables()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    image_dir = tmp_path / "images"
+    image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
     Image.new("RGB", (32, 32), color="red").save(image_dir / "cat.png")
 
     async with factory() as db_session:
         datasets_service = DatasetsService(DatasetRepository(db_session), DatasetImageCropRepository(db_session))
-        dataset = await datasets_service.create_dataset(name="cats", image_dir=str(image_dir))
+        dataset = await datasets_service.create_dataset(name="cats", relative_path="images")
         await db_session.commit()
 
         async def _override_datasets_service():

@@ -111,8 +111,8 @@ class TrainConfig(BaseModel):
     """SDXL LoRA training configuration. Serialized to/from YAML."""
 
     # Model
-    base_model_name: str = "stabilityai/stable-diffusion-xl-base-1.0"
-    output_dir: str = "output"
+    base_model_name: str = ""
+    output_dir: str = ""
     lora_name: str = "lora"
     output_format: OutputFormat = OutputFormat.SAFETENSORS
 
