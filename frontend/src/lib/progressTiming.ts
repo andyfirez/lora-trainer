@@ -32,16 +32,36 @@ export function formatIterationSeconds(seconds: number | null): string {
   return `${Math.round(seconds)}s`;
 }
 
+export function computeMovingAverageWindow(total: number | null): number {
+  if (total == null || total <= 0) {
+    return Infinity;
+  }
+  return Math.max(1, Math.ceil(total * 0.15));
+}
+
+export function computeAverageStepDuration(
+  durations: number[],
+  windowSize: number,
+): number | null {
+  if (durations.length === 0) {
+    return null;
+  }
+  const window = durations.slice(-windowSize);
+  return window.reduce((sum, value) => sum + value, 0) / window.length;
+}
+
 export function computeProgressTiming(
   step: number | null,
   total: number | null,
   elapsedSeconds: number,
   secondsPerIteration: number | null,
+  recentStepDurations: number[] = [],
 ): ProgressTiming {
   const completedSteps = step != null && step > 0 ? step : 0;
+  const windowSize = computeMovingAverageWindow(total);
   const avgSecondsPerIteration =
-    completedSteps >= 1 && elapsedSeconds >= 0
-      ? elapsedSeconds / completedSteps
+    completedSteps >= 1
+      ? computeAverageStepDuration(recentStepDurations, windowSize)
       : null;
 
   const remaining =
