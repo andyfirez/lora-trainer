@@ -52,8 +52,6 @@ async def test_cancel_clears_progress_and_error(
         epoch_total=10,
     )
     await jobs_service._job_repo.update_cache_progress(job, step=3, total=10)
-    await jobs_service._job_repo.update_sampling_status(job, "Sampling")
-    await jobs_service._job_repo.update_sampling_progress(job, step=2, total=5)
 
     cancelled = await jobs_service.cancel_job(job.id)
 
@@ -68,9 +66,6 @@ async def test_cancel_clears_progress_and_error(
     assert cancelled.progress_epoch_total == 10
     assert cancelled.cache_progress_step == 3
     assert cancelled.cache_progress_total == 10
-    assert cancelled.sampling_status is None
-    assert cancelled.sampling_step is None
-    assert cancelled.sampling_total is None
 
 
 @pytest.mark.asyncio

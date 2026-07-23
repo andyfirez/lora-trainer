@@ -11,7 +11,7 @@ Train SDXL LoRAs on your own GPU with a web UI for dataset management, configura
 - **Web UI** — manage datasets, configs, jobs, and live training progress
 - **Dataset pipeline** — crop, bucketing, preprocess, and caption editing
 - **WD14 auto-tagging** — ONNX GPU tagger writes `.txt` captions
-- **Sampling** — mid-training previews and standalone sampling jobs with LoRA weights
+- **Sampling** — post-train auto sampling and standalone sampling jobs with LoRA weights
 - **Job queue** — SQLite-backed queue with resume, cancel, and checkpointing
 - **Trained LoRA catalog** — immutable records for completed training runs
 
@@ -136,7 +136,7 @@ Training hyperparameters are defined in YAML and managed through the `/trainings
 - **Data** — `resolution`, bucketing, `concepts[]` (dataset IDs, trigger words, repeats)
 - **Caching** — latent and text encoder output caching (memory or disk)
 - **Checkpointing** — `save_every_n_epochs`, `resume_from_checkpoint`
-- **Sampling** — mid-training preview generation
+- **Sampling** — post-train auto sampling on intermediate checkpoints
 
 ### Frontend API URL
 
