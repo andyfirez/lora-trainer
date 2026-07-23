@@ -156,11 +156,7 @@ class JobConfigService:
 
     async def _validate_training_config(self, config: TrainConfig) -> None:
         await self._validate_training_concepts(config)
-        sampling_active = (
-            config.sampling_enabled
-            or config.sample_before_training
-            or config.sample_every_n_epochs is not None
-        )
+        sampling_active = config.sampling_enabled
         if config.sampling_enabled and not config.checkpointing_enabled:
             raise JobConfigValidationError("Sampling requires checkpointing to be enabled")
         if sampling_active and config.sampling_config_id is None:

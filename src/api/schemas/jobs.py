@@ -15,9 +15,6 @@ class TrainingJobDetails(BaseModel):
     progress_epoch_total: Optional[int] = None
     cache_progress_step: Optional[int] = None
     cache_progress_total: Optional[int] = None
-    sampling_status: Optional[str] = None
-    sampling_step: Optional[int] = None
-    sampling_total: Optional[int] = None
     last_checkpoint_path: Optional[str] = None
     last_checkpoint_epoch: Optional[int] = None
     last_checkpoint_step: Optional[int] = None
