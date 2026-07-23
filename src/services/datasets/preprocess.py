@@ -348,6 +348,15 @@ def expected_prepared_size(
     return resolution, resolution
 
 
+def has_complete_bucket_metadata(record: StoredCropRecord) -> bool:
+    return (
+        record.bucket_width is not None
+        and record.bucket_height is not None
+        and record.scale_to_width is not None
+        and record.scale_to_height is not None
+    )
+
+
 def get_image_state(
     *,
     filename: str,
@@ -382,6 +391,11 @@ def get_image_state(
     if (
         prepared_path is None
         or crop_record.baked_at is None
+        or (
+            bucket_config.enable_bucket
+            and crop_record.baked_at is not None
+            and not has_complete_bucket_metadata(crop_record)
+        )
         or not is_prepared_file_valid(prepared_path, expected_w, expected_h)
     ):
         return ImagePreprocessState.CROPPED

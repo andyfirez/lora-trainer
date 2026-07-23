@@ -24,7 +24,11 @@ from src.services.datasets.captions import (
     safe_filename,
     write_tags,
 )
-from src.services.datasets.duplicates import DuplicateScanResult, remove_duplicate_files, scan_duplicates
+from src.services.datasets.duplicates import (
+    DuplicateScanResult,
+    remove_duplicate_files,
+    scan_duplicates,
+)
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetImageNotFoundError,
@@ -35,6 +39,7 @@ from src.services.datasets.exceptions import (
     InvalidDatasetFilenameError,
 )
 from src.services.datasets.formats import IMAGE_EXTENSIONS
+from src.services.datasets.hashing import file_sha256
 from src.services.datasets.preprocess import (
     BucketPreprocessConfig,
     CropMeta,
@@ -47,6 +52,7 @@ from src.services.datasets.preprocess import (
     compute_preprocess_status,
     default_crop_center,
     get_image_state,
+    has_complete_bucket_metadata,
     invalidate_latent_cache_for_prepared,
     is_crop_stale,
     prepared_dir_path,
@@ -54,6 +60,10 @@ from src.services.datasets.preprocess import (
     resolve_prepared_path,
     source_mtime,
     validate_target_resolution,
+)
+from src.services.datasets.reconcile import (
+    DatasetReconcileResult,
+    reconcile_dataset_records,
 )
 from src.services.datasets.training_cache import invalidate_te_cache_for_image
 
@@ -399,8 +409,20 @@ class DatasetsService:
         await self._crop_repo._session.flush()
 
     async def get_preprocess_status(self, dataset: Dataset) -> PreprocessStatus:
+        await self.reconcile_dataset(dataset)
         crop_map = await self._crop_map(dataset.id)  # type: ignore[arg-type]
         return compute_preprocess_status(dataset, crop_map)
+
+    async def reconcile_dataset(self, dataset: Dataset) -> DatasetReconcileResult:
+        result = await reconcile_dataset_records(
+            dataset,
+            self._crop_repo,
+            purge_artifacts=self._purge_image_artifacts,
+        )
+        if result.changed:
+            await self._update_preprocess_ready_flag(dataset)
+            result.preprocess_ready_updated = True
+        return result
 
     async def get_crop_meta(self, dataset: Dataset, filename: str) -> CropMeta:
         path = self._resolve_image_path(dataset, filename)
@@ -488,6 +510,7 @@ class DatasetsService:
         now = datetime.now(timezone.utc)
         crop.baked_at = now
         crop.updated_at = now
+        crop.content_hash = file_sha256(path)
         if assignment is not None:
             crop.bucket_width = assignment.bucket_width
             crop.bucket_height = assignment.bucket_height
@@ -533,6 +556,7 @@ class DatasetsService:
         return existing
 
     async def bake_all(self, dataset: Dataset, filenames: list[str] | None = None) -> int:
+        await self.reconcile_dataset(dataset)
         bucket_config = self._require_bucket_config(dataset)
         all_filenames = filenames if filenames else list_image_filenames(Path(dataset.image_dir))
         image_dir = Path(dataset.image_dir)
@@ -541,13 +565,16 @@ class DatasetsService:
         for filename in all_filenames:
             try:
                 crop = await self._ensure_crop(dataset, filename)
+                stored = self._stored_crop_record(crop)
                 state = get_image_state(
                     filename=filename,
                     image_dir=image_dir,
                     bucket_config=bucket_config,
-                    crop_record=self._stored_crop_record(crop),
+                    crop_record=stored,
                 )
-                if state == ImagePreprocessState.READY:
+                if state == ImagePreprocessState.READY and (
+                    not bucket_config.enable_bucket or has_complete_bucket_metadata(stored)
+                ):
                     continue
                 await self.bake_image(dataset, filename)
                 baked += 1
@@ -584,6 +611,7 @@ class DatasetsService:
         dataset: Dataset,
         caption_extension: str = DEFAULT_CAPTION_EXTENSION,
     ) -> list[tuple[DatasetItem, ImagePreprocessState]]:
+        await self.reconcile_dataset(dataset)
         items = self.list_items(dataset, caption_extension)
         crops = await self._crop_repo.list_by_dataset(dataset.id)  # type: ignore[arg-type]
         crop_map = {crop.filename: crop for crop in crops}
@@ -594,6 +622,14 @@ class DatasetsService:
             )
             for item in items
         ]
+
+    async def _purge_image_artifacts(self, dataset: Dataset, filename: str) -> None:
+        self._remove_prepared_for_image(dataset, filename)
+        self._invalidate_te_cache(dataset, filename)
+        await self._crop_repo.delete_by_dataset_and_filenames(
+            dataset.id,  # type: ignore[arg-type]
+            [filename],
+        )
 
     def get_image_preprocess_state(
         self,
@@ -644,13 +680,8 @@ class DatasetsService:
         except FileNotFoundError as exc:
             raise DatasetImageNotFoundError(filename) from exc
 
-        self._remove_prepared_for_image(dataset, filename)
-        self._invalidate_te_cache(dataset, filename)
         remove_duplicate_files(Path(dataset.image_dir), [filename], caption_extension)
-        await self._crop_repo.delete_by_dataset_and_filenames(
-            dataset.id,  # type: ignore[arg-type]
-            [filename],
-        )
+        await self._purge_image_artifacts(dataset, filename)
         await self._update_preprocess_ready_flag(dataset)
 
     def _remove_prepared_for_image(self, dataset: Dataset, filename: str) -> None:
@@ -662,3 +693,15 @@ class DatasetsService:
             return
         invalidate_latent_cache_for_prepared(prepared_path)
         prepared_path.unlink(missing_ok=True)
+
+
+async def reconcile_datasets_for_training(
+    dataset_ids: list[int],
+    dataset_repo: DatasetRepository,
+    crop_repo: DatasetImageCropRepository,
+) -> None:
+    service = DatasetsService(dataset_repo, crop_repo)
+    for dataset_id in dict.fromkeys(dataset_ids):
+        dataset = await dataset_repo.get_by_id(dataset_id)
+        if dataset is not None:
+            await service.reconcile_dataset(dataset)

@@ -1,5 +1,6 @@
 export interface ProgressTiming {
   secondsPerIteration: number | null;
+  avgSecondsPerIteration: number | null;
   elapsedSeconds: number;
   etaSeconds: number | null;
 }
@@ -39,21 +40,21 @@ export function computeProgressTiming(
 ): ProgressTiming {
   const completedSteps = step != null && step > 0 ? step : 0;
   const avgSecondsPerIteration =
-    completedSteps > 0 && elapsedSeconds > 0
+    completedSteps >= 1 && elapsedSeconds >= 0
       ? elapsedSeconds / completedSteps
-      : secondsPerIteration;
-  const effectiveSecondsPerIteration = secondsPerIteration ?? avgSecondsPerIteration;
+      : null;
 
   const remaining =
     step != null && total != null && total > step ? total - step : null;
   const etaSeconds =
-    remaining != null && effectiveSecondsPerIteration != null
-      ? remaining * effectiveSecondsPerIteration
+    remaining != null && avgSecondsPerIteration != null
+      ? remaining * avgSecondsPerIteration
       : null;
 
   return {
-    secondsPerIteration: effectiveSecondsPerIteration,
+    secondsPerIteration: step != null && step >= 2 ? secondsPerIteration : null,
+    avgSecondsPerIteration: completedSteps >= 1 ? avgSecondsPerIteration : null,
     elapsedSeconds,
-    etaSeconds,
+    etaSeconds: completedSteps >= 1 ? etaSeconds : null,
   };
 }

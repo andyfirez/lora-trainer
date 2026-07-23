@@ -51,6 +51,7 @@ export interface Job {
   sampling: SamplingJobDetails | null;
   tagging: TaggingJobDetails | null;
   can_resume: boolean;
+  elapsed_seconds: number | null;
   created_at: string;
   updated_at: string;
 }
