@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   ImageIcon,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -25,6 +26,8 @@ const NAV = [
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/parameters", label: "Parameters", icon: BookOpen },
 ];
+
+const FOOTER_NAV = [{ href: "/settings", label: "Settings", icon: Settings }];
 
 const STORAGE_KEY = "sidebar-collapsed";
 
@@ -50,30 +53,37 @@ export default function Sidebar() {
     });
   };
 
+  const navLink = (href: string, label: string, Icon: typeof ListOrdered, compact: boolean) => {
+    const active = pathname === href || pathname.startsWith(`${href}/`);
+    return (
+      <Link
+        key={href}
+        href={href}
+        title={compact ? label : undefined}
+        aria-label={compact ? label : undefined}
+        className={cn(
+          "flex items-center rounded-lg text-sm font-medium transition-colors",
+          compact ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2",
+          active
+            ? "bg-accent text-white shadow-sm"
+            : "text-muted hover:text-text hover:bg-white/5",
+        )}
+      >
+        <Icon size={18} className="shrink-0" />
+        {!compact && <span>{label}</span>}
+      </Link>
+    );
+  };
+
   const navContent = (compact: boolean) => (
-    <nav className="flex-1 px-2 py-4 space-y-1">
-      {NAV.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`);
-        return (
-          <Link
-            key={href}
-            href={href}
-            title={compact ? label : undefined}
-            aria-label={compact ? label : undefined}
-            className={cn(
-              "flex items-center rounded-lg text-sm font-medium transition-colors",
-              compact ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2",
-              active
-                ? "bg-accent text-white shadow-sm"
-                : "text-muted hover:text-text hover:bg-white/5",
-            )}
-          >
-            <Icon size={18} className="shrink-0" />
-            {!compact && <span>{label}</span>}
-          </Link>
-        );
-      })}
-    </nav>
+    <div className="flex flex-1 flex-col min-h-0">
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        {NAV.map(({ href, label, icon: Icon }) => navLink(href, label, Icon, compact))}
+      </nav>
+      <div className="mt-auto border-t border-border px-2 py-3 space-y-1">
+        {FOOTER_NAV.map(({ href, label, icon: Icon }) => navLink(href, label, Icon, compact))}
+      </div>
+    </div>
   );
 
   return (
