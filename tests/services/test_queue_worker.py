@@ -403,3 +403,53 @@ concepts:
     assert sampling_jobs[0].status == JobStatus.QUEUED
     queue_entry = await jobs_service._queue_repo.get_by_job_id(sampling_jobs[0].id)
     assert queue_entry is not None
+
+
+@pytest.mark.asyncio
+async def test_finalize_job_registers_trained_lora_without_sampling(
+    session: AsyncSession,
+    jobs_service: JobsService,
+    config_service: JobConfigService,
+    training_dataset: Dataset,
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "output"
+    training_config = await config_service.create_config(
+        name="training",
+        config_type=ConfigType.TRAINING,
+        config_yaml=f"""
+output_dir: {output_dir.as_posix()}
+lora_name: demo
+output_format: safetensors
+sampling_enabled: false
+concepts:
+  - dataset_id: {training_dataset.id}
+""",
+    )
+    training_job = await jobs_service.create_from_config(training_config.id)
+    from src.db.repositories.trained_lora_repo import TrainedLoraRepository
+    from src.trainer.config import TrainConfig
+
+    train_config = TrainConfig.from_yaml(training_job.config_yaml)
+    work_dir = output_dir / train_config.lora_name
+    work_dir.mkdir(parents=True)
+    (work_dir / f"{train_config.lora_name}.safetensors").write_bytes(b"weights")
+    await jobs_service._job_repo.update_output_path(training_job, str(work_dir))
+    await jobs_service._job_repo.update_status(training_job, JobStatus.COMPLETED)
+    await session.commit()
+
+    @asynccontextmanager
+    async def test_session_factory():
+        yield session
+
+    worker = QueueWorker()
+    with patch("src.services.worker.service.session_factory", test_session_factory):
+        await worker._finalize_job(training_job.id, 0)
+
+    loras = await TrainedLoraRepository(session).list_all()
+    assert len(loras) == 1
+    assert loras[0].job_id == training_job.id
+    assert loras[0].name == train_config.lora_name
+    assert loras[0].weights_path == str(work_dir / f"{train_config.lora_name}.safetensors")
+    sampling_jobs = await jobs_service.list_jobs_by_source(training_job.id)
+    assert sampling_jobs == []

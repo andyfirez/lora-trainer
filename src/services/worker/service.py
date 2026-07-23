@@ -230,12 +230,12 @@ class QueueWorker:
                     )
                     sampling_job = None
                 if sampling_job is not None:
-                    await session.commit()
                     logger.info(
                         "Queued post-training sampling job id=%d for training job id=%d",
                         sampling_job.id,
                         job_id,
                     )
+                await session.commit()
 
     async def _watch_cancellations(self) -> None:
         interval = settings.training.cancel_poll_interval_seconds
