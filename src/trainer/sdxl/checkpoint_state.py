@@ -53,6 +53,20 @@ def parse_step_from_checkpoint_name(path: Path) -> int | None:
     return int(match.group("step"))
 
 
+def prune_stale_resume_states(work_dir: Path, *, keep_state_path: Path) -> None:
+    """Delete resume state files except the one for the latest checkpoint."""
+    keep_resolved = keep_state_path.resolve()
+    for state_path in work_dir.glob("*.state.pt"):
+        if state_path.resolve() != keep_resolved:
+            state_path.unlink(missing_ok=True)
+
+
+def delete_all_resume_states(work_dir: Path) -> None:
+    """Remove all resume state files from a training work directory."""
+    for state_path in work_dir.glob("*.state.pt"):
+        state_path.unlink(missing_ok=True)
+
+
 def save_resume_state(
     *,
     checkpoint_path: Path,
