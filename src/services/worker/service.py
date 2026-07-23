@@ -298,18 +298,22 @@ class QueueWorker:
             if managed is not None:
                 await self._finalize_job(job_id, managed.returncode or 0, output_lines)
 
+    async def _active_job_count(self) -> int:
+        return sum(1 for managed in self._active_jobs.values() if managed.is_running())
+
     async def _poll_loop(self) -> None:
-        interval = settings.training.worker_poll_interval_seconds
         while True:
             try:
-                if not await self._is_any_job_running():
+                max_jobs = settings.training.max_concurrent_jobs
+                while await self._active_job_count() < max_jobs:
                     entry = await self._get_next_queued_entry()
-                    if entry is not None and entry.job_id not in self._active_jobs:
-                        task = asyncio.create_task(self._run_entry(entry))
-                        self._job_tasks.add(task)
-                        task.add_done_callback(self._job_tasks.discard)
+                    if entry is None or entry.job_id in self._active_jobs:
+                        break
+                    task = asyncio.create_task(self._run_entry(entry))
+                    self._job_tasks.add(task)
+                    task.add_done_callback(self._job_tasks.discard)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception("Worker poll error")
-            await asyncio.sleep(interval)
+            await asyncio.sleep(settings.training.worker_poll_interval_seconds)
