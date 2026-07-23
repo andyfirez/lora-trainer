@@ -101,7 +101,7 @@ async def test_create_training_config_rejects_missing_dataset(
         await config_service.create_config(
             name="bad dataset",
             config_type=ConfigType.TRAINING,
-            config_yaml="""base_model_name: x
+            config_yaml="""base_model_name: test-model
 concepts:
   - dataset_id: 999
 """,
@@ -116,7 +116,7 @@ async def test_create_training_config_rejects_legacy_image_dir(
         await config_service.create_config(
             name="legacy concept field",
             config_type=ConfigType.TRAINING,
-            config_yaml="""base_model_name: x
+            config_yaml="""base_model_name: test-model
 concepts:
   - image_dir: /tmp/images
 """,
@@ -131,7 +131,7 @@ async def test_create_training_config_rejects_empty_concepts(
         await config_service.create_config(
             name="no concepts",
             config_type=ConfigType.TRAINING,
-            config_yaml="base_model_name: x\nconcepts: []\n",
+            config_yaml="base_model_name: test-model\nconcepts: []\n",
         )
 
 
@@ -189,7 +189,7 @@ async def test_update_config_changes_fields(
         config_yaml=minimal_training_yaml,
     )
 
-    updated_yaml = f"""base_model_name: y
+    updated_yaml = f"""base_model_name: alt-model
 concepts:
   - dataset_id: {training_dataset.id}
 """
@@ -201,7 +201,7 @@ concepts:
     )
 
     assert updated.name == "renamed"
-    assert "base_model_name: y" in updated.config_yaml
+    assert "base_model_name: alt-model" in updated.config_yaml
     assert updated.description == "updated"
 
 

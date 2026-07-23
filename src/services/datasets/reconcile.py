@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.tables.dataset import Dataset
+from src.services.datasets.captions import list_image_filenames
 from src.services.datasets.paths import dataset_image_dir, dataset_image_dir_str
 from src.services.datasets.formats import IMAGE_EXTENSIONS, PREPARED_EXTENSION
 from src.services.datasets.hashing import file_sha256

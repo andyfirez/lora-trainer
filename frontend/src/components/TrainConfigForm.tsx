@@ -11,7 +11,7 @@ import {
   hasVaryingParamsExceptPrompt,
   sweepSummary,
 } from "@/lib/sweepUtils";
-import PathInput from "@/components/PathInput";
+import StoragePathInput from "@/components/StoragePathInput";
 import FieldHint from "@/components/FieldHint";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
@@ -224,7 +224,7 @@ function normalizeConcept(concept: unknown, datasets?: Dataset[]): Config {
   const legacyDir = raw.image_dir as string | undefined;
 
   if (datasetId == null && legacyDir && datasets?.length) {
-    datasetId = datasets.find((d) => d.image_dir === legacyDir)?.id;
+    datasetId = datasets.find((d) => d.relative_path === legacyDir || d.resolved_path === legacyDir)?.id;
   }
   if (datasetId == null && datasets?.length) {
     datasetId = datasets[0].id;
@@ -446,22 +446,21 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
       <section className={sectionClass}>
         <div className={sectionTitleClass}>Model</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PathInput
+          <StoragePathInput
             label="Base Model"
             value={config.base_model_name ?? ""}
             onChange={(v) => set("base_model_name", v)}
-            placeholder="stabilityai/stable-diffusion-xl-base-1.0 or D:\models\sdxl"
-            pickerTitle="Select Base Model"
-            kind="model"
+            placeholder="sdxl-base"
+            kind="base_models"
+            allowFiles
             {...trainHint("base_model_name")}
           />
-          <PathInput
+          <StoragePathInput
             label="Output Folder"
             value={config.output_dir ?? ""}
             onChange={(v) => set("output_dir", v)}
-            placeholder="D:\loras\output"
-            pickerTitle="Select Output Folder"
-            kind="directory"
+            placeholder=""
+            kind="lora"
             {...trainHint("output_dir")}
           />
         </div>
@@ -846,7 +845,7 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
                           paramKey="concepts.dataset_id"
                         />
                         {selectedDataset && (
-                          <p className="text-xs text-muted mt-1 break-all">{selectedDataset.image_dir}</p>
+                          <p className="text-xs text-muted mt-1 break-all">{selectedDataset.relative_path}</p>
                         )}
                         {selectedDataset && !isDatasetCompatible(selectedDataset) && (
                           <p className="text-xs text-warning mt-1">

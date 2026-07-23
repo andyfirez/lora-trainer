@@ -66,6 +66,15 @@ class StoragePaths:
         return True
 
     @classmethod
+    def dataset_dir_exists(cls, relative_path: str) -> bool:
+        if not cls.is_managed_relative_path(StorageKind.DATASETS, relative_path):
+            return False
+        try:
+            return cls.resolve_dataset_path(relative_path).is_dir()
+        except (ValueError, OSError):
+            return False
+
+    @classmethod
     def resolve_training_work_dir(cls, output_dir_relative: str, lora_name: str) -> Path:
         return cls.resolve_lora_path(output_dir_relative) / lora_name
 

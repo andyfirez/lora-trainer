@@ -21,14 +21,14 @@ SAMPLING_YAML = "sample_prompts:\n  - prompt\n"
 
 
 @pytest.fixture
-async def api_client(tmp_path):
+async def api_client(tmp_path, storage_roots):
     register_all_tables()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    image_dir = tmp_path / "images"
+    image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
     from PIL import Image
 
@@ -38,12 +38,11 @@ async def api_client(tmp_path):
         datasets_service = DatasetsService(
             DatasetRepository(db_session), DatasetImageCropRepository(db_session)
         )
-        dataset = await datasets_service.create_dataset(name="cats", image_dir=str(image_dir))
+        dataset = await datasets_service.create_dataset(name="cats", relative_path="images")
         dataset = await datasets_service.update_dataset(
             dataset.id,
             name=None,
-            image_dir=None,
-            caption_dir=None,
+            relative_path=None,
             description=None,
             target_resolution=1024,
             update_target_resolution=True,

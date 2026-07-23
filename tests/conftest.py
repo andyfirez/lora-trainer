@@ -30,7 +30,7 @@ def _write_square_image(path, size: int = 1024) -> None:
     Image.new("RGB", (size, size), (100, 100, 100)).save(path)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def storage_roots(tmp_path):
     datasets = tmp_path / "datasets"
     base_models = tmp_path / "base-models"
@@ -38,6 +38,8 @@ def storage_roots(tmp_path):
     for path in (datasets, base_models, lora):
         path.mkdir()
     (base_models / "test-model").mkdir()
+    for name in ("alt-model", "changed"):
+        (base_models / name).mkdir()
     settings.storage = settings.storage.model_copy(
         update={
             "datasets_root": str(datasets),

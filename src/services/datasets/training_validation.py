@@ -6,6 +6,7 @@ from PIL import Image
 
 from src.db.tables.dataset import Dataset
 from src.db.tables.dataset_image_crop import DatasetImageCrop
+from src.services.datasets.captions import list_image_filenames
 from src.services.datasets.paths import dataset_image_dir, dataset_image_dir_str
 from src.services.datasets.exceptions import (
     DatasetNotPreparedError,

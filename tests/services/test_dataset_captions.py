@@ -53,12 +53,12 @@ def test_collect_tag_stats_sorted_by_count(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_datasets_service_caption_crud(tmp_path: Path, datasets_service: DatasetsService) -> None:
-    image_dir = tmp_path / "images"
+async def test_datasets_service_caption_crud(storage_roots, datasets_service: DatasetsService) -> None:
+    image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
     Image.new("RGB", (16, 16), color="green").save(image_dir / "photo.png")
 
-    dataset = await datasets_service.create_dataset(name="demo", image_dir=str(image_dir))
+    dataset = await datasets_service.create_dataset(name="demo", relative_path="images")
     assert datasets_service.get_tags(dataset, "photo.png") == []
 
     tags = datasets_service.update_tags(dataset, "photo.png", ["1girl", "solo"])
@@ -76,13 +76,13 @@ async def test_datasets_service_caption_crud(tmp_path: Path, datasets_service: D
 
 @pytest.mark.asyncio
 async def test_datasets_service_invalid_filename(
-    tmp_path: Path,
+    storage_roots,
     datasets_service: DatasetsService,
 ) -> None:
-    image_dir = tmp_path / "images"
+    image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
     Image.new("RGB", (16, 16), color="green").save(image_dir / "photo.png")
-    dataset = await datasets_service.create_dataset(name="demo", image_dir=str(image_dir))
+    dataset = await datasets_service.create_dataset(name="demo", relative_path="images")
 
     with pytest.raises(InvalidDatasetFilenameError):
         datasets_service.get_tags(dataset, "../photo.png")

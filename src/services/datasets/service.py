@@ -67,6 +67,7 @@ from src.services.datasets.reconcile import (
     DatasetReconcileResult,
     reconcile_dataset_records,
 )
+from src.services.datasets.training_cache import invalidate_te_cache_for_image
 from src.services.storage.browse import StorageBrowseService
 from src.storage.paths import StorageKind, StoragePaths
 
