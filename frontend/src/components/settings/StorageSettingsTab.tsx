@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import Input from "@/components/ui/Input";
+import PathInput from "@/components/PathInput";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import { settingsApi } from "@/lib/api/settings";
@@ -51,11 +51,30 @@ export default function StorageSettingsTab() {
     <Card className="max-w-xl space-y-4">
       <p className="text-sm text-muted">
         Managed storage roots are saved to config.toml. Relative paths in the database are resolved against these folders at runtime.
+        The browse dialog opens on the machine where the backend is running, not in the browser.
       </p>
       <form onSubmit={handleSave} className="space-y-4">
-        <Input label="Datasets root" value={datasetsRoot} onChange={(e) => setDatasetsRoot(e.target.value)} />
-        <Input label="Base models root" value={baseModelsRoot} onChange={(e) => setBaseModelsRoot(e.target.value)} />
-        <Input label="LoRA root" value={loraRoot} onChange={(e) => setLoraRoot(e.target.value)} />
+        <PathInput
+          label="Datasets root"
+          value={datasetsRoot}
+          onChange={setDatasetsRoot}
+          pickerTitle="Select datasets root folder"
+          kind="directory"
+        />
+        <PathInput
+          label="Base models root"
+          value={baseModelsRoot}
+          onChange={setBaseModelsRoot}
+          pickerTitle="Select base models root folder"
+          kind="directory"
+        />
+        <PathInput
+          label="LoRA root"
+          value={loraRoot}
+          onChange={setLoraRoot}
+          pickerTitle="Select LoRA root folder"
+          kind="directory"
+        />
         {error && <p className="text-sm text-error">{error}</p>}
         {success && <p className="text-sm text-success">Storage settings saved.</p>}
         <Button type="submit" disabled={saving}>

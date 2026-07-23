@@ -54,7 +54,10 @@ class DatasetResponse(BaseModel):
     @classmethod
     def populate_paths(cls, data: object) -> object:
         if not isinstance(data, dict):
-            return data
+            if hasattr(data, "model_dump"):
+                data = data.model_dump()
+            else:
+                return data
         from src.storage.paths import StoragePaths
 
         relative_path = data.get("relative_path", "")

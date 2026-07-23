@@ -99,7 +99,12 @@ class DatasetsService:
     async def _sync_discovered_datasets(self) -> None:
         browse = StorageBrowseService()
         discovered = browse.discover_dataset_folders()
-        existing_paths = {dataset.relative_path for dataset in await self._repo.get_all()}
+        existing_paths: set[str] = set()
+        for dataset in await self._repo.get_all():
+            existing_paths.add(dataset.relative_path)
+            canonical = StoragePaths.to_relative(StorageKind.DATASETS, dataset.relative_path)
+            if canonical is not None:
+                existing_paths.add(canonical)
         for relative_path in discovered:
             if relative_path in existing_paths:
                 continue
