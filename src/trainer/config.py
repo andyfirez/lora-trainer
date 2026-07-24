@@ -49,13 +49,6 @@ class VaeDtype(StrEnum):
     BFLOAT_16 = "bfloat16"
 
 
-class SampleScheduler(StrEnum):
-    EULER = "euler"
-    EULER_A = "euler_a"
-    DDIM = "ddim"
-    DPM_PP = "dpm++"
-
-
 RUNTIME_SAMPLING_FIELDS: tuple[str, ...] = (
     "sample_prompts",
     "sample_negative_prompt",
@@ -63,6 +56,7 @@ RUNTIME_SAMPLING_FIELDS: tuple[str, ...] = (
     "sample_cfg_scale",
     "sample_width",
     "sample_height",
+    "sample_sampler_name",
     "sample_scheduler",
     "sample_vae_tiling",
     "sample_vae_fp32",
@@ -194,7 +188,8 @@ class TrainConfig(BaseModel):
     sample_cfg_scale: float = Field(default=7.5, gt=0.0)
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
-    sample_scheduler: SampleScheduler = SampleScheduler.EULER
+    sample_sampler_name: str = "euler"
+    sample_scheduler: str = "simple"
     sample_vae_tiling: bool = True
     sample_vae_fp32: bool = False
     sample_offload_unet_before_decode: bool = True

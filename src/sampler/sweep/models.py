@@ -18,6 +18,7 @@ SWEEP_PARAM_ORDER: tuple[str, ...] = (
     "negative_prompt",
     "width",
     "height",
+    "sampler_name",
     "scheduler",
 )
 
@@ -147,7 +148,8 @@ class SweepParameters(BaseModel):
     cfg_scale: SweepParameter = Field(default_factory=lambda: SweepParameter(value=7.5))
     width: SweepParameter = Field(default_factory=lambda: SweepParameter(value=None))
     height: SweepParameter = Field(default_factory=lambda: SweepParameter(value=None))
-    scheduler: SweepParameter = Field(default_factory=lambda: SweepParameter(value="euler"))
+    sampler_name: SweepParameter = Field(default_factory=lambda: SweepParameter(value="euler"))
+    scheduler: SweepParameter = Field(default_factory=lambda: SweepParameter(value="simple"))
     seed: SweepParameter = Field(default_factory=lambda: SweepParameter(value=None))
 
     def vary_keys_with_values(self) -> list[str]:

@@ -3,9 +3,13 @@ export interface SelectOption {
   label: string;
 }
 
-export const diffusersSchedulerOptions: SelectOption[] = [
+export const comfySamplerNameOptions: SelectOption[] = [
   { value: "euler", label: "Euler" },
-  { value: "euler_a", label: "Euler Ancestral" },
-  { value: "ddim", label: "DDIM" },
-  { value: "dpm++", label: "DPM++ (multistep)" },
+  { value: "euler_ancestral", label: "Euler Ancestral" },
+  { value: "dpmpp_2m", label: "DPM++ 2M" },
+];
+
+export const comfySchedulerOptions: SelectOption[] = [
+  { value: "simple", label: "Simple" },
+  { value: "karras", label: "Karras" },
 ];

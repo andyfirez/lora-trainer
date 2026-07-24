@@ -12,9 +12,9 @@ from diffusers import DDPMScheduler
 
 from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
+from src.trainer.sdxl.latent_sampling.comfy import build_comfy_sampling_plan
 from src.trainer.sdxl.sampling import (
     PromptEmbedCache,
-    build_inference_scheduler,
     precompute_all_sample_embeds,
 )
 
@@ -191,11 +191,23 @@ def run_sampling_pass_with_embeds(
     if device.type == "cuda":
         torch.cuda.empty_cache()
 
-    log.info("Starting diffusion (%d steps, scheduler=%s)...", sampling_config.sample_steps, sampling_config.sample_scheduler)
+    log.info(
+        "Starting diffusion (%d steps, sampler=%s, scheduler=%s)...",
+        sampling_config.sample_steps,
+        sampling_config.sample_sampler_name,
+        sampling_config.sample_scheduler,
+    )
+    sampling_plan = build_comfy_sampling_plan(
+        sampler_name=sampling_config.sample_sampler_name,
+        scheduler_name=sampling_config.sample_scheduler,
+        steps=sampling_config.sample_steps,
+        noise_scheduler=noise_scheduler,
+        device=device,
+    )
     session = SDXLSamplingSession.create(
         unet=inference_unet,
         vae=vae,
-        scheduler=build_inference_scheduler(sampling_config.sample_scheduler, noise_scheduler),
+        sampling_plan=sampling_plan,
         device=device,
         width=width,
         height=height,

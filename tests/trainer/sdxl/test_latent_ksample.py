@@ -1,32 +1,22 @@
 from unittest.mock import MagicMock
 
 import torch
+from diffusers import DDPMScheduler
+from src.trainer.sdxl.latent_sampling.comfy.plan import build_comfy_sampling_plan
 from src.trainer.sdxl.latent_sampling.ksample import ksample_sdxl_latent
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 from src.trainer.sdxl.sampling import SamplePromptEmbeds
 
 
 def _build_session(*, sample_steps: int = 3) -> SDXLSamplingSession:
-    scheduler = MagicMock()
-    scheduler.init_noise_sigma = 1.0
-    scheduler.timesteps = torch.tensor([999, 500, 0][:sample_steps])
-
-    def _scale_model_input(sample: torch.Tensor, _timestep: torch.Tensor) -> torch.Tensor:
-        return sample
-
-    def _step(
-        noise_pred: torch.Tensor,
-        _timestep: torch.Tensor,
-        sample: torch.Tensor,
-        *,
-        return_dict: bool,
-        **_: object,
-    ) -> tuple[torch.Tensor]:
-        assert return_dict is False
-        return (sample - noise_pred * 0.01,)
-
-    scheduler.scale_model_input.side_effect = _scale_model_input
-    scheduler.step.side_effect = _step
+    scheduler = DDPMScheduler(num_train_timesteps=1000)
+    plan = build_comfy_sampling_plan(
+        sampler_name="euler",
+        scheduler_name="simple",
+        steps=sample_steps,
+        noise_scheduler=scheduler,
+        device=torch.device("cpu"),
+    )
 
     unet = MagicMock()
     unet.config.in_channels = 4
@@ -36,8 +26,7 @@ def _build_session(*, sample_steps: int = 3) -> SDXLSamplingSession:
         device=torch.device("cpu"),
         unet=unet,
         vae=MagicMock(),
-        scheduler=scheduler,
-        timesteps=scheduler.timesteps,
+        sampling_plan=plan,
         add_time_ids=torch.tensor([[1024, 1024, 0, 0, 1024, 1024]], dtype=torch.float32),
         vae_scale_factor=8,
         autocast_dtype=torch.float32,

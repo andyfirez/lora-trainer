@@ -114,6 +114,9 @@ parameters:
     value: null
   scheduler:
     mode: fixed
+    value: simple
+  sampler_name:
+    mode: fixed
     value: euler
   seed:
     mode: fixed

@@ -27,7 +27,7 @@ from src.sampler.sweep.manifest import (
 )
 from src.sampler.sweep.models import parse_trigger_words
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
-from src.trainer.config import SampleScheduler, TrainConfig
+from src.trainer.config import TrainConfig
 from src.trainer.sdxl.caption import apply_trigger_words_to_prompt
 
 ProgressStatusCallback = Callable[[str | None], None]
@@ -202,9 +202,12 @@ class SweepEngine:
             "sample_width": params.get("width"),
             "sample_height": params.get("height"),
         }
+        sampler_name = params.get("sampler_name")
+        if sampler_name is not None:
+            updates["sample_sampler_name"] = str(sampler_name)
         scheduler = params.get("scheduler")
         if scheduler is not None:
-            updates["sample_scheduler"] = SampleScheduler(str(scheduler))
+            updates["sample_scheduler"] = str(scheduler)
         seed = params.get("seed")
         if seed is not None:
             updates["seed"] = int(seed)

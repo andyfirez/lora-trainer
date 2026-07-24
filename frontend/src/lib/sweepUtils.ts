@@ -21,6 +21,7 @@ export interface SweepParameters {
   cfg_scale?: SweepParameter;
   width?: SweepParameter;
   height?: SweepParameter;
+  sampler_name?: SweepParameter;
   scheduler?: SweepParameter;
   seed?: SweepParameter;
 }
@@ -41,6 +42,7 @@ export const SWEEP_PARAM_ORDER = [
   "negative_prompt",
   "width",
   "height",
+  "sampler_name",
   "scheduler",
 ] as const;
 
@@ -56,6 +58,7 @@ export const SWEEP_PARAM_LABELS: Record<SweepParamKey, string> = {
   cfg_scale: "CFG Scale",
   width: "Width",
   height: "Height",
+  sampler_name: "Sampler",
   scheduler: "Scheduler",
   seed: "Seed",
 };
@@ -88,6 +91,9 @@ export function getParameters(config: Record<string, unknown>): SweepParameters 
   if (config.sample_cfg_scale != null) legacy.cfg_scale = { mode: "fixed", value: config.sample_cfg_scale };
   if (config.sample_width != null) legacy.width = { mode: "fixed", value: config.sample_width };
   if (config.sample_height != null) legacy.height = { mode: "fixed", value: config.sample_height };
+  if (config.sample_sampler_name != null) {
+    legacy.sampler_name = { mode: "fixed", value: config.sample_sampler_name };
+  }
   if (config.sample_scheduler != null) legacy.scheduler = { mode: "fixed", value: config.sample_scheduler };
   if (Array.isArray(config.lora_paths) && config.lora_paths.length) {
     const paths = config.lora_paths.filter((p) => p != null && String(p).trim());

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 from torch import Tensor
 
 from src.trainer.config import TrainConfig
+from src.trainer.sdxl.latent_sampling.comfy.plan import ComfySamplingPlan
 from src.trainer.sdxl.sampling import prepare_vae_for_decode
 
 _VAE_TILING_MIN_SIDE = 768
@@ -43,8 +43,7 @@ class SDXLSamplingSession:
     device: torch.device
     unet: torch.nn.Module
     vae: torch.nn.Module
-    scheduler: Any
-    timesteps: Tensor
+    sampling_plan: ComfySamplingPlan
     add_time_ids: Tensor
     vae_scale_factor: int
     autocast_dtype: torch.dtype
@@ -58,7 +57,7 @@ class SDXLSamplingSession:
         *,
         unet: torch.nn.Module,
         vae: torch.nn.Module,
-        scheduler: Any,
+        sampling_plan: ComfySamplingPlan,
         device: torch.device,
         width: int,
         height: int,
@@ -75,7 +74,6 @@ class SDXLSamplingSession:
             vae_tiling_enabled = True
 
         unet.eval()
-        scheduler.set_timesteps(sample_steps, device=device)
         if reference_add_time_ids is not None:
             add_time_ids = _add_time_ids_from_reference(reference_add_time_ids, device)
         else:
@@ -84,8 +82,7 @@ class SDXLSamplingSession:
             device=device,
             unet=unet,
             vae=vae,
-            scheduler=scheduler,
-            timesteps=scheduler.timesteps,
+            sampling_plan=sampling_plan,
             add_time_ids=add_time_ids,
             vae_scale_factor=vae_scale_factor,
             autocast_dtype=autocast_dtype,

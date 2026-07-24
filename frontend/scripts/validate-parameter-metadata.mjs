@@ -93,6 +93,7 @@ const requiredYamlOnlyKeys = [
   "sample_cfg_scale",
   "sample_width",
   "sample_height",
+  "sample_sampler_name",
   "sample_scheduler",
   "sample_vae_tiling",
   "sample_vae_fp32",

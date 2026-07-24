@@ -4,7 +4,7 @@ import { useState } from "react";
 import ParamGroup from "@/components/sweep/ParamGroup";
 import SweepField from "@/components/sweep/SweepField";
 import SweepPathField from "@/components/sweep/SweepPathField";
-import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
+import { comfySamplerNameOptions, comfySchedulerOptions } from "@/lib/sampleSamplerOptions";
 import { labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
 import {
@@ -112,11 +112,18 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
               type="number"
             />
             <SweepField
+              label={SWEEP_PARAM_LABELS.sampler_name}
+              param={param(config, "sampler_name")}
+              onChange={(p) => updateParam("sampler_name", p)}
+              type="select"
+              selectOptions={comfySamplerNameOptions}
+            />
+            <SweepField
               label={SWEEP_PARAM_LABELS.scheduler}
               param={param(config, "scheduler")}
               onChange={(p) => updateParam("scheduler", p)}
               type="select"
-              selectOptions={diffusersSchedulerOptions}
+              selectOptions={comfySchedulerOptions}
             />
           </ParamGroup>
 

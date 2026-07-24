@@ -16,11 +16,13 @@ from src.sampler.sweep.models import (
     lora_entry_to_param_value,
     parse_lora_entry,
 )
-from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
+from src.trainer.config import VaeDtype, WeightDtype
 from src.trainer.gpu_config_validation import validate_gpu_config
 
 if TYPE_CHECKING:
     from src.trainer.config import TrainConfig
+
+_LEGACY_DIFFUSERS_SCHEDULER_VALUES = frozenset({"euler", "euler_a", "ddim", "dpm++"})
 
 _LEGACY_FIELD_MAP: dict[str, tuple[str, str]] = {
     "base_model_name": ("base_model_name", "base_model_name"),
@@ -29,7 +31,6 @@ _LEGACY_FIELD_MAP: dict[str, tuple[str, str]] = {
     "sample_cfg_scale": ("cfg_scale", "sample_cfg_scale"),
     "sample_width": ("width", "sample_width"),
     "sample_height": ("height", "sample_height"),
-    "sample_scheduler": ("scheduler", "sample_scheduler"),
 }
 
 
@@ -44,7 +45,8 @@ class SamplingConfig(BaseModel):
     sample_cfg_scale: float = Field(default=7.5, gt=0.0)
     sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
-    sample_scheduler: SampleScheduler = SampleScheduler.EULER
+    sample_sampler_name: str = "euler"
+    sample_scheduler: str = "simple"
     sample_vae_tiling: bool = True
     sample_vae_fp32: bool = False
     sample_offload_unet_before_decode: bool = True
@@ -58,11 +60,38 @@ class SamplingConfig(BaseModel):
     grid: GridLayout = Field(default_factory=GridLayout)
     parameters: SweepParameters = Field(default_factory=SweepParameters)
 
+    @staticmethod
+    def _reject_legacy_scheduler_fields(data: dict[str, Any]) -> None:
+        if "sample_scheduler" in data and "sample_sampler_name" not in data:
+            raise ValueError(
+                "Legacy field 'sample_scheduler' is no longer supported. "
+                "Use parameters.sampler_name and parameters.scheduler instead."
+            )
+        params = data.get("parameters")
+        if not isinstance(params, dict):
+            return
+        if "sampler_name" in params:
+            return
+        scheduler = params.get("scheduler")
+        if scheduler is None:
+            return
+        if isinstance(scheduler, dict):
+            values = scheduler.get("values") or ([scheduler["value"]] if scheduler.get("value") is not None else [])
+        else:
+            values = [scheduler]
+        for value in values:
+            if str(value) in _LEGACY_DIFFUSERS_SCHEDULER_VALUES:
+                raise ValueError(
+                    "Legacy unified parameters.scheduler values (euler/euler_a/ddim/dpm++) are no longer supported. "
+                    "Recreate the sampling config with parameters.sampler_name and parameters.scheduler."
+                )
+
     @model_validator(mode="before")
     @classmethod
     def _migrate_legacy_yaml(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
+        cls._reject_legacy_scheduler_fields(data)
         params_data = data.get("parameters")
         if isinstance(params_data, SweepParameters):
             migrated = params_data
@@ -137,8 +166,8 @@ class SamplingConfig(BaseModel):
         height = migrated.height.first_value()
         result["sample_width"] = width
         result["sample_height"] = height
-        scheduler = migrated.scheduler.first_value()
-        result["sample_scheduler"] = scheduler or "euler"
+        result["sample_sampler_name"] = str(migrated.sampler_name.first_value() or "euler")
+        result["sample_scheduler"] = str(migrated.scheduler.first_value() or "simple")
         result["base_model_name"] = str(migrated.base_model_name.first_value() or data.get("base_model_name", ""))
         return result
 
@@ -161,6 +190,7 @@ class SamplingConfig(BaseModel):
             "sample_cfg_scale",
             "sample_width",
             "sample_height",
+            "sample_sampler_name",
             "sample_scheduler",
         ):
             payload.pop(legacy_key, None)
@@ -199,7 +229,8 @@ class SamplingConfig(BaseModel):
             "sample_cfg_scale": float(params.cfg_scale.first_value() or 7.5),
             "sample_width": params.width.first_value(),
             "sample_height": params.height.first_value(),
-            "sample_scheduler": params.scheduler.first_value() or SampleScheduler.EULER,
+            "sample_sampler_name": str(params.sampler_name.first_value() or "euler"),
+            "sample_scheduler": str(params.scheduler.first_value() or "simple"),
             "sample_vae_tiling": self.sample_vae_tiling,
             "sample_vae_fp32": self.sample_vae_fp32,
             "sample_offload_unet_before_decode": self.sample_offload_unet_before_decode,

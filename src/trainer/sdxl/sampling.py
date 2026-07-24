@@ -4,31 +4,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import torch
-from diffusers import (
-    DDIMScheduler,
-    DDPMScheduler,
-    DPMSolverMultistepScheduler,
-    EulerAncestralDiscreteScheduler,
-    EulerDiscreteScheduler,
-)
 from torch import Tensor
 
-from src.trainer.config import SampleScheduler
 from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
-
-_SCHEDULER_MAP = {
-    SampleScheduler.EULER: EulerDiscreteScheduler,
-    SampleScheduler.EULER_A: EulerAncestralDiscreteScheduler,
-    SampleScheduler.DDIM: DDIMScheduler,
-    SampleScheduler.DPM_PP: DPMSolverMultistepScheduler,
-}
-
-
-def build_inference_scheduler(
-    sample_scheduler: SampleScheduler,
-    noise_scheduler: DDPMScheduler,
-) -> object:
-    return _SCHEDULER_MAP[sample_scheduler].from_config(noise_scheduler.config)
 
 
 def encode_sdxl_prompt(
