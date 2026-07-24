@@ -3,53 +3,29 @@
 import logging
 import re
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
 import torch
-from peft import get_peft_model
 from src.sampler.config import SamplingConfig
-from src.trainer.attention import configure_unet_attention
+from src.storage.config_paths import resolve_config_base_model
 from src.trainer.concept_training_metadata import (
     ConceptTrainingMetadata,
     resolve_reference_add_time_ids,
 )
-from src.trainer.config import TrainConfig, WeightDtype
-from src.trainer.sdxl.inference_context import run_merged_adapter_sampling
-from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
-from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
-from src.trainer.sdxl.lora_peft import build_sdxl_lora_config
-from src.trainer.sdxl.lora_targets import (
-    SDXL_TE_LORA_TARGET_MODULES,
-    SDXL_UNET_LORA_TARGET_MODULES,
+from src.trainer.config import TrainConfig
+from src.trainer.sdxl.comfy_inference import (
+    ComfyInferenceStack,
+    load_comfy_sdxl_stack,
+    run_comfy_inference_sampling,
 )
-from src.storage.config_paths import resolve_config_base_model
-from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
-from src.trainer.sdxl.sampling import PromptEmbedCache
+from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
+from src.trainer.sdxl.lora_io import load_lora_file
 
 logger = logging.getLogger(__name__)
 
 ProgressStatusCallback = Callable[[str | None], None]
 ProgressCallback = Callable[[int, int], None]
-
-_DTYPE_MAP = {
-    WeightDtype.FLOAT_32: torch.float32,
-    WeightDtype.FLOAT_16: torch.float16,
-    WeightDtype.BFLOAT_16: torch.bfloat16,
-}
-
-
-@dataclass
-class _SamplingStack:
-    device: torch.device
-    tokenizer_1: Any
-    tokenizer_2: Any
-    noise_scheduler: Any
-    text_encoder_1: torch.nn.Module
-    text_encoder_2: torch.nn.Module
-    vae: torch.nn.Module
-    unet: torch.nn.Module
 
 
 class SDXLLoRASampler:
@@ -74,7 +50,6 @@ class SDXLLoRASampler:
         self._progress_status_callback = progress_status_callback
         self._progress_callback = progress_callback
         self._log = log or logger
-        self._prompt_embed_cache = PromptEmbedCache()
         self._concept_metadata = concept_metadata or {}
         self._compose_grids = compose_grids
         self._job_id = job_id
@@ -108,7 +83,6 @@ class SDXLLoRASampler:
         if not torch.cuda.is_available():
             raise RuntimeError(f"CUDA is not available (torch {torch.__version__})")
 
-        self._prompt_embed_cache.clear()
         self._output_dir.mkdir(parents=True, exist_ok=True)
         config.validate_gpu()
 
@@ -116,7 +90,7 @@ class SDXLLoRASampler:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
 
-        self._log.info("Loading SDXL pipeline from %s", config.base_model_name)
+        self._log.info("Loading SDXL stack (vendored Comfy) from %s", config.base_model_name)
 
         total_diffusion_steps = self._total_diffusion_steps()
         self._set_progress(0, total_diffusion_steps)
@@ -125,7 +99,7 @@ class SDXLLoRASampler:
             for lora_index, lora_path in enumerate(self._lora_paths):
                 status_prefix = f"Sampling {lora_path.name} ({lora_index + 1}/{len(self._lora_paths)})"
                 self._set_status(f"{status_prefix} — loading LoRA")
-                stack, lora_config, merge_unet = self.load_stack_for_combo(
+                stack, lora_config, _has_lora = self.load_stack_for_combo(
                     base_model=config.base_model_name,
                     lora_path=lora_path,
                     combo_params={"lora_weight": 1.0},
@@ -137,14 +111,13 @@ class SDXLLoRASampler:
                         completed_images=completed_images,
                         stack=stack,
                         lora_config=lora_config,
-                        merge_unet_adapter=merge_unet,
                     )
                 finally:
                     del stack
                     torch.cuda.empty_cache()
                 completed_images += len(self._effective_sample_prompts())
         else:
-            stack, lora_config, merge_unet = self.load_stack_for_combo(
+            stack, lora_config, _has_lora = self.load_stack_for_combo(
                 base_model=config.base_model_name,
                 lora_path=None,
                 combo_params={},
@@ -158,7 +131,6 @@ class SDXLLoRASampler:
                     completed_images=0,
                     stack=stack,
                     lora_config=lora_config,
-                    merge_unet_adapter=merge_unet,
                 )
             finally:
                 del stack
@@ -171,125 +143,48 @@ class SDXLLoRASampler:
         base_model: str,
         lora_path: Path | None,
         combo_params: dict[str, Any],
-    ) -> tuple[_SamplingStack, TrainConfig, bool]:
+    ) -> tuple[ComfyInferenceStack, TrainConfig, bool]:
+        del combo_params
         config = self._config.model_copy(update={"base_model_name": base_model})
-        enable_lora = lora_path is not None
-        if enable_lora and lora_path is not None:
+        resolved_base_model = resolve_config_base_model(config.base_model_name)
+        lora_state = None
+        lora_apply_te1 = False
+        lora_apply_te2 = False
+
+        if lora_path is not None:
             self._log.info("Reading LoRA file: %s", lora_path)
             load_started = time.perf_counter()
-            state_dict = load_lora_file(lora_path)
+            lora_state = load_lora_file(lora_path)
             self._log.info("LoRA file read in %.1fs", time.perf_counter() - load_started)
-            lora_config = apply_lora_metadata_to_config(config, state_dict)
+            lora_config = apply_lora_metadata_to_config(config, lora_state)
+            lora_apply_te1 = lora_config.text_encoder_1.train
+            lora_apply_te2 = lora_config.text_encoder_2.train
             self._log.info(
                 "LoRA metadata: rank=%d alpha=%.1f te1=%s te2=%s",
                 lora_config.lora_rank,
                 lora_config.lora_alpha,
-                lora_config.text_encoder_1.train,
-                lora_config.text_encoder_2.train,
+                lora_apply_te1,
+                lora_apply_te2,
             )
-            stack = self._load_stack(lora_config, enable_lora=True)
-            self._log.info("Applying LoRA weights to pipeline...")
-            apply_started = time.perf_counter()
-            apply_lora_state_dict(
-                state_dict,
-                unet=stack.unet,
-                text_encoder_1=stack.text_encoder_1,
-                text_encoder_2=stack.text_encoder_2,
-                config=lora_config,
-            )
-            self._log.info("LoRA weights applied in %.1fs", time.perf_counter() - apply_started)
-            return stack, lora_config, True
-        self._log.info("Loading base model pipeline (no LoRA)")
-        stack = self._load_stack(config, enable_lora=False)
-        return stack, config, False
+        else:
+            lora_config = config
+            self._log.info("Loading base model via vendored Comfy (no LoRA)")
 
-    def _load_stack(self, config: TrainConfig, *, enable_lora: bool) -> _SamplingStack:
-        device = torch.device("cuda")
-        vae_dtype = resolve_vae_dtype(config.vae_dtype)
-        resolved_base_model = resolve_config_base_model(config.base_model_name)
-        self._log.info(
-            "Loading SDXL components from %s (lora=%s, attention=%s)...",
-            resolved_base_model,
-            enable_lora,
-            config.attention_mechanism,
-        )
         load_started = time.perf_counter()
-        components = load_sdxl_components(
+        stack = load_comfy_sdxl_stack(
             resolved_base_model,
-            unet_dtype=config.unet.weight_dtype,
-            text_encoder_1_dtype=config.text_encoder_1.weight_dtype,
-            text_encoder_2_dtype=config.text_encoder_2.weight_dtype,
-            vae_dtype=config.vae_dtype,
+            config=lora_config,
+            lora_state=lora_state,
+            lora_apply_te1=lora_apply_te1,
+            lora_apply_te2=lora_apply_te2,
         )
-        self._log.info("SDXL components loaded from disk in %.1fs", time.perf_counter() - load_started)
-
-        vae = components.vae
-        text_encoder_1 = components.text_encoder_1
-        text_encoder_2 = components.text_encoder_2
-        unet = components.unet
-
-        vae.requires_grad_(False)
-        text_encoder_1.requires_grad_(False)
-        text_encoder_2.requires_grad_(False)
-        unet.requires_grad_(False)
-
-        if enable_lora:
-            self._log.info("Attaching LoRA adapters (rank=%d)...", config.lora_rank)
-            unet = get_peft_model(
-                unet,
-                build_sdxl_lora_config(
-                    rank=config.lora_rank,
-                    alpha=config.lora_alpha,
-                    dropout=config.lora_dropout,
-                    target_modules=SDXL_UNET_LORA_TARGET_MODULES,
-                ),
-            )
-        if enable_lora and config.text_encoder_1.train:
-            text_encoder_1 = get_peft_model(
-                text_encoder_1,
-                build_sdxl_lora_config(
-                    rank=config.lora_rank,
-                    alpha=config.lora_alpha,
-                    dropout=config.lora_dropout,
-                    target_modules=SDXL_TE_LORA_TARGET_MODULES,
-                ),
-            )
-        if enable_lora and config.text_encoder_2.train:
-            text_encoder_2 = get_peft_model(
-                text_encoder_2,
-                build_sdxl_lora_config(
-                    rank=config.lora_rank,
-                    alpha=config.lora_alpha,
-                    dropout=config.lora_dropout,
-                    target_modules=SDXL_TE_LORA_TARGET_MODULES,
-                ),
-            )
-
-        self._log.info("Moving SDXL models to GPU...")
-        gpu_started = time.perf_counter()
-        unet = unet.to(device=device, dtype=_DTYPE_MAP[config.unet.weight_dtype])
-        text_encoder_1 = text_encoder_1.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_1.weight_dtype])
-        text_encoder_2 = text_encoder_2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
-        vae = vae.to(device=device, dtype=vae_dtype)
-        self._log.info("GPU transfer finished in %.1fs", time.perf_counter() - gpu_started)
-        configure_unet_attention(unet, config.attention_mechanism, self._log)
-        self._log.info("Pipeline ready for sampling")
-
-        return _SamplingStack(
-            device=device,
-            tokenizer_1=components.tokenizer_1,
-            tokenizer_2=components.tokenizer_2,
-            noise_scheduler=components.noise_scheduler,
-            text_encoder_1=text_encoder_1,
-            text_encoder_2=text_encoder_2,
-            vae=vae,
-            unet=unet,
-        )
+        self._log.info("Vendored Comfy stack loaded in %.1fs", time.perf_counter() - load_started)
+        return stack, lora_config, lora_state is not None
 
     def generate_single_cell(
         self,
         *,
-        stack: _SamplingStack,
+        stack: ComfyInferenceStack,
         lora_config: TrainConfig,
         sampling_config: TrainConfig,
         merge_unet: bool,
@@ -300,8 +195,8 @@ class SDXLLoRASampler:
         completed_images: int,
         total_steps: int,
     ) -> None:
+        del merge_unet, lora_config
         config = sampling_config
-        device = stack.device
         width = config.sample_width or config.resolution
         height = config.sample_height or config.resolution
         self._log.info(
@@ -322,28 +217,17 @@ class SDXLLoRASampler:
             image_offset = completed_images * config.sample_steps
             self._set_progress(image_offset + completed, total_steps)
 
-        run_merged_adapter_sampling(
-            unet=stack.unet,
-            text_encoder_1=stack.text_encoder_1,
-            text_encoder_2=stack.text_encoder_2,
-            vae=stack.vae,
-            tokenizer_1=stack.tokenizer_1,
-            tokenizer_2=stack.tokenizer_2,
-            noise_scheduler=stack.noise_scheduler,
-            lora_config=lora_config,
+        run_comfy_inference_sampling(
+            stack=stack,
             sampling_config=config,
-            device=device,
             sample_prompts=[prompt],
             output_dir=output_dir,
             output_stem="cell",
             log=self._log,
-            merge_unet=merge_unet,
-            embed_cache=self._prompt_embed_cache,
+            lora_weight=lora_weight,
             reference_add_time_ids=reference_add_time_ids,
             on_step=on_step,
-            lora_weight=lora_weight,
             output_filenames=[output_filename],
-            clear_embed_cache_on_te_train=True,
         )
 
     def _sample_pass(
@@ -352,13 +236,12 @@ class SDXLLoRASampler:
         output_stem: str,
         status_prefix: str,
         completed_images: int,
-        stack: _SamplingStack,
+        stack: ComfyInferenceStack,
         lora_config: TrainConfig,
-        merge_unet_adapter: bool,
     ) -> None:
+        del lora_config
         config = self._config
         sample_prompts = self._effective_sample_prompts()
-        device = stack.device
         started_at = time.perf_counter()
 
         reference_add_time_ids = resolve_reference_add_time_ids(
@@ -374,23 +257,13 @@ class SDXLLoRASampler:
                 reference_add_time_ids,
             )
 
-        run_merged_adapter_sampling(
-            unet=stack.unet,
-            text_encoder_1=stack.text_encoder_1,
-            text_encoder_2=stack.text_encoder_2,
-            vae=stack.vae,
-            tokenizer_1=stack.tokenizer_1,
-            tokenizer_2=stack.tokenizer_2,
-            noise_scheduler=stack.noise_scheduler,
-            lora_config=lora_config,
+        run_comfy_inference_sampling(
+            stack=stack,
             sampling_config=config,
-            device=device,
             sample_prompts=sample_prompts,
             output_dir=self._output_dir,
             output_stem=output_stem,
             log=self._log,
-            merge_unet=merge_unet_adapter,
-            embed_cache=self._prompt_embed_cache,
             reference_add_time_ids=reference_add_time_ids,
             on_status=lambda prompt_index, n: self._set_status(
                 f"{status_prefix} — image {prompt_index + 1}/{n}",
@@ -402,7 +275,6 @@ class SDXLLoRASampler:
                 completed_images,
             ),
             log_step_context="[sample {prompt_index}/{n_prompts}]",
-            clear_embed_cache_on_te_train=True,
         )
         self._log.info("Sampling %s completed in %.2fs", output_stem, time.perf_counter() - started_at)
 

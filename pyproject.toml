@@ -18,6 +18,8 @@ dependencies = [
     "safetensors>=0.4.5",
     "torch==2.12.0",
     "torchvision==0.27.0",
+    "torchaudio>=2.5.0",
+    "torchsde>=0.2.6",
     "pillow>=11.0.0",
     "tqdm>=4.67.0",
     "tensorboard>=2.18.0",
@@ -28,6 +30,11 @@ dependencies = [
     "bitsandbytes>=0.44.0",
     "prodigyopt>=1.0",
     "xformers>=0.0.35",
+    "einops>=0.7.0",
+    "scipy>=1.11.0",
+    "sentencepiece>=0.2.0",
+    "comfy-aimdo==0.4.10",
+    "comfy-kitchen==0.2.18",
 ]
 
 [project.scripts]
@@ -70,3 +77,4 @@ explicit = true
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
 torchvision = { index = "pytorch-cu130" }
+torchaudio = { index = "pytorch-cu130" }
