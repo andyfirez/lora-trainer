@@ -12,6 +12,6 @@ class TaggingJobHandler(BaseJobHandler):
 
     def validate_config_yaml(self, config_yaml: str) -> None:
         config = TaggingConfig.from_yaml(config_yaml)
-        if not config.image_dir:
-            raise ValueError("image_dir is required")
+        if config.dataset_id <= 0:
+            raise ValueError("dataset_id is required")
         config.resolve_model_repo()

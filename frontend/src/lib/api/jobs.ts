@@ -19,14 +19,12 @@ export interface JobLossResponse {
 
 export interface JobListParams {
   job_type?: JobType;
-  source_job_id?: number;
 }
 
 export const jobsApi = {
   list: (params: JobListParams = {}) => {
     const search = new URLSearchParams();
     if (params.job_type) search.set("job_type", params.job_type);
-    if (params.source_job_id != null) search.set("source_job_id", String(params.source_job_id));
     const qs = search.toString();
     return api.get<Job[]>(`/jobs/${qs ? `?${qs}` : ""}`);
   },

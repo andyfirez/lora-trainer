@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 
 from src.settings.gpu_info import GpuInfo
-from src.settings.models import DatabaseSettings, ServerSettings
+from src.settings.models import DatabaseSettings, ServerSettings, StorageSettings
 
 
 class TrainingSystemInfo(BaseModel):
@@ -16,6 +16,7 @@ class SettingsResponse(BaseModel):
     worker_poll_interval_seconds: int
     server: ServerSettings
     database: DatabaseSettings
+    storage: StorageSettings
     training: TrainingSystemInfo
     config_file: str
     app_version: str
@@ -25,3 +26,6 @@ class SettingsResponse(BaseModel):
 class SettingsPatch(BaseModel):
     max_concurrent_jobs: int | None = Field(default=None, ge=1)
     worker_poll_interval_seconds: int | None = Field(default=None, ge=1)
+    datasets_root: str | None = None
+    base_models_root: str | None = None
+    lora_root: str | None = None

@@ -17,18 +17,18 @@ from src.services.configs.service import JobConfigService
 from src.services.datasets.service import DatasetsService
 from src.services.jobs.service import JobsService
 
-SAMPLING_YAML = "sample_prompts:\n  - prompt\n"
+SAMPLING_YAML = f"output_dir: {{output_dir}}\nsample_prompts:\n  - prompt\n"
 
 
 @pytest.fixture
-async def api_client(tmp_path):
+async def api_client(tmp_path, storage_roots):
     register_all_tables()
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    image_dir = tmp_path / "images"
+    image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
     from PIL import Image
 
@@ -38,12 +38,11 @@ async def api_client(tmp_path):
         datasets_service = DatasetsService(
             DatasetRepository(db_session), DatasetImageCropRepository(db_session)
         )
-        dataset = await datasets_service.create_dataset(name="cats", image_dir=str(image_dir))
+        dataset = await datasets_service.create_dataset(name="cats", relative_path="images")
         dataset = await datasets_service.update_dataset(
             dataset.id,
             name=None,
-            image_dir=None,
-            caption_dir=None,
+            relative_path=None,
             description=None,
             target_resolution=1024,
             update_target_resolution=True,
@@ -56,6 +55,10 @@ async def api_client(tmp_path):
 concepts:
   - dataset_id: {dataset.id}
 """
+
+        sampling_output = tmp_path / "sampling-out"
+        sampling_output.mkdir()
+        sampling_yaml = SAMPLING_YAML.format(output_dir=sampling_output.as_posix())
 
         config_service = JobConfigService(
             JobConfigRepository(db_session), DatasetRepository(db_session)
@@ -78,7 +81,7 @@ concepts:
         try:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                yield client, config_service, training_yaml
+                yield client, config_service, training_yaml, sampling_yaml
         finally:
             app.dependency_overrides.clear()
 
@@ -87,7 +90,7 @@ concepts:
 
 @pytest.mark.asyncio
 async def test_trainings_crud_and_type_isolation(api_client) -> None:
-    client, config_service, training_yaml = api_client
+    client, config_service, training_yaml, sampling_yaml = api_client
 
     create = await client.post(
         "/trainings/",
@@ -100,7 +103,7 @@ async def test_trainings_crud_and_type_isolation(api_client) -> None:
     sampling = await config_service.create_config(
         name="sample-1",
         config_type=ConfigType.SAMPLING,
-        config_yaml=SAMPLING_YAML,
+        config_yaml=sampling_yaml,
     )
 
     listed = await client.get("/trainings/")
@@ -141,7 +144,7 @@ async def test_trainings_crud_and_type_isolation(api_client) -> None:
 
 @pytest.mark.asyncio
 async def test_sampling_configs_crud_and_type_isolation(api_client) -> None:
-    client, config_service, training_yaml = api_client
+    client, config_service, training_yaml, sampling_yaml = api_client
 
     training = await config_service.create_config(
         name="train-1",
@@ -151,7 +154,7 @@ async def test_sampling_configs_crud_and_type_isolation(api_client) -> None:
 
     create = await client.post(
         "/sampling-configs/",
-        json={"name": "sample-1", "config_yaml": SAMPLING_YAML},
+        json={"name": "sample-1", "config_yaml": sampling_yaml},
     )
     assert create.status_code == 201
     sampling_id = create.json()["id"]
@@ -180,6 +183,6 @@ async def test_sampling_configs_crud_and_type_isolation(api_client) -> None:
 
 @pytest.mark.asyncio
 async def test_legacy_configs_route_not_found(api_client) -> None:
-    client, _, _ = api_client
+    client, _, _, _ = api_client
     response = await client.get("/configs/")
     assert response.status_code == 404

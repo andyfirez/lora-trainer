@@ -22,11 +22,18 @@ export interface TrainingSystemInfo {
   cancel_poll_interval_seconds: number;
 }
 
+export interface StorageInfo {
+  datasets_root: string;
+  base_models_root: string;
+  lora_root: string;
+}
+
 export interface Settings {
   max_concurrent_jobs: number;
   worker_poll_interval_seconds: number;
   server: ServerInfo;
   database: DatabaseInfo;
+  storage: StorageInfo;
   training: TrainingSystemInfo;
   config_file: string;
   app_version: string;
@@ -36,6 +43,9 @@ export interface Settings {
 export interface SettingsPatch {
   max_concurrent_jobs?: number;
   worker_poll_interval_seconds?: number;
+  datasets_root?: string;
+  base_models_root?: string;
+  lora_root?: string;
 }
 
 export const settingsApi = {

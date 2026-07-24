@@ -18,3 +18,9 @@ class TrainingSettings(BaseModel):
     max_concurrent_jobs: int = Field(default=1, ge=1)
     logs_dir: str = "logs"
     cancel_poll_interval_seconds: int = Field(default=1, ge=1)
+
+
+class StorageSettings(BaseModel):
+    datasets_root: str = "~/lora-trainer/datasets"
+    base_models_root: str = "~/lora-trainer/base-models"
+    lora_root: str = "~/lora-trainer/lora"

@@ -563,7 +563,9 @@ def compute_preprocess_status(
     dataset: Dataset,
     crop_by_filename: dict[str, StoredCropRecord],
 ) -> PreprocessStatus:
-    image_dir = Path(dataset.image_dir)
+    from src.services.datasets.paths import dataset_image_dir
+
+    image_dir = dataset_image_dir(dataset)
     filenames = list_image_filenames(image_dir)
     bucket_config = BucketPreprocessConfig.from_dataset(dataset)
     counts = {state: 0 for state in ImagePreprocessState}

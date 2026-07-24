@@ -1,15 +1,51 @@
 "use client";
 
 import useSWR from "swr";
-import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback } from "react";
 import { lorasApi } from "@/lib/api/loras";
+import StorageFolderBrowser from "@/components/storage/StorageFolderBrowser";
+import LoraFolderItem from "@/components/lora/LoraFolderItem";
 import PageHeader from "@/components/ui/PageHeader";
-import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "@/components/ui/Table";
-import Card from "@/components/ui/Card";
+import { normalizeRelativePath } from "@/lib/storagePaths";
 
-export default function LorasPage() {
+function LorasPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentPath = normalizeRelativePath(searchParams.get("path") ?? "");
   const { data: loras, isLoading } = useSWR("/loras", () => lorasApi.list());
+
+  const navigateToPath = useCallback(
+    (path: string, replace = false) => {
+      const normalized = normalizeRelativePath(path);
+      const params = new URLSearchParams(searchParams.toString());
+      if (normalized) {
+        params.set("path", normalized);
+      } else {
+        params.delete("path");
+      }
+      const query = params.toString();
+      const href = query ? `/loras?${query}` : "/loras";
+      if (replace) {
+        router.replace(href);
+      } else {
+        router.push(href);
+      }
+    },
+    [router, searchParams]
+  );
+
+  const handleNavigate = useCallback(
+    (path: string) => {
+      const normalized = normalizeRelativePath(path);
+      const current = normalizeRelativePath(currentPath);
+      const isBack =
+        normalized === "" ||
+        (current.startsWith(`${normalized}/`) && normalized.split("/").length < current.split("/").length);
+      navigateToPath(path, isBack);
+    },
+    [currentPath, navigateToPath]
+  );
 
   return (
     <div className="space-y-6">
@@ -18,44 +54,23 @@ export default function LorasPage() {
         description="Successfully trained LoRA models with frozen configs and artifacts"
       />
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20 text-muted">
-          <Loader2 className="animate-spin mr-2" size={18} /> Loading LoRAs…
-        </div>
-      ) : !loras?.length ? (
-        <Card className="text-center py-20 text-muted">
-          No trained LoRAs yet. Complete a training job to see results here.
-        </Card>
-      ) : (
-        <Table>
-          <TableHead>
-            <tr>
-              <TableHeader>Name</TableHeader>
-              <TableHeader>Base Model</TableHeader>
-              <TableHeader>Job</TableHeader>
-              <TableHeader>Created</TableHeader>
-            </tr>
-          </TableHead>
-          <TableBody>
-            {loras.map((lora) => (
-              <TableRow key={lora.id}>
-                <TableCell>
-                  <Link href={`/loras/${lora.id}`} className="text-text hover:text-accent font-medium">
-                    {lora.name}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted max-w-xs truncate">{lora.base_model_name}</TableCell>
-                <TableCell>
-                  <Link href={`/jobs/${lora.job_id}`} className="text-accent hover:underline text-sm">
-                    Job #{lora.job_id}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted">{new Date(lora.created_at).toLocaleDateString()}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <StorageFolderBrowser
+        kind="lora"
+        items={loras ?? []}
+        currentPath={currentPath}
+        onNavigate={handleNavigate}
+        catalogLoading={isLoading}
+        emptyHint="Complete a training job or place LoRA weights under the LoRA root to auto-discover."
+        renderItem={(lora) => <LoraFolderItem lora={lora} />}
+      />
     </div>
+  );
+}
+
+export default function LorasPage() {
+  return (
+    <Suspense fallback={<div className="text-muted py-20">Loading…</div>}>
+      <LorasPageContent />
+    </Suspense>
   );
 }

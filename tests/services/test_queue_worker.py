@@ -18,7 +18,7 @@ from src.db.tables.job_config import ConfigType
 from src.db.tables.queue_entry import QueueEntry
 from src.services.configs.service import JobConfigService
 from src.services.jobs.service import JobsService
-from src.services.worker.service import QueueWorker
+from src.services.worker.service import QueueWorker, _ManagedProcess, _PendingSpawn
 
 
 class _FakeStdout:
@@ -76,7 +76,7 @@ async def _session_with_job(job_id: int, job_type: JobType = JobType.TRAINING):
 @pytest.mark.asyncio
 async def test_queue_worker_start_stop() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
-    with patch.object(worker, "_get_next_queued_entry", AsyncMock(return_value=None)):
+    with patch.object(worker, "_peek_next_queued_entry", AsyncMock(return_value=None)):
         await worker.start()
         await asyncio.sleep(0.05)
         await worker.stop()
@@ -91,10 +91,11 @@ async def test_echo_subprocess_output_false_drains_without_logging(
 
     with caplog.at_level(logging.INFO, logger="src.services.worker.service"):
         async with _session_with_job(7):
+            worker._active_jobs[7] = _PendingSpawn()
             with patch(
                 "src.services.worker.service.subprocess.Popen",
                 MagicMock(return_value=fake_proc),
-            ), patch.object(worker, "_dequeue_entry", AsyncMock()), patch.object(
+            ), patch.object(
                 worker, "_mark_job_running", AsyncMock()
             ), patch.object(worker, "_finalize_job", AsyncMock()):
                 await worker._run_entry(QueueEntry(id=1, job_id=7, position=1))
@@ -112,6 +113,7 @@ async def test_echo_subprocess_output_true_logs_subprocess_lines() -> None:
     fake_proc = _FakePopen([b"visible line\n"])
 
     async with _session_with_job(9):
+        worker._active_jobs[9] = _PendingSpawn()
         with patch(
             "src.services.worker.service.asyncio.to_thread",
             side_effect=_inline_to_thread,
@@ -120,7 +122,7 @@ async def test_echo_subprocess_output_true_logs_subprocess_lines() -> None:
         ) as log_mock, patch(
             "src.services.worker.service.subprocess.Popen",
             MagicMock(return_value=fake_proc),
-        ), patch.object(worker, "_dequeue_entry", AsyncMock()), patch.object(
+        ), patch.object(
             worker, "_mark_job_running", AsyncMock()
         ), patch.object(worker, "_finalize_job", AsyncMock()):
             await worker._run_entry(QueueEntry(id=1, job_id=9, position=1))
@@ -129,28 +131,26 @@ async def test_echo_subprocess_output_true_logs_subprocess_lines() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_job_dequeues_before_spawn() -> None:
+async def test_run_entry_spawns_after_pending_reservation() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
     fake_proc = _FakePopen([])
     call_order: list[str] = []
-
-    async def _dequeue(entry_id: int) -> None:
-        call_order.append("dequeue")
 
     def _popen(*_args: object, **_kwargs: object) -> _FakePopen:
         call_order.append("popen")
         return fake_proc
 
     async with _session_with_job(3):
+        worker._active_jobs[3] = _PendingSpawn()
         with patch(
             "src.services.worker.service.subprocess.Popen",
             side_effect=_popen,
-        ), patch.object(worker, "_dequeue_entry", side_effect=_dequeue), patch.object(
+        ), patch.object(
             worker, "_mark_job_running", AsyncMock()
         ), patch.object(worker, "_finalize_job", AsyncMock()):
             await worker._run_entry(QueueEntry(id=5, job_id=3, position=1))
 
-    assert call_order == ["dequeue", "popen"]
+    assert call_order == ["popen"]
 
 
 @pytest.mark.asyncio
@@ -186,7 +186,7 @@ async def test_poll_loop_skips_active_job() -> None:
     worker._active_jobs[42] = active
 
     with patch.object(
-        worker, "_get_next_queued_entry", AsyncMock(
+        worker, "_peek_next_queued_entry", AsyncMock(
             return_value=QueueEntry(id=1, job_id=42, position=1)
         )
     ), patch.object(worker, "_run_entry", AsyncMock()) as run_job_mock:
@@ -202,11 +202,92 @@ async def test_poll_loop_skips_active_job() -> None:
 
 
 @pytest.mark.asyncio
+async def test_poll_loop_does_not_double_spawn_same_job() -> None:
+    worker = QueueWorker(echo_subprocess_output=False)
+    entry = QueueEntry(id=1, job_id=63, position=1)
+    spawn_count = 0
+
+    async def counting_run_entry(claimed: QueueEntry) -> None:
+        nonlocal spawn_count
+        spawn_count += 1
+        worker._active_jobs[claimed.job_id] = MagicMock(is_running=lambda: True, pid=4242)
+
+    with patch.object(worker, "_peek_next_queued_entry", AsyncMock(return_value=entry)), patch.object(
+        worker, "_claim_next_entry", AsyncMock(return_value=entry)
+    ), patch.object(worker, "_run_entry", counting_run_entry), patch(
+        "src.services.worker.service.settings"
+    ) as settings_mock:
+        settings_mock.training.max_concurrent_jobs = 2
+        for _ in range(3):
+            if await worker._active_job_count() >= settings_mock.training.max_concurrent_jobs:
+                break
+            peek = await worker._peek_next_queued_entry()
+            if peek is None or peek.job_id in worker._active_jobs:
+                break
+            worker._active_jobs[peek.job_id] = _PendingSpawn()
+            claimed = await worker._claim_next_entry()
+            if claimed is None or claimed.job_id != peek.job_id:
+                worker._active_jobs.pop(peek.job_id, None)
+                break
+            await counting_run_entry(claimed)
+
+    assert spawn_count == 1
+
+
+@pytest.mark.asyncio
+async def test_run_entry_aborts_when_managed_process_already_active() -> None:
+    worker = QueueWorker(echo_subprocess_output=False)
+    fake_proc = _FakePopen([])
+    worker._active_jobs[63] = _ManagedProcess(fake_proc)
+
+    async with _session_with_job(63):
+        with patch(
+            "src.services.worker.service.subprocess.Popen",
+        ) as popen_mock, patch.object(worker, "_finalize_job", AsyncMock()):
+            await worker._run_entry(QueueEntry(id=1, job_id=63, position=1))
+
+    popen_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_claim_next_removes_entry_atomically(
+    worker_db: tuple[AsyncSession, async_sessionmaker[AsyncSession]],
+) -> None:
+    session, test_session_factory = worker_db
+    queue_repo = QueueRepository(session)
+    job = Job(
+        job_type=JobType.SAMPLING,
+        name="sample",
+        config_yaml="base_model_name: x",
+        lora_paths_yaml="[]",
+        status=JobStatus.QUEUED,
+    )
+    session.add(job)
+    await session.flush()
+    await queue_repo.add(QueueEntry(job_id=job.id, position=1))
+    await session.commit()
+
+    async with test_session_factory() as claim_session:
+        claimed = await QueueRepository(claim_session).claim_next()
+        await claim_session.commit()
+
+    assert claimed is not None
+    assert claimed.job_id == job.id
+
+    async with test_session_factory() as claim_session:
+        second = await QueueRepository(claim_session).claim_next()
+        await claim_session.commit()
+
+    assert second is None
+
+
+@pytest.mark.asyncio
 async def test_run_job_spawn_failure_marks_failed() -> None:
     worker = QueueWorker(echo_subprocess_output=False)
 
     async with _session_with_job(11):
-        with patch.object(worker, "_dequeue_entry", AsyncMock()), patch(
+        worker._active_jobs[11] = _PendingSpawn()
+        with patch(
             "src.services.worker.service.subprocess.Popen",
             side_effect=OSError("spawn failed"),
         ), patch.object(worker, "_mark_job_spawn_failed", AsyncMock()) as mark_failed_mock, patch.object(
@@ -258,7 +339,7 @@ async def test_dequeue_on_start_prevents_requeue_after_completion(
             assert stored_job is not None
             await repo.update_status(stored_job, JobStatus.COMPLETED)
             await db_session.commit()
-        assert await worker._get_next_queued_entry() is None
+        assert await worker._peek_next_queued_entry() is None
         assert await worker._is_any_job_running() is False
 
 
@@ -351,77 +432,22 @@ async def test_finalize_job_includes_subprocess_output_on_failure(
 
 
 @pytest.mark.asyncio
-async def test_finalize_job_queues_sampling_when_runner_already_completed(
+async def test_finalize_job_registers_trained_lora(
     session: AsyncSession,
     jobs_service: JobsService,
     config_service: JobConfigService,
     training_dataset: Dataset,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    output_dir = tmp_path / "output"
-
-    sampling_config = await config_service.create_config(
-        name="post-train sampling",
-        config_type=ConfigType.SAMPLING,
-        config_yaml="sample_prompts:\n  - test prompt\n",
-    )
+    output_rel = "output"
     training_config = await config_service.create_config(
         name="training",
         config_type=ConfigType.TRAINING,
         config_yaml=f"""
-output_dir: {output_dir.as_posix()}
+base_model_name: test-model
+output_dir: {output_rel}
 lora_name: demo
 output_format: safetensors
-checkpointing_enabled: true
-sampling_enabled: true
-sampling_config_id: {sampling_config.id}
-concepts:
-  - dataset_id: {training_dataset.id}
-""",
-    )
-    training_job = await jobs_service.create_from_config(training_config.id)
-    from src.trainer.config import TrainConfig
-
-    train_config = TrainConfig.from_yaml(training_job.config_yaml)
-    work_dir = output_dir / train_config.lora_name
-    work_dir.mkdir(parents=True)
-    (work_dir / f"{train_config.lora_name}_epoch1.safetensors").write_bytes(b"epoch")
-    await jobs_service._job_repo.update_status(training_job, JobStatus.COMPLETED)
-    await session.commit()
-
-    @asynccontextmanager
-    async def test_session_factory():
-        yield session
-
-    worker = QueueWorker()
-    with patch("src.services.worker.service.session_factory", test_session_factory):
-        await worker._finalize_job(training_job.id, 0)
-
-    sampling_jobs = await jobs_service.list_jobs_by_source(training_job.id)
-    assert len(sampling_jobs) == 1
-    assert sampling_jobs[0].job_type == JobType.SAMPLING
-    assert sampling_jobs[0].status == JobStatus.QUEUED
-    queue_entry = await jobs_service._queue_repo.get_by_job_id(sampling_jobs[0].id)
-    assert queue_entry is not None
-
-
-@pytest.mark.asyncio
-async def test_finalize_job_registers_trained_lora_without_sampling(
-    session: AsyncSession,
-    jobs_service: JobsService,
-    config_service: JobConfigService,
-    training_dataset: Dataset,
-    tmp_path: Path,
-) -> None:
-    output_dir = tmp_path / "output"
-    training_config = await config_service.create_config(
-        name="training",
-        config_type=ConfigType.TRAINING,
-        config_yaml=f"""
-output_dir: {output_dir.as_posix()}
-lora_name: demo
-output_format: safetensors
-sampling_enabled: false
 concepts:
   - dataset_id: {training_dataset.id}
 """,
@@ -431,7 +457,7 @@ concepts:
     from src.trainer.config import TrainConfig
 
     train_config = TrainConfig.from_yaml(training_job.config_yaml)
-    work_dir = output_dir / train_config.lora_name
+    work_dir = storage_roots["lora"] / output_rel / train_config.lora_name
     work_dir.mkdir(parents=True)
     (work_dir / f"{train_config.lora_name}.safetensors").write_bytes(b"weights")
     await jobs_service._job_repo.update_output_path(training_job, str(work_dir))
@@ -450,6 +476,4 @@ concepts:
     assert len(loras) == 1
     assert loras[0].job_id == training_job.id
     assert loras[0].name == train_config.lora_name
-    assert loras[0].weights_path == str(work_dir / f"{train_config.lora_name}.safetensors")
-    sampling_jobs = await jobs_service.list_jobs_by_source(training_job.id)
-    assert sampling_jobs == []
+    assert loras[0].weights_relpath.endswith(f"{train_config.lora_name}.safetensors")

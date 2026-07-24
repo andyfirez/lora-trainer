@@ -13,17 +13,12 @@ import type { Job, JobType } from "@/types";
 
 interface JobsListProps {
   jobType?: JobType;
-  sourceJobId?: number;
 }
 
-export default function JobsList({ jobType, sourceJobId }: JobsListProps) {
-  const swrKey = sourceJobId != null
-    ? `/jobs?source_job_id=${sourceJobId}`
-    : jobType != null
-      ? `/jobs?job_type=${jobType}`
-      : "/jobs";
+export default function JobsList({ jobType }: JobsListProps) {
+  const swrKey = jobType != null ? `/jobs?job_type=${jobType}` : "/jobs";
 
-  const { data: jobs, isLoading, mutate } = useSWR(swrKey, () => jobsApi.list({ job_type: jobType, source_job_id: sourceJobId }), {
+  const { data: jobs, isLoading, mutate } = useSWR(swrKey, () => jobsApi.list({ job_type: jobType }), {
     refreshInterval: (latest) =>
       latest?.some((job) => job.status === "running") ? 1000 : 5000,
   });

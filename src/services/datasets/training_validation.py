@@ -7,6 +7,7 @@ from PIL import Image
 from src.db.tables.dataset import Dataset
 from src.db.tables.dataset_image_crop import DatasetImageCrop
 from src.services.datasets.captions import list_image_filenames
+from src.services.datasets.paths import dataset_image_dir, dataset_image_dir_str
 from src.services.datasets.exceptions import (
     DatasetNotPreparedError,
     DatasetResolutionMismatchError,
@@ -53,12 +54,12 @@ def validate_dataset_for_training(
             "Dataset was prepared with bucketing but training has enable_bucket=false",
         )
 
-    image_dir = Path(dataset.image_dir)
+    image_dir = dataset_image_dir(dataset)
     if not image_dir.is_dir():
         raise DatasetNotPreparedError(
             dataset.id,
             dataset.name,
-            f"Image directory not found: {dataset.image_dir}",
+            f"Image directory not found: {dataset.relative_path}",
         )
 
     filenames = list_image_filenames(image_dir)
@@ -69,7 +70,7 @@ def validate_dataset_for_training(
             "Dataset has no images",
         )
 
-    prepared_dir = prepared_dir_path(dataset.image_dir, dataset.target_resolution)
+    prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), dataset.target_resolution)
     if not prepared_dir.is_dir():
         raise DatasetNotPreparedError(
             dataset.id,

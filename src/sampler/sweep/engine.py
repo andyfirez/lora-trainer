@@ -107,8 +107,8 @@ class SweepEngine:
         self._log.info(
             "Sweep load plan: %d pipeline group(s) (%d with LoRA, %d base-only)",
             len(sorted_groups),
-            sum(1 for (_, k) in sorted_groups if k[1]),
-            sum(1 for (_, k) in sorted_groups if not k[1]),
+            sum(1 for (key, _) in sorted_groups if key[1]),
+            sum(1 for (key, _) in sorted_groups if not key[1]),
         )
         for index, ((base_model, lora_key), group_combos) in enumerate(sorted_groups, start=1):
             lora_label = Path(lora_key).name if lora_key else "(none)"

@@ -23,5 +23,4 @@ def test_build_sampling_field_updates_preserves_prompts() -> None:
 def test_new_format_yaml_roundtrip() -> None:
     yaml_text = SamplingConfig.default_yaml()
     config = SamplingConfig.from_yaml(yaml_text)
-    assert config.source_type == "manual"
     assert config.parameters.lora_weight.first_value() == 1.0

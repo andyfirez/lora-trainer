@@ -22,7 +22,6 @@ WD14_MODEL_REPOS: dict[str, str] = {
 
 class TaggingConfig(BaseModel):
     dataset_id: int
-    image_dir: str
     mode: TaggingMode = TaggingMode.IF_EMPTY
     threshold: float = Field(default=0.35, ge=0.0, le=1.0)
     model: str = "wd-v1-4-convnextv2-tagger-v2"

@@ -166,7 +166,7 @@ def test_validate_dataset_for_training_ready(tmp_path: Path) -> None:
     dataset = Dataset(
         id=1,
         name="demo",
-        image_dir=str(tmp_path),
+        relative_path=str(tmp_path),
         target_resolution=1024,
         preprocess_ready=True,
     )
@@ -177,7 +177,7 @@ def test_validate_dataset_resolution_mismatch(tmp_path: Path) -> None:
     dataset = Dataset(
         id=1,
         name="demo",
-        image_dir=str(tmp_path),
+        relative_path=str(tmp_path),
         target_resolution=768,
         preprocess_ready=True,
     )
@@ -189,7 +189,7 @@ def test_validate_dataset_bucket_mode_mismatch(tmp_path: Path) -> None:
     dataset = Dataset(
         id=1,
         name="demo",
-        image_dir=str(tmp_path),
+        relative_path=str(tmp_path),
         target_resolution=1024,
         preprocess_ready=True,
         enable_bucket=True,
@@ -214,7 +214,7 @@ def test_recompute_preprocess_ready(tmp_path: Path) -> None:
     dataset = Dataset(
         id=1,
         name="demo",
-        image_dir=str(tmp_path),
+        relative_path=str(tmp_path),
         target_resolution=1024,
         preprocess_ready=False,
     )
@@ -271,7 +271,7 @@ def test_validate_bucket_training_with_crops(tmp_path: Path) -> None:
     dataset = Dataset(
         id=1,
         name="demo",
-        image_dir=str(tmp_path),
+        relative_path=str(tmp_path),
         target_resolution=1024,
         preprocess_ready=True,
         enable_bucket=True,

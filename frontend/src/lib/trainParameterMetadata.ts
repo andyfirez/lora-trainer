@@ -967,38 +967,14 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     recommendedValue: "path/to/checkpoint",
   },
 
-  // Sampling
-  {
-    key: "sampling_enabled",
-    label: "Sampling Enabled",
-    section: "Sampling",
-    shortHint: "Queue sampling jobs after training completes using a linked sampling config.",
-    description:
-      "When enabled, automatically queues standalone sampling jobs for intermediate checkpoints after training finishes. Requires checkpointing enabled and a linked sampling config.",
-    defaultValue: "false",
-    showInlineHint: false,
-    recommendedValue: "false",
-    valueOptions: [
-      { value: "true", description: "Queue post-train sampling jobs for saved checkpoints." },
-      { value: "false", description: "No automatic sampling after training." },
-    ],
-  },
-  {
-    key: "sampling_config_id",
-    label: "Sampling Config",
-    section: "Sampling",
-    shortHint: "Reference to a saved sampling config with prompts and sampler settings.",
-    description:
-      "ID of a sampling configuration stored in the app database. Its prompts, steps, CFG, and scheduler settings are used for post-train auto sampling jobs.",
-    recommendedValue: "linked sampling config",
-  },
+  // Runtime sampling overlay (yaml-only; populated during sampling jobs)
   {
     key: "sample_prompts",
     label: "Sample Prompts",
     section: "Sampling",
     shortHint: "Prompts used by standalone sampling jobs (resolved from sampling config).",
     description:
-      "List of text prompts for post-train sampling jobs. In the web UI these come from the linked sampling config via resolve_sampling(); inline YAML values are merged when creating sampling jobs. Trigger words from concepts are appended automatically.",
+      "List of text prompts for sampling jobs. In the web UI these come from the linked sampling config via resolve_sampling(); inline YAML values are merged when creating sampling jobs.",
     defaultValue: "[]",
     yamlOnly: true,
     recommendedValue: "[]",
@@ -1149,23 +1125,46 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     key: "post_training_sampling_config_id",
     label: "Post-Training Sampling Config",
     section: "Sampling",
-    shortHint: "Deprecated — use sampling_config_id with sampling_enabled instead.",
+    shortHint: "Deprecated — rejected by config validation.",
     description:
-      "Legacy field for linking a sampling config after training completes. Rejected by config validation in favor of sampling_enabled + sampling_config_id for post-train auto sampling. Do not use in new configs.",
+      "Legacy field for linking a sampling config after training completes. Rejected by config validation. Do not use in new configs.",
     yamlOnly: true,
     deprecated: true,
-    recommendedValue: "do not use (use sampling_config_id + sampling_enabled)",
+    showInlineHint: false,
+    recommendedValue: "do not use",
   },
   {
     key: "sample_after_training",
     label: "Sample After Training",
     section: "Sampling",
-    shortHint: "Deprecated — removed; use sampling_enabled for preview generation.",
+    shortHint: "Deprecated — rejected by config validation.",
     description:
-      "Deprecated boolean flag for post-training sampling. Config validation rejects this key. Use sampling_enabled with a linked sampling config for post-train auto sampling.",
+      "Deprecated boolean flag for post-training sampling. Config validation rejects this key.",
     yamlOnly: true,
     deprecated: true,
-    recommendedValue: "do not use (use sampling_enabled)",
+    recommendedValue: "do not use",
+  },
+  {
+    key: "sampling_enabled",
+    label: "Sampling Enabled",
+    section: "Sampling",
+    shortHint: "Deprecated — rejected by config validation.",
+    description: "Legacy post-training auto-sampling flag. Rejected by config validation.",
+    yamlOnly: true,
+    deprecated: true,
+    showInlineHint: false,
+    recommendedValue: "do not use",
+  },
+  {
+    key: "sampling_config_id",
+    label: "Sampling Config ID",
+    section: "Sampling",
+    shortHint: "Deprecated — rejected by config validation.",
+    description: "Legacy reference to a sampling config for post-training jobs. Rejected by config validation.",
+    yamlOnly: true,
+    deprecated: true,
+    showInlineHint: false,
+    recommendedValue: "do not use",
   },
 
   // Logging

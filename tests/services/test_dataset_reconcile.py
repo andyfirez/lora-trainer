@@ -27,20 +27,20 @@ def _write_image(path: Path, size: tuple[int, int] = (800, 600)) -> None:
 
 async def _dataset_with_image(
     datasets_service: DatasetsService,
-    tmp_path: Path,
+    storage_roots,
     *,
     filename: str = "sample.png",
     enable_bucket: bool = False,
+    relative_path: str = "images",
 ) -> tuple[object, Path]:
-    image_dir = tmp_path / "images"
-    image_dir.mkdir()
+    image_dir = storage_roots["datasets"] / relative_path
+    image_dir.mkdir(parents=True, exist_ok=True)
     _write_image(image_dir / filename)
-    dataset = await datasets_service.create_dataset(name="reconcile", image_dir=str(image_dir))
+    dataset = await datasets_service.create_dataset(name="reconcile", relative_path=relative_path)
     dataset = await datasets_service.update_dataset(
         dataset.id,
         name=None,
-        image_dir=None,
-        caption_dir=None,
+        relative_path=None,
         description=None,
         target_resolution=1024,
         update_target_resolution=True,
@@ -53,9 +53,9 @@ async def _dataset_with_image(
 @pytest.mark.asyncio
 async def test_reconcile_removes_orphan_crop_and_prepared(
     datasets_service: DatasetsService,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    dataset, image_dir = await _dataset_with_image(datasets_service, tmp_path)
+    dataset, image_dir = await _dataset_with_image(datasets_service, storage_roots)
     await datasets_service.save_crop(dataset, "sample.png", 0.5, 0.5)
     await datasets_service.bake_image(dataset, "sample.png")
 
@@ -74,9 +74,9 @@ async def test_reconcile_removes_orphan_crop_and_prepared(
 @pytest.mark.asyncio
 async def test_reconcile_removes_orphan_prepared_without_source(
     datasets_service: DatasetsService,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    dataset, image_dir = await _dataset_with_image(datasets_service, tmp_path, filename="keep.png")
+    dataset, image_dir = await _dataset_with_image(datasets_service, storage_roots, filename="keep.png")
     await datasets_service.save_crop(dataset, "keep.png", 0.5, 0.5)
     await datasets_service.bake_image(dataset, "keep.png")
 
@@ -94,9 +94,9 @@ async def test_reconcile_removes_orphan_prepared_without_source(
 @pytest.mark.asyncio
 async def test_reconcile_renames_file_by_content_hash(
     datasets_service: DatasetsService,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    dataset, image_dir = await _dataset_with_image(datasets_service, tmp_path, filename="old.png")
+    dataset, image_dir = await _dataset_with_image(datasets_service, storage_roots, filename="old.png")
     await datasets_service.save_crop(dataset, "old.png", 0.4, 0.6)
     await datasets_service.bake_image(dataset, "old.png")
     await datasets_service.reconcile_dataset(dataset)
@@ -119,9 +119,9 @@ async def test_reconcile_renames_file_by_content_hash(
 @pytest.mark.asyncio
 async def test_list_items_with_states_reconciles_orphan_crop(
     datasets_service: DatasetsService,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    dataset, image_dir = await _dataset_with_image(datasets_service, tmp_path)
+    dataset, image_dir = await _dataset_with_image(datasets_service, storage_roots)
     await datasets_service.save_crop(dataset, "sample.png", 0.5, 0.5)
     await datasets_service.bake_image(dataset, "sample.png")
     (image_dir / "sample.png").unlink()
@@ -156,9 +156,9 @@ def test_get_image_state_requires_bucket_metadata_when_baked() -> None:
 @pytest.mark.asyncio
 async def test_bake_all_rebakes_ready_image_with_missing_bucket_metadata(
     datasets_service: DatasetsService,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    dataset, image_dir = await _dataset_with_image(datasets_service, tmp_path, enable_bucket=True)
+    dataset, image_dir = await _dataset_with_image(datasets_service, storage_roots, enable_bucket=True)
     await datasets_service.save_crop(dataset, "sample.png", 0.5, 0.5)
     await datasets_service.bake_image(dataset, "sample.png")
 
@@ -184,9 +184,9 @@ async def test_bake_all_rebakes_ready_image_with_missing_bucket_metadata(
 async def test_resolve_concept_training_metadata_ignores_orphan_crops(
     session,
     datasets_service: DatasetsService,
-    tmp_path: Path,
+    storage_roots,
 ) -> None:
-    dataset, image_dir = await _dataset_with_image(datasets_service, tmp_path)
+    dataset, image_dir = await _dataset_with_image(datasets_service, storage_roots)
     await datasets_service.save_crop(dataset, "sample.png", 0.5, 0.5)
     await datasets_service.bake_image(dataset, "sample.png")
 

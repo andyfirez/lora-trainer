@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import PathInput from "@/components/PathInput";
+import StoragePathInput from "@/components/StoragePathInput";
 import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
@@ -9,35 +9,35 @@ import { datasetsApi } from "@/lib/api/datasets";
 
 interface Props {
   open: boolean;
-  dataset: { id: number; name: string; image_dir: string };
+  dataset: { id: number; name: string; relative_path: string; path_missing?: boolean };
   onClose: () => void;
   onSaved: () => void;
 }
 
 export default function EditDatasetModal({ open, dataset, onClose, onSaved }: Props) {
   const [name, setName] = useState(dataset.name);
-  const [imageDir, setImageDir] = useState(dataset.image_dir);
+  const [relativePath, setRelativePath] = useState(dataset.relative_path);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName(dataset.name);
-      setImageDir(dataset.image_dir);
+      setRelativePath(dataset.relative_path);
       setError(null);
     }
-  }, [open, dataset.name, dataset.image_dir]);
+  }, [open, dataset.name, dataset.relative_path]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!name || !imageDir) {
-      setError("Name and image directory are required");
+    if (!name || !relativePath) {
+      setError("Name and path are required");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await datasetsApi.update(dataset.id, { name, image_dir: imageDir });
+      await datasetsApi.update(dataset.id, { name, relative_path: relativePath });
       onSaved();
       onClose();
     } catch (err: unknown) {
@@ -60,13 +60,13 @@ export default function EditDatasetModal({ open, dataset, onClose, onSaved }: Pr
             className={inputClassName}
           />
         </div>
-        <PathInput
-          label="Image Directory"
-          value={imageDir}
-          onChange={setImageDir}
-          placeholder="/path/to/images"
-          pickerTitle="Select Image Directory"
-          kind="directory"
+        <StoragePathInput
+          label="Path inside datasets root"
+          value={relativePath}
+          onChange={setRelativePath}
+          kind="datasets"
+          placeholder="anime/girl_01"
+          warning={dataset.path_missing ? "Folder not found on disk" : null}
         />
         <ModalFooter>
           <Button type="button" variant="secondary" onClick={onClose} className="flex-1">

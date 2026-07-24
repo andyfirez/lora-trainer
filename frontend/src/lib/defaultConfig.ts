@@ -64,10 +64,6 @@ mixed_precision: float16
 checkpointing_enabled: true
 save_every_n_epochs: 1
 
-# Sampling
-sampling_enabled: false
-# sampling_config_id: 1
-
 # Logging (loss graph + optional TensorBoard)
 logging:
   use_ui_logger: true
@@ -78,10 +74,8 @@ logging:
 
 export const SamplingConfig = {
   DEFAULT_YAML: `# SDXL LoRA Sampling Configuration
-output_dir: output
-source_type: manual
+output_dir: ""
 lora_paths: []
-include_final_checkpoint: true
 include_base_model_sample: false
 
 grid:

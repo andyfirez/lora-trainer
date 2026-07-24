@@ -24,6 +24,7 @@ from src.trainer.sdxl.lora_targets import (
     SDXL_TE_LORA_TARGET_MODULES,
     SDXL_UNET_LORA_TARGET_MODULES,
 )
+from src.storage.config_paths import resolve_config_base_model
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.sampling import PromptEmbedCache
 
@@ -205,15 +206,16 @@ class SDXLLoRASampler:
     def _load_stack(self, config: TrainConfig, *, enable_lora: bool) -> _SamplingStack:
         device = torch.device("cuda")
         vae_dtype = resolve_vae_dtype(config.vae_dtype)
+        resolved_base_model = resolve_config_base_model(config.base_model_name)
         self._log.info(
             "Loading SDXL components from %s (lora=%s, attention=%s)...",
-            config.base_model_name,
+            resolved_base_model,
             enable_lora,
             config.attention_mechanism,
         )
         load_started = time.perf_counter()
         components = load_sdxl_components(
-            config.base_model_name,
+            resolved_base_model,
             unet_dtype=config.unet.weight_dtype,
             text_encoder_1_dtype=config.text_encoder_1.weight_dtype,
             text_encoder_2_dtype=config.text_encoder_2.weight_dtype,

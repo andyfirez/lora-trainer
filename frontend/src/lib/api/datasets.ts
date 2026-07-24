@@ -37,14 +37,15 @@ export function datasetCropPreviewUrl(datasetId: number, filename: string): stri
 export const datasetsApi = {
   list: () => api.get<Dataset[]>("/datasets/"),
   get: (id: number) => api.get<Dataset>(`/datasets/${id}`),
-  create: (data: { name: string; image_dir: string; description?: string }) =>
+  create: (data: { name: string; relative_path: string; description?: string }) =>
     api.post<Dataset>("/datasets/", data),
+  import: (data: { name: string; source_dir: string; relative_path: string; description?: string }) =>
+    api.post<Dataset>("/datasets/import", data),
   update: (
     id: number,
     data: Partial<{
       name: string;
-      image_dir: string;
-      caption_dir: string;
+      relative_path: string;
       description: string;
       target_resolution: number | null;
       enable_bucket: boolean;

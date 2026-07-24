@@ -26,14 +26,6 @@ class JobRepository(BaseRepository[Job]):
         )
         return result.all()
 
-    async def get_by_source_job_id(self, source_job_id: int) -> Sequence[Job]:
-        result = await self._exec(
-            select(Job)
-            .where(Job.source_job_id == source_job_id)
-            .order_by(Job.created_at.desc())
-        )
-        return result.all()
-
     async def get_running(self) -> Optional[Job]:
         result = await self._exec(
             select(Job).where(Job.status == JobStatus.RUNNING).limit(1)
