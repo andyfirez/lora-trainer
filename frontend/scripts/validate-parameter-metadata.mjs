@@ -73,8 +73,6 @@ const requiredFormKeys = [
   "dataloader_pin_memory",
   "checkpointing_enabled",
   "save_every_n_epochs",
-  "sampling_enabled",
-  "sampling_config_id",
 ];
 
 for (const key of requiredFormKeys) {
@@ -101,6 +99,8 @@ const requiredYamlOnlyKeys = [
   "sample_offload_unet_before_decode",
   "post_training_sampling_config_id",
   "sample_after_training",
+  "sampling_enabled",
+  "sampling_config_id",
   "concepts.image_dir",
   "concepts.prepared_dir",
 ];

@@ -1,6 +1,7 @@
 """Shared pytest fixtures for service tests."""
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -154,3 +155,18 @@ concepts:
         return await jobs_service.create_from_config(config.id, name=name)
 
     return _create
+
+
+@pytest.fixture
+def sampling_output_dir(tmp_path: Path) -> Path:
+    path = tmp_path / "sampling-output"
+    path.mkdir()
+    return path
+
+
+@pytest.fixture
+def minimal_sampling_yaml(sampling_output_dir: Path) -> str:
+    return f"""output_dir: {sampling_output_dir.as_posix()}
+sample_prompts:
+  - test prompt
+"""

@@ -33,12 +33,8 @@ def _sample_url(job_id: int, relative: str) -> str:
 async def list_jobs(
     service: JobsServiceDep,
     job_type: JobType | None = Query(default=None),
-    source_job_id: int | None = Query(default=None),
 ) -> Sequence[JobResponse]:
-    if source_job_id is not None:
-        jobs = await service.list_jobs_by_source(source_job_id)
-    else:
-        jobs = await service.list_jobs(job_type=job_type)
+    jobs = await service.list_jobs(job_type=job_type)
     return [to_job_response(job, service) for job in jobs]
 
 

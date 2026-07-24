@@ -177,9 +177,6 @@ class SweepParameters(BaseModel):
         return self.set_resolved_lora_sweep_values(entries)
 
 
-SourceType = Literal["manual", "training_job"]
-
-
 class SweepCombination(BaseModel):
     index: int
     params: dict[str, Any]

@@ -35,7 +35,6 @@ async def test_update_log_path_resolves_source_job_foreign_key(session: AsyncSes
         name="sample",
         config_yaml="base_model_name: x",
         lora_paths_yaml="[]",
-        source_job_id=training_job.id,
     )
     session.add(sampling_job)
     await session.commit()

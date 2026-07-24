@@ -28,7 +28,6 @@ from src.services.jobs.exceptions import (
 )
 from src.services.loras.exceptions import TrainedLoraNotFoundError, TrainedLoraReproduceError
 from src.services.sampling.exceptions import (
-    SamplingCheckpointsNotFoundError,
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
 )
@@ -83,13 +82,6 @@ async def trained_lora_reproduce_handler(request: Request, exc: TrainedLoraRepro
 
 async def sampling_lora_path_not_found_handler(request: Request, exc: SamplingLoRAPathNotFoundError) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": str(exc)})
-
-
-async def sampling_checkpoints_not_found_handler(
-    request: Request,
-    exc: SamplingCheckpointsNotFoundError,
-) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 async def sampling_prompts_not_configured_handler(

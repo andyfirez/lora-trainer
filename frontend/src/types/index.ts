@@ -17,12 +17,10 @@ export interface TrainingJobDetails {
   resume_from_epoch: number | null;
   resume_from_step: number | null;
   save_checkpoint_requested: boolean;
-  sampling_config_id: number | null;
 }
 
 export interface SamplingJobDetails {
   lora_paths: string[];
-  source_job_id: number | null;
   progress_status: string | null;
 }
 
@@ -235,6 +233,5 @@ export interface AutotagResponse {
 export interface CreateJobFromConfigRequest {
   name?: string;
   lora_paths?: string[];
-  source_job_id?: number;
   enqueue?: boolean;
 }

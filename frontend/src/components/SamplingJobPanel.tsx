@@ -1,7 +1,6 @@
 "use client";
 
 import useSWR from "swr";
-import Link from "next/link";
 import JobProgressBar from "@/components/JobProgressBar";
 import LiveLogsPanel from "@/components/LiveLogsPanel";
 import SweepGridViewer from "@/components/sweep/SweepGridViewer";
@@ -89,15 +88,6 @@ export default function SamplingJobPanel({ job }: SamplingJobPanelProps) {
           </ul>
         </div>
       ) : null}
-
-      {sampling?.source_job_id != null && (
-        <p className="text-sm text-muted">
-          Source training job:{" "}
-          <Link href={`/jobs/${sampling.source_job_id}`} className="text-accent hover:underline">
-            #{sampling.source_job_id}
-          </Link>
-        </p>
-      )}
 
       {job.status === "completed" && (
         <>

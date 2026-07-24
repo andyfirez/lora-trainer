@@ -18,6 +18,7 @@ from src.trainer.config import TrainConfig
 async def test_list_configs_returns_all(
     config_service: JobConfigService,
     minimal_training_yaml: str,
+    minimal_sampling_yaml: str,
 ) -> None:
     await config_service.create_config(
         name="train",
@@ -27,7 +28,7 @@ async def test_list_configs_returns_all(
     await config_service.create_config(
         name="sample",
         config_type=ConfigType.SAMPLING,
-        config_yaml="sample_prompts:\n  - prompt\n",
+        config_yaml=minimal_sampling_yaml,
     )
 
     configs = await config_service.list_configs()
@@ -40,6 +41,7 @@ async def test_list_configs_returns_all(
 async def test_list_configs_filters_by_type(
     config_service: JobConfigService,
     minimal_training_yaml: str,
+    minimal_sampling_yaml: str,
 ) -> None:
     await config_service.create_config(
         name="train",
@@ -49,7 +51,7 @@ async def test_list_configs_filters_by_type(
     await config_service.create_config(
         name="sample",
         config_type=ConfigType.SAMPLING,
-        config_yaml="sample_prompts:\n  - prompt\n",
+        config_yaml=minimal_sampling_yaml,
     )
 
     training_configs = await config_service.list_configs(config_type=ConfigType.TRAINING)
@@ -164,15 +166,16 @@ async def test_create_sampling_config_rejects_unsupported_gpu_settings(
     _capability: object,
     _cuda: object,
     config_service: JobConfigService,
+    minimal_sampling_yaml: str,
 ) -> None:
     with pytest.raises(JobConfigValidationError, match="mixed_precision=bfloat16 is not supported"):
         await config_service.create_config(
             name="bad gpu settings",
             config_type=ConfigType.SAMPLING,
             config_yaml=(
-                "sample_prompts:\n  - test\n"
-                "attention_mechanism: xformers\n"
-                "mixed_precision: bfloat16\n"
+                minimal_sampling_yaml
+                + "attention_mechanism: xformers\n"
+                + "mixed_precision: bfloat16\n"
             ),
         )
 
@@ -276,11 +279,14 @@ concepts:
 
 
 @pytest.mark.asyncio
-async def test_clone_config_custom_name(config_service: JobConfigService) -> None:
+async def test_clone_config_custom_name(
+    config_service: JobConfigService,
+    minimal_sampling_yaml: str,
+) -> None:
     created = await config_service.create_config(
         name="original",
         config_type=ConfigType.SAMPLING,
-        config_yaml="sample_prompts:\n  - prompt\n",
+        config_yaml=minimal_sampling_yaml,
     )
 
     cloned = await config_service.clone_config(created.id, name="custom name")
@@ -309,38 +315,15 @@ async def test_create_training_config_rejects_inline_sample_prompts(
 
 
 @pytest.mark.asyncio
-async def test_create_training_config_requires_sampling_config_when_enabled(
+async def test_create_training_config_rejects_sampling_enabled(
     config_service: JobConfigService,
     minimal_training_yaml: str,
 ) -> None:
-    with pytest.raises(JobConfigValidationError, match="sampling_config_id is required"):
+    with pytest.raises(JobConfigValidationError, match="Deprecated or inline"):
         await config_service.create_config(
-            name="missing sampling ref",
+            name="sampling enabled",
             config_type=ConfigType.TRAINING,
             config_yaml=f"{minimal_training_yaml}sampling_enabled: true\n",
-        )
-
-
-@pytest.mark.asyncio
-async def test_create_training_config_rejects_sampling_without_checkpointing(
-    config_service: JobConfigService,
-    minimal_training_yaml: str,
-) -> None:
-    sampling_config = await config_service.create_config(
-        name="sampling",
-        config_type=ConfigType.SAMPLING,
-        config_yaml="sample_prompts:\n  - prompt\n",
-    )
-    with pytest.raises(JobConfigValidationError, match="Sampling requires checkpointing"):
-        await config_service.create_config(
-            name="sampling without checkpointing",
-            config_type=ConfigType.TRAINING,
-            config_yaml=(
-                f"{minimal_training_yaml}"
-                f"checkpointing_enabled: false\n"
-                f"sampling_enabled: true\n"
-                f"sampling_config_id: {sampling_config.id}\n"
-            ),
         )
 
 
@@ -355,39 +338,6 @@ async def test_create_training_config_rejects_deprecated_sample_after_training(
             config_type=ConfigType.TRAINING,
             config_yaml=f"{minimal_training_yaml}sample_after_training: true\n",
         )
-
-
-@pytest.mark.asyncio
-async def test_create_training_config_rejects_invalid_sampling_config_id(
-    config_service: JobConfigService,
-    minimal_training_yaml: str,
-) -> None:
-    with pytest.raises(JobConfigValidationError, match="Sampling config with id=999 not found"):
-        await config_service.create_config(
-            name="bad sampling ref",
-            config_type=ConfigType.TRAINING,
-            config_yaml=f"{minimal_training_yaml}sampling_config_id: 999\n",
-        )
-
-
-@pytest.mark.asyncio
-async def test_create_training_config_with_sampling_config_id(
-    config_service: JobConfigService,
-    minimal_training_yaml: str,
-) -> None:
-    sampling_config = await config_service.create_config(
-        name="sampling",
-        config_type=ConfigType.SAMPLING,
-        config_yaml="sample_prompts:\n  - prompt\n",
-    )
-    created = await config_service.create_config(
-        name="train",
-        config_type=ConfigType.TRAINING,
-        config_yaml=f"{minimal_training_yaml}sampling_config_id: {sampling_config.id}\n",
-    )
-
-    assert f"sampling_config_id: {sampling_config.id}" in created.config_yaml
-    assert "sample_prompts" not in created.config_yaml
 
 
 @pytest.mark.asyncio
@@ -465,16 +415,18 @@ async def test_update_training_config_metadata_only(
 @pytest.mark.asyncio
 async def test_sampling_config_update_still_in_place(
     config_service: JobConfigService,
+    minimal_sampling_yaml: str,
+    sampling_output_dir,
 ) -> None:
     created = await config_service.create_config(
         name="sample",
         config_type=ConfigType.SAMPLING,
-        config_yaml="sample_prompts:\n  - prompt\n",
+        config_yaml=minimal_sampling_yaml,
     )
 
     updated = await config_service.update_config(
         created.id,
-        config_yaml="sample_prompts:\n  - updated prompt\n",
+        config_yaml=f"output_dir: {sampling_output_dir.as_posix()}\nsample_prompts:\n  - updated prompt\n",
     )
 
     assert "updated prompt" in updated.config_yaml

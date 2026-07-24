@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
@@ -11,7 +12,7 @@ from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import register_all_tables
 from src.db.tables.job import Job, JobStatus, JobType
-from src.services.jobs.exceptions import JobNotCancellableError
+from src.services.jobs.exceptions import JobAlreadyQueuedError, JobNotCancellableError
 from src.services.jobs.service import JobsService
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger
@@ -69,6 +70,18 @@ async def test_cancel_clears_progress_and_error(
 
 
 @pytest.mark.asyncio
+async def test_enqueue_rejects_running_job(
+    jobs_service: JobsService,
+    create_training_job,
+) -> None:
+    job = await create_training_job()
+    await jobs_service._job_repo.update_status(job, JobStatus.RUNNING, pid=1234)
+
+    with pytest.raises(JobAlreadyQueuedError):
+        await jobs_service.enqueue_job(job.id)
+
+
+@pytest.mark.asyncio
 async def test_enqueue_clears_stale_runtime_state(
     jobs_service: JobsService,
     create_training_job,
@@ -98,11 +111,10 @@ async def test_resume_job_queues_with_resume_state(
     jobs_service: JobsService,
     create_training_job,
     training_dataset,
-    tmp_path,
 ) -> None:
-    output_dir = tmp_path / "output"
+    output_rel = "output"
     config_yaml = f"""
-output_dir: {output_dir.as_posix()}
+output_dir: {output_rel}
 lora_name: test_lora
 base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 concepts:
@@ -110,7 +122,7 @@ concepts:
 """
     job = await create_training_job(config_yaml=config_yaml)
     train_config = TrainConfig.from_yaml(job.config_yaml)
-    work_dir = output_dir / train_config.lora_name
+    work_dir = Path(output_rel) / train_config.lora_name
     work_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = work_dir / f"{train_config.lora_name}_epoch3.safetensors"
     checkpoint_path.write_bytes(b"checkpoint")
@@ -169,11 +181,10 @@ async def test_enqueue_clears_loss_log(
     jobs_service: JobsService,
     create_training_job,
     training_dataset,
-    tmp_path,
 ) -> None:
-    output_dir = tmp_path / "output"
+    output_rel = "output"
     config_yaml = f"""
-output_dir: {output_dir.as_posix()}
+output_dir: {output_rel}
 lora_name: test_lora
 base_model_name: stabilityai/stable-diffusion-xl-base-1.0
 concepts:
@@ -181,7 +192,7 @@ concepts:
 """
     job = await create_training_job(config_yaml=config_yaml)
     train_config = TrainConfig.from_yaml(job.config_yaml)
-    loss_log = output_dir / train_config.lora_name / "loss_log.db"
+    loss_log = Path(output_rel) / train_config.lora_name / "loss_log.db"
     logger = MetricLogger(loss_log)
     logger.log({"loss/loss": 0.9})
     logger.commit(step=10)

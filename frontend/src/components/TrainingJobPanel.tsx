@@ -3,7 +3,6 @@
 import JobProgressBar from "@/components/JobProgressBar";
 import JobLossGraph from "@/components/JobLossGraph";
 import LiveLogsPanel from "@/components/LiveLogsPanel";
-import JobsList from "@/components/JobsList";
 import { jobsApi } from "@/lib/api/jobs";
 import type { Job } from "@/types";
 
@@ -74,16 +73,6 @@ export default function TrainingJobPanel({ job, lossGraphRunKey }: TrainingJobPa
       {showLossGraph && (
         <JobLossGraph jobId={id} isActive={isRunning} resetKey={String(lossGraphRunKey)} />
       )}
-
-      <div className="space-y-4">
-        <div>
-          <h2 className="text-sm font-medium text-text">Sampling Jobs</h2>
-          <p className="text-xs text-muted mt-1">
-            Sampling runs created from this training job.
-          </p>
-        </div>
-        <JobsList sourceJobId={id} />
-      </div>
 
       {showLogs && (
         <LiveLogsPanel

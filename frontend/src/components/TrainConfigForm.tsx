@@ -4,18 +4,10 @@ import { useEffect } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { Plus, X } from "lucide-react";
-import { parse as yamlParse } from "yaml";
-import {
-  countCombinations,
-  getParameters,
-  hasVaryingParamsExceptPrompt,
-  sweepSummary,
-} from "@/lib/sweepUtils";
 import StoragePathInput from "@/components/StoragePathInput";
 import FieldHint from "@/components/FieldHint";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
-import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
 import { datasetsApi } from "@/lib/api/datasets";
 import { trainHint } from "@/lib/trainParameterMetadata";
 import {
@@ -23,7 +15,7 @@ import {
   optimizerOptions,
   type OptimizerType,
 } from "@/lib/optimizerPresets";
-import type { Dataset, JobConfig } from "@/types";
+import type { Dataset } from "@/types";
 
 type Config = Record<string, any>;
 
@@ -273,40 +265,14 @@ function stripInlineSamplingFields(next: Config): Config {
   for (const key of INLINE_SAMPLING_KEYS) {
     delete cleaned[key];
   }
+  delete cleaned.sampling_enabled;
+  delete cleaned.sampling_config_id;
   return cleaned;
-}
-
-function samplingPreview(configYaml: string): {
-  promptCount: number;
-  steps: number;
-  scheduler: string;
-  summary: string;
-  hasVaryingExceptPrompt: boolean;
-} | null {
-  try {
-    const parsed = yamlParse(configYaml) as Record<string, unknown>;
-    const parameters = getParameters(parsed);
-    const prompts = parameters.prompt?.mode === "vary" ? parameters.prompt.values ?? [] : [parameters.prompt?.value ?? ""];
-    const promptCount = countCombinations(parameters) || prompts.filter((p) => String(p).trim()).length;
-    return {
-      promptCount,
-      steps: Number(parameters.steps?.value ?? parsed.sample_steps ?? 30),
-      scheduler: String(parameters.scheduler?.value ?? parsed.sample_scheduler ?? "euler"),
-      summary: sweepSummary(parameters),
-      hasVaryingExceptPrompt: hasVaryingParamsExceptPrompt(parameters),
-    };
-  } catch {
-    return null;
-  }
 }
 
 export default function TrainConfigForm({ config, onChange }: TrainConfigFormProps) {
   const concepts: Config[] = config.concepts ?? [];
   const { data: datasets, isLoading: datasetsLoading } = useSWR("/datasets", () => datasetsApi.list());
-  const { data: samplingConfigs, isLoading: samplingConfigsLoading } = useSWR(
-    "/sampling-configs",
-    () => samplingConfigsApi.list(),
-  );
 
   function emit(next: Config) {
     onChange(sanitizeTrainConfig(next, datasets));
@@ -314,9 +280,6 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
 
   function set(key: string, value: unknown) {
     let next: Config = { ...config, [key]: value };
-    if (key === "checkpointing_enabled" && value === false) {
-      next = { ...next, sampling_enabled: false };
-    }
     if (key === "cache_latents" && value === false) {
       next = { ...next, cache_latents_to_disk: false };
     }
@@ -374,19 +337,9 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
     disabled: !isDatasetCompatible(d),
   }));
 
-  const samplingConfigOptions = (samplingConfigs ?? []).map((c: JobConfig) => ({
-    value: String(c.id),
-    label: c.name,
-  }));
-
   function datasetById(id: number | undefined): Dataset | undefined {
     if (id == null) return undefined;
     return datasets?.find((d) => d.id === id);
-  }
-
-  function samplingConfigById(id: number | undefined): JobConfig | undefined {
-    if (id == null) return undefined;
-    return samplingConfigs?.find((c) => c.id === id);
   }
 
   function updateConcept(i: number, key: string, value: unknown) {
@@ -408,18 +361,12 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
     set("concepts", concepts.filter((_, idx) => idx !== i));
   }
 
-  const selectedSamplingConfig = samplingConfigById(config.sampling_config_id);
-  const selectedSamplingPreview = selectedSamplingConfig
-    ? samplingPreview(selectedSamplingConfig.config_yaml)
-    : null;
   const checkpointingEnabled = config.checkpointing_enabled ?? true;
   const cacheLatentsEnabled = config.cache_latents ?? true;
   const textEncoderTrainingEnabled = isTextEncoderTrainingEnabled(config);
   const cacheTextEncoderEnabled = textEncoderTrainingEnabled
     ? false
     : (config.cache_text_encoder_outputs ?? true);
-  const samplingEnabled = config.sampling_enabled ?? false;
-  const samplingConfigRequired = samplingEnabled;
 
   useEffect(() => {
     const normalized = sanitizeTrainConfig(config, datasetsLoading ? undefined : datasets);
@@ -1064,68 +1011,6 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
             disabled={!checkpointingEnabled}
             paramKey="save_every_n_epochs"
           />
-        </div>
-      </section>
-
-      {/* Sampling */}
-      <section className={`${sectionClass} ${!checkpointingEnabled ? "opacity-60" : ""}`}>
-        <div className={sectionTitleClass}>Sampling</div>
-        <div className="space-y-4">
-          <CheckboxInput
-            label="Run sampling after training for intermediate checkpoints"
-            checked={samplingEnabled}
-            onChange={(v) => set("sampling_enabled", v)}
-            disabled={!checkpointingEnabled}
-            paramKey="sampling_enabled"
-          />
-          {!checkpointingEnabled && (
-            <p className="text-xs text-muted">Sampling requires checkpointing to be enabled.</p>
-          )}
-          {checkpointingEnabled && samplingEnabled && (
-            <div className="space-y-3">
-              <div className="text-xs font-medium text-muted">Sampling Config</div>
-              {samplingConfigsLoading ? (
-                <div className="text-sm text-muted">Loading sampling configs…</div>
-              ) : !samplingConfigs?.length ? (
-                <div className="rounded-lg border border-dashed border-border p-6 text-center space-y-3">
-                  <p className="text-sm text-muted">
-                    No sampling configs yet. Create one to configure preview prompts and sampler settings.
-                  </p>
-                  <Link
-                    href="/sampling/new"
-                    className="inline-flex items-center gap-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium"
-                  >
-                    Create Sampling Config
-                  </Link>
-                </div>
-              ) : (
-                <>
-                  <SelectInput
-                    label="Sampling Config"
-                    value={config.sampling_config_id != null ? String(config.sampling_config_id) : ""}
-                    onChange={(v) => set("sampling_config_id", v ? Number(v) : null)}
-                    options={[{ value: "", label: "None" }, ...samplingConfigOptions]}
-                    paramKey="sampling_config_id"
-                  />
-                  {samplingEnabled && selectedSamplingPreview && (
-                    <p className="text-xs text-muted">
-                      {selectedSamplingPreview.promptCount} image(s) per checkpoint,{" "}
-                      {selectedSamplingPreview.steps} steps, {selectedSamplingPreview.scheduler} scheduler
-                      {selectedSamplingPreview.summary !== "all fixed"
-                        ? ` · vary: ${selectedSamplingPreview.summary}`
-                        : ""}
-                    </p>
-                  )}
-                  {samplingEnabled && config.sampling_config_id != null && !selectedSamplingConfig && (
-                    <p className="text-xs text-error">Sampling config not found</p>
-                  )}
-                  {samplingConfigRequired && config.sampling_config_id == null && (
-                    <p className="text-xs text-error">Select a sampling config when sampling is enabled</p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
         </div>
       </section>
     </div>

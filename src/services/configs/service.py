@@ -1,6 +1,7 @@
 """Business logic for saved job configs."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from typing import Sequence
 
@@ -140,8 +141,7 @@ class JobConfigService:
                 forbidden = (FORBIDDEN_INLINE_SAMPLING_KEYS | FORBIDDEN_DEPRECATED_TRAIN_KEYS) & raw.keys()
                 if forbidden:
                     raise JobConfigValidationError(
-                        "Deprecated or inline sampling parameters are not allowed; "
-                        "use sampling_enabled and sampling_config_id: "
+                        "Deprecated or inline sampling parameters are not allowed: "
                         + ", ".join(sorted(forbidden))
                     )
                 self._validate_raw_concepts(raw.get("concepts"))
@@ -151,6 +151,7 @@ class JobConfigService:
             else:
                 config = SamplingConfig.from_yaml(config_yaml)
                 config.validate_gpu()
+                self._validate_sampling_config(config)
         except JobConfigValidationError:
             raise
         except Exception as exc:
@@ -168,29 +169,15 @@ class JobConfigService:
         except ValueError as exc:
             raise JobConfigValidationError(str(exc)) from exc
         await self._validate_training_concepts(config)
-        sampling_active = config.sampling_enabled
-        if config.sampling_enabled and not config.checkpointing_enabled:
-            raise JobConfigValidationError("Sampling requires checkpointing to be enabled")
-        if sampling_active and config.sampling_config_id is None:
-            raise JobConfigValidationError(
-                "sampling_config_id is required when sampling is enabled"
-            )
-        if config.sampling_config_id is not None:
-            sampling_entity = await self._config_repo.get_by_id(config.sampling_config_id)
-            if sampling_entity is None:
-                raise JobConfigValidationError(
-                    f"Sampling config with id={config.sampling_config_id} not found"
-                )
-            if sampling_entity.config_type != ConfigType.SAMPLING:
-                raise JobConfigValidationError(
-                    f"Job config id={config.sampling_config_id} is not a sampling config"
-                )
-            if sampling_active:
-                sampling = SamplingConfig.from_yaml(sampling_entity.config_yaml)
-                if not sampling.sample_prompts:
-                    raise JobConfigValidationError(
-                        "Referenced sampling config has no sample_prompts"
-                    )
+
+    @staticmethod
+    def _validate_sampling_config(config: SamplingConfig) -> None:
+        raw = config.output_dir.strip()
+        if not raw:
+            raise JobConfigValidationError("output_dir is required")
+        base = Path(raw).expanduser()
+        if not base.is_absolute():
+            raise JobConfigValidationError("output_dir must be an absolute path")
 
     def _validate_raw_concepts(self, concepts: object) -> None:
         if not isinstance(concepts, list):

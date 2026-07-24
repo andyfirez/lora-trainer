@@ -4,7 +4,7 @@ Persisted YAML omits runtime-only fields:
 - Concept ``image_dir`` / ``prepared_dir`` are populated by ``resolve_concepts`` and
   stripped by ``to_yaml`` (see ``ResolvedConceptPaths``).
 - Sampling prompt/size fields on ``TrainConfig`` are a runtime overlay applied via
-  ``resolve_sampling`` from a persisted ``SamplingConfig`` entity (``sampling_config_id``).
+  ``resolve_sampling`` from a persisted ``SamplingConfig`` entity during sampling jobs.
 """
 
 from __future__ import annotations
@@ -76,7 +76,12 @@ FORBIDDEN_INLINE_SAMPLING_KEYS: frozenset[str] = frozenset(
     }
 )
 
-FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({"sample_after_training", "learning_rate"})
+FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({
+    "sample_after_training",
+    "learning_rate",
+    "sampling_enabled",
+    "sampling_config_id",
+})
 
 FORBIDDEN_DEPRECATED_CONCEPT_KEYS: frozenset[str] = frozenset({"image_dir", "prepared_dir"})
 
@@ -182,9 +187,7 @@ class TrainConfig(BaseModel):
     save_every_n_epochs: int = Field(default=1, ge=1)
     resume_from_checkpoint: Optional[str] = None
 
-    # Sampling
-    sampling_enabled: bool = False
-    sampling_config_id: Optional[int] = None
+    # Runtime sampling overlay (populated from SamplingConfig during sampling jobs)
     sample_prompts: list[str] = Field(default_factory=list)
     sample_negative_prompt: str = ""
     sample_steps: int = Field(default=30, ge=1)

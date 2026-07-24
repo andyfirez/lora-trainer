@@ -7,23 +7,14 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
-from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.session import session_factory
 from src.db.tables.job import Job, JobStatus, JobType
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import SDXLLoRASampler
-from src.services.datasets.service import reconcile_datasets_for_training
 from src.services.jobs.job_logging import build_job_log_path, build_job_logger
 from src.services.jobs.sampling_jobs import prepare_sampling_config_lora_paths
-from src.trainer.concept_training_metadata import (
-    ConceptTrainingMetadata,
-    resolve_concept_training_metadata,
-)
-from src.trainer.config import TrainConfig
-from src.trainer.sdxl.caption import collect_trigger_words
 
 logger = logging.getLogger(__name__)
 
@@ -149,27 +140,12 @@ async def run_sampling_job(job_id: int) -> int:
             config_yaml = job.config_yaml
             lora_paths_yaml = job.lora_paths_yaml
             output_path = job.output_path
-            source_job_id = job.source_job_id
 
         sampling_config = SamplingConfig.from_yaml(config_yaml)
         job_lora_paths = [str(p) for p in (yaml.safe_load(lora_paths_yaml or "[]") or [])]
-        default_trigger: str | None = None
-        source_train_config: TrainConfig | None = None
-        if source_job_id is not None:
-            async with session_factory() as session:
-                repo = JobRepository(session)
-                source_job = await repo.get_by_id(source_job_id)
-                if source_job is not None and source_job.job_type == JobType.TRAINING:
-                    source_train_config = TrainConfig.from_yaml(source_job.config_yaml)
-        if source_train_config is not None:
-            words = collect_trigger_words(source_train_config.concepts)
-            if words:
-                default_trigger = ", ".join(words)
-
         sampling_config, effective_lora_paths = prepare_sampling_config_lora_paths(
             sampling_config,
             job_lora_paths or None,
-            default_trigger=default_trigger,
         )
         if effective_lora_paths and not job_lora_paths:
             run_logger.info(
@@ -179,28 +155,9 @@ async def run_sampling_job(job_id: int) -> int:
         lora_paths = [Path(p) for p in effective_lora_paths]
         train_config = sampling_config.to_train_config()
         train_config.validate_gpu()
-        if source_train_config is not None:
-            train_config = train_config.model_copy(
-                update={"clip_skip": source_train_config.clip_skip},
-            )
         if output_path is None:
-            output_path = str(
-                resolve_sampling_output_path(sampling_config, job_id, source_train_config)
-            )
+            output_path = str(resolve_sampling_output_path(sampling_config, job_id))
             await _set_output_path(job_id, output_path)
-
-        concept_metadata: dict[int, ConceptTrainingMetadata] | None = None
-        if source_train_config is not None:
-            dataset_ids = [c.dataset_id for c in source_train_config.concepts]
-            async with session_factory() as session:
-                dataset_repo = DatasetRepository(session)
-                crop_repo = DatasetImageCropRepository(session)
-                await reconcile_datasets_for_training(dataset_ids, dataset_repo, crop_repo)
-                concept_metadata = await resolve_concept_training_metadata(
-                    dataset_ids,
-                    dataset_repo,
-                    crop_repo,
-                )
 
         from src.sampler.sweep.combinations import count_combinations
 
@@ -225,7 +182,7 @@ async def run_sampling_job(job_id: int) -> int:
             progress_status_callback=_make_progress_status_callback(job_id),
             progress_callback=_make_progress_callback(job_id),
             log=run_logger,
-            concept_metadata=concept_metadata,
+            concept_metadata=None,
             job_id=job_id,
             compose_grids=True,
         )

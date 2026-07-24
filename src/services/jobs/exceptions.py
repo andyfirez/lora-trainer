@@ -9,7 +9,7 @@ class JobNotFoundError(Exception):
 
 class JobAlreadyQueuedError(Exception):
     def __init__(self, job_id: int) -> None:
-        super().__init__(f"Training job id={job_id} is already in the queue")
+        super().__init__(f"Job id={job_id} is already queued or running")
         self.job_id = job_id
 
 
