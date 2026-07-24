@@ -106,7 +106,6 @@ async def create_job_from_sampling_config(
         config_id,
         name=body.name,
         lora_paths=body.lora_paths,
-        source_job_id=body.source_job_id,
     )
     if body.enqueue and job.id is not None:
         await jobs_service.enqueue_job(job.id)

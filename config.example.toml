@@ -11,3 +11,8 @@ worker_poll_interval_seconds = 5
 max_concurrent_jobs = 1
 logs_dir = "logs"
 cancel_poll_interval_seconds = 1
+
+[storage]
+datasets_root = "~/lora-trainer/datasets"
+base_models_root = "~/lora-trainer/base-models"
+lora_root = "~/lora-trainer/lora"

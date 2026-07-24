@@ -3,12 +3,9 @@
 import useSWR from "swr";
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Play, Square, Download, Loader2, Images } from "lucide-react";
+import { ArrowLeft, Play, Square, Download, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { jobsApi } from "@/lib/api/jobs";
-import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
-import { useSourceJobChildren } from "@/hooks/useSourceJobChildren";
 import StatusBadge from "@/components/StatusBadge";
 import TrainingJobPanel from "@/components/TrainingJobPanel";
 import SamplingJobPanel from "@/components/SamplingJobPanel";
@@ -28,16 +25,10 @@ interface Props {
 export default function JobDetailPage({ params }: Props) {
   const { jobId } = use(params);
   const id = Number(jobId);
-  const router = useRouter();
   const { data: job, isLoading, mutate } = useSWR(`/jobs/${id}`, () => jobsApi.get(id), {
     refreshInterval: (latest) => (latest?.status === "running" ? 1000 : 2000),
   });
-  const { hasActiveSamplingJob, mutate: mutateChildren } = useSourceJobChildren(
-    job?.job_type === "training" ? id : null,
-  );
   const [lossGraphRunKey, setLossGraphRunKey] = useState(0);
-  const [samplingLoading, setSamplingLoading] = useState(false);
-  const [samplingError, setSamplingError] = useState<string | null>(null);
   const prevJobStatusRef = useRef<string | null>(null);
   const {
     dialogJob,
@@ -74,11 +65,6 @@ export default function JobDetailPage({ params }: Props) {
 
   const isTraining = job.job_type === "training";
   const isTagging = job.job_type === "tagging";
-  const showRunSampling =
-    isTraining &&
-    job.status === "completed" &&
-    job.training?.sampling_config_id != null &&
-    !hasActiveSamplingJob;
 
   const handleEnqueue = async () => {
     await jobsApi.enqueue(id);
@@ -97,26 +83,6 @@ export default function JobDetailPage({ params }: Props) {
     a.href = URL.createObjectURL(blob);
     a.download = `${job.name}.yaml`;
     a.click();
-  };
-  const handleRunSampling = async () => {
-    const samplingConfigId = job.training?.sampling_config_id;
-    if (samplingConfigId == null) return;
-    setSamplingError(null);
-    setSamplingLoading(true);
-    try {
-      const samplingJob = await samplingConfigsApi.createJob(samplingConfigId, {
-        name: `${job.name} sampling`,
-        source_job_id: job.id,
-        enqueue: true,
-      });
-      await mutateChildren();
-      mutate();
-      router.push(`/jobs/${samplingJob.id}`);
-    } catch (err) {
-      setSamplingError(err instanceof Error ? err.message : "Failed to start sampling");
-    } finally {
-      setSamplingLoading(false);
-    }
   };
 
   return (
@@ -146,12 +112,6 @@ export default function JobDetailPage({ params }: Props) {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
-          {showRunSampling && (
-            <Button variant="sampling" size="sm" onClick={() => void handleRunSampling()} disabled={samplingLoading}>
-              {samplingLoading ? <Loader2 size={13} className="animate-spin" /> : <Images size={13} />}
-              Run Sampling
-            </Button>
-          )}
           {(job.status === "pending" || job.status === "failed" || job.status === "cancelled") && (
             <Button variant="success" size="sm" onClick={() => void handleEnqueue()}>
               <Play size={13} /> Enqueue
@@ -180,7 +140,6 @@ export default function JobDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {samplingError && <ModalError>{samplingError}</ModalError>}
       {cancelError && !dialogJob && <ModalError>{cancelError}</ModalError>}
 
       <StopJobDialog

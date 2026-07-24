@@ -10,7 +10,6 @@ from src.sampler.sweep.models import (
     SWEEP_PARAM_ORDER,
     GridLayout,
     LoraEntry,
-    SourceType,
     SweepMode,
     SweepParameter,
     SweepParameters,
@@ -38,7 +37,7 @@ class SamplingConfig(BaseModel):
     """SDXL LoRA sampling configuration with unified parameter sweep support."""
 
     base_model_name: str = "stabilityai/stable-diffusion-xl-base-1.0"
-    output_dir: str = "output"
+    output_dir: str = ""
     sample_prompts: list[str] = Field(default_factory=list)
     sample_negative_prompt: str = ""
     sample_steps: int = Field(default=30, ge=1)
@@ -54,10 +53,7 @@ class SamplingConfig(BaseModel):
     vae_dtype: VaeDtype = VaeDtype.AUTO
     tf32: bool = True
 
-    source_type: SourceType = "manual"
-    source_job_id: Optional[int] = None
     lora_paths: list[str] = Field(default_factory=list)
-    include_final_checkpoint: bool = True
     include_base_model_sample: bool = False
     grid: GridLayout = Field(default_factory=GridLayout)
     parameters: SweepParameters = Field(default_factory=SweepParameters)

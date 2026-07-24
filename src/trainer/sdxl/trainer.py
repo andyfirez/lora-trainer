@@ -48,6 +48,7 @@ from src.trainer.sdxl.mixed_precision import (
     cast_trainable_params_to_fp32,
     create_grad_scaler,
 )
+from src.storage.config_paths import resolve_config_base_model
 from src.trainer.sdxl.model_loader import load_sdxl_components
 from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
 from src.trainer.sdxl.te_cache import build_te_cache
@@ -116,7 +117,8 @@ class SDXLLoRATrainer:
             torch.backends.cudnn.allow_tf32 = True
 
         log = self._training_logger.logger if self._training_logger is not None else logger
-        log.info("Loading SDXL pipeline from %s", config.base_model_name)
+        resolved_base_model = resolve_config_base_model(config.base_model_name)
+        log.info("Loading SDXL pipeline from %s", resolved_base_model)
         resume_state = None
         start_epoch = 0
         start_step = 0
@@ -132,7 +134,7 @@ class SDXLLoRATrainer:
             )
 
         components = load_sdxl_components(
-            config.base_model_name,
+            resolved_base_model,
             unet_dtype=config.unet.weight_dtype,
             text_encoder_1_dtype=config.text_encoder_1.weight_dtype,
             text_encoder_2_dtype=config.text_encoder_2.weight_dtype,

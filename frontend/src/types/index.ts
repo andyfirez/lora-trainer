@@ -17,12 +17,10 @@ export interface TrainingJobDetails {
   resume_from_epoch: number | null;
   resume_from_step: number | null;
   save_checkpoint_requested: boolean;
-  sampling_config_id: number | null;
 }
 
 export interface SamplingJobDetails {
   lora_paths: string[];
-  source_job_id: number | null;
   progress_status: string | null;
 }
 
@@ -66,12 +64,15 @@ export interface JobConfig {
 export interface TrainedLora {
   id: number;
   name: string;
-  job_id: number;
+  relative_path: string;
+  weights_relpath: string;
+  resolved_work_dir: string;
+  resolved_weights_path: string;
+  path_missing: boolean;
+  job_id: number | null;
   config_id: number | null;
-  config_yaml: string;
+  config_yaml: string | null;
   base_model_name: string;
-  weights_path: string;
-  work_dir: string;
   created_at: string;
   updated_at: string;
 }
@@ -131,8 +132,9 @@ export interface SweepManifestResponse {
 export interface Dataset {
   id: number;
   name: string;
-  image_dir: string;
-  caption_dir: string | null;
+  relative_path: string;
+  resolved_path: string;
+  path_missing: boolean;
   description: string | null;
   target_resolution: number | null;
   preprocess_ready: boolean;
@@ -147,7 +149,8 @@ export interface Dataset {
 
 export interface DatasetImages {
   dataset_id: number;
-  image_dir: string;
+  relative_path: string;
+  resolved_path: string;
   images: string[];
 }
 
@@ -230,6 +233,5 @@ export interface AutotagResponse {
 export interface CreateJobFromConfigRequest {
   name?: string;
   lora_paths?: string[];
-  source_job_id?: number;
   enqueue?: boolean;
 }

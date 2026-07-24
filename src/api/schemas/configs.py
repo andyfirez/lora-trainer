@@ -53,5 +53,4 @@ class JobConfigResponse(BaseModel):
 class CreateJobFromConfigRequest(BaseModel):
     name: Optional[str] = None
     lora_paths: Optional[list[str]] = None
-    source_job_id: Optional[int] = None
     enqueue: bool = False

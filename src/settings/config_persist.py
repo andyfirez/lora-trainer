@@ -5,7 +5,7 @@ import tomllib
 from pathlib import Path
 
 from src.settings.app_settings import settings
-from src.settings.models import DatabaseSettings, ServerSettings, TrainingSettings
+from src.settings.models import DatabaseSettings, ServerSettings, StorageSettings, TrainingSettings
 
 
 def get_config_path() -> Path:
@@ -43,6 +43,7 @@ def _current_config_data() -> dict[str, dict[str, object]]:
         "server": settings.server.model_dump(),
         "database": settings.database.model_dump(),
         "training": settings.training.model_dump(),
+        "storage": settings.storage.model_dump(),
     }
 
 
@@ -63,8 +64,54 @@ def persist_training_settings(
         data["server"] = ServerSettings.model_validate(settings.server).model_dump()
     if "database" not in data:
         data["database"] = DatabaseSettings.model_validate(settings.database).model_dump()
+    if "storage" not in data:
+        data["storage"] = StorageSettings.model_validate(settings.storage).model_dump()
 
     _write_toml(get_config_path(), data)
+
+
+def persist_storage_settings(
+    *,
+    datasets_root: str | None = None,
+    base_models_root: str | None = None,
+    lora_root: str | None = None,
+) -> None:
+    data = _current_config_data()
+    storage = dict(data.get("storage", settings.storage.model_dump()))
+    if datasets_root is not None:
+        storage["datasets_root"] = datasets_root
+    if base_models_root is not None:
+        storage["base_models_root"] = base_models_root
+    if lora_root is not None:
+        storage["lora_root"] = lora_root
+    data["storage"] = storage
+
+    if "server" not in data:
+        data["server"] = ServerSettings.model_validate(settings.server).model_dump()
+    if "database" not in data:
+        data["database"] = DatabaseSettings.model_validate(settings.database).model_dump()
+    if "training" not in data:
+        data["training"] = TrainingSettings.model_validate(settings.training).model_dump()
+
+    _write_toml(get_config_path(), data)
+
+
+def apply_storage_settings(
+    *,
+    datasets_root: str | None = None,
+    base_models_root: str | None = None,
+    lora_root: str | None = None,
+) -> StorageSettings:
+    updates: dict[str, str] = {}
+    if datasets_root is not None:
+        updates["datasets_root"] = datasets_root
+    if base_models_root is not None:
+        updates["base_models_root"] = base_models_root
+    if lora_root is not None:
+        updates["lora_root"] = lora_root
+    if updates:
+        settings.storage = settings.storage.model_copy(update=updates)
+    return settings.storage
 
 
 def apply_training_settings(

@@ -11,7 +11,6 @@ from src.db.elapsed import compute_elapsed_seconds
 from src.db.tables.job import Job, JobType
 from src.services.jobs.service import JobsService
 from src.tagger.config import TaggingConfig
-from src.trainer.config import TrainConfig
 
 
 def to_job_response(job: Job, service: JobsService) -> JobResponse:
@@ -34,7 +33,6 @@ def to_job_response(job: Job, service: JobsService) -> JobResponse:
         "updated_at": job.updated_at,
     }
     if job.job_type == JobType.TRAINING:
-        train_config = TrainConfig.from_yaml(job.config_yaml)
         payload["training"] = TrainingJobDetails(
             progress_loss=job.progress_loss,
             progress_avr_loss=job.progress_avr_loss,
@@ -49,12 +47,10 @@ def to_job_response(job: Job, service: JobsService) -> JobResponse:
             resume_from_epoch=job.resume_from_epoch,
             resume_from_step=job.resume_from_step,
             save_checkpoint_requested=job.save_checkpoint_requested,
-            sampling_config_id=train_config.sampling_config_id,
         )
     elif job.job_type == JobType.SAMPLING:
         payload["sampling"] = SamplingJobDetails(
             lora_paths=service.get_lora_paths(job),
-            source_job_id=job.source_job_id,
             progress_status=job.progress_status,
         )
     elif job.job_type == JobType.TAGGING:

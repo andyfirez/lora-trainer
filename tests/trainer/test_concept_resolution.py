@@ -48,15 +48,15 @@ def test_to_yaml_excludes_resolved_image_dir() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_dataset_ids(session, datasets_service, tmp_path) -> None:
-    image_dir = tmp_path / "images"
+async def test_resolve_dataset_ids(session, datasets_service, storage_roots) -> None:
+    image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
-    dataset = await _prepare_dataset(datasets_service, image_dir, name="demo")
+    dataset = await _prepare_dataset(datasets_service, image_dir, name="demo", relative_path="images")
     repo = DatasetRepository(session)
 
     result = await resolve_dataset_ids([dataset.id], repo)
 
-    assert result[dataset.id] == str(image_dir)
+    assert result[dataset.id] == str(image_dir.resolve())
 
 
 @pytest.mark.asyncio

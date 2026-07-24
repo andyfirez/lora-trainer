@@ -92,19 +92,23 @@ export default function LoraDetailPage({ params }: Props) {
           >
             <Download size={14} /> Weights
           </a>
-          <Button variant="success" size="sm" onClick={openReproduceModal}>
-            <Play size={14} /> Reproduce
-          </Button>
+          {lora.config_yaml && (
+            <Button variant="success" size="sm" onClick={openReproduceModal}>
+              <Play size={14} /> Reproduce
+            </Button>
+          )}
         </div>
       </div>
 
       <Card className="space-y-2 text-sm">
-        <div>
-          <span className="text-muted">Training job:</span>{" "}
-          <Link href={`/jobs/${lora.job_id}`} className="text-accent hover:underline">
-            #{lora.job_id}
-          </Link>
-        </div>
+        {lora.job_id != null && (
+          <div>
+            <span className="text-muted">Training job:</span>{" "}
+            <Link href={`/jobs/${lora.job_id}`} className="text-accent hover:underline">
+              #{lora.job_id}
+            </Link>
+          </div>
+        )}
         {lora.config_id != null && (
           <div>
             <span className="text-muted">Source config:</span>{" "}
@@ -113,8 +117,9 @@ export default function LoraDetailPage({ params }: Props) {
             </Link>
           </div>
         )}
-        <div className="text-muted break-all">Weights: {lora.weights_path}</div>
-        <div className="text-muted break-all">Work dir: {lora.work_dir}</div>
+        <div className="text-muted break-all">Relative path: {lora.relative_path}</div>
+        <div className="text-muted break-all">Weights: {lora.resolved_weights_path}</div>
+        <div className="text-muted break-all">Work dir: {lora.resolved_work_dir}</div>
       </Card>
 
       {samples.length > 0 && (
@@ -134,18 +139,20 @@ export default function LoraDetailPage({ params }: Props) {
         </div>
       )}
 
-      <div className="space-y-2">
-        <h2 className="text-sm font-medium text-muted">Frozen Config YAML</h2>
-        <Card padding="none" className="overflow-hidden" style={{ height: 400 }}>
-          <MonacoEditor
-            height="400px"
-            defaultLanguage="yaml"
-            theme="vs-dark"
-            value={lora.config_yaml}
-            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }}
-          />
-        </Card>
-      </div>
+      {lora.config_yaml && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-medium text-muted">Frozen Config YAML</h2>
+          <Card padding="none" className="overflow-hidden" style={{ height: 400 }}>
+            <MonacoEditor
+              height="400px"
+              defaultLanguage="yaml"
+              theme="vs-dark"
+              value={lora.config_yaml}
+              options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }}
+            />
+          </Card>
+        </div>
+      )}
 
       <Modal
         open={showReproduceModal}

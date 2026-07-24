@@ -6,6 +6,8 @@ from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
 from src.api.dependencies import DatasetsServiceDep, JobsServiceDep
+
+from src.storage.paths import StoragePaths
 from src.api.schemas.datasets import (
     AutotagRequest,
     AutotagResponse,
@@ -19,6 +21,7 @@ from src.api.schemas.datasets import (
     CropMetaResponse,
     CropUpdateRequest,
     DatasetCreate,
+    DatasetImport,
     DatasetImagesResponse,
     DatasetItemResponse,
     DatasetItemsResponse,
@@ -61,8 +64,18 @@ async def list_datasets(service: DatasetsServiceDep) -> Sequence[DatasetResponse
 async def create_dataset(body: DatasetCreate, service: DatasetsServiceDep) -> DatasetResponse:
     dataset = await service.create_dataset(
         name=body.name,
-        image_dir=body.image_dir,
-        caption_dir=body.caption_dir,
+        relative_path=body.relative_path,
+        description=body.description,
+    )
+    return dataset  # type: ignore[return-value]
+
+
+@router.post("/import", response_model=DatasetResponse, status_code=201)
+async def import_dataset(body: DatasetImport, service: DatasetsServiceDep) -> DatasetResponse:
+    dataset = await service.import_dataset(
+        name=body.name,
+        source_dir=body.source_dir,
+        relative_path=body.relative_path,
         description=body.description,
     )
     return dataset  # type: ignore[return-value]
@@ -86,8 +99,7 @@ async def update_dataset(dataset_id: int, body: DatasetUpdate, service: Datasets
     return await service.update_dataset(  # type: ignore[return-value]
         dataset_id,
         name=body.name,
-        image_dir=body.image_dir,
-        caption_dir=body.caption_dir,
+        relative_path=body.relative_path,
         description=body.description,
         target_resolution=body.target_resolution,
         update_target_resolution="target_resolution" in fields_set,
@@ -129,7 +141,8 @@ async def list_images(dataset_id: int, service: DatasetsServiceDep) -> DatasetIm
     images = service.list_images(dataset)
     return DatasetImagesResponse(
         dataset_id=dataset_id,
-        image_dir=dataset.image_dir,
+        relative_path=dataset.relative_path,
+        resolved_path=str(StoragePaths.resolve_dataset_path(dataset.relative_path)),
         images=images,
     )
 
@@ -270,7 +283,6 @@ async def autotag_dataset(
     job = await jobs_service.create_tagging_job(
         dataset_id=dataset_id,
         dataset_name=dataset.name,
-        image_dir=dataset.image_dir,
         mode=body.mode,
         threshold=body.threshold,
         model=body.model,

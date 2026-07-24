@@ -12,8 +12,7 @@ class Dataset(TimestampMixin, SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
-    image_dir: str
-    caption_dir: Optional[str] = Field(default=None)
+    relative_path: str
     description: Optional[str] = Field(default=None)
     target_resolution: Optional[int] = Field(default=None, ge=64, le=2048)
     preprocess_ready: bool = Field(default=False)

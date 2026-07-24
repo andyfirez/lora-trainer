@@ -40,14 +40,14 @@ def test_remove_duplicate_files_deletes_image_and_caption(tmp_path: Path) -> Non
 
 
 @pytest.mark.asyncio
-async def test_remove_duplicates_via_service(tmp_path: Path, datasets_service: DatasetsService) -> None:
-    image_dir = tmp_path / "images"
+async def test_remove_duplicates_via_service(storage_roots, datasets_service: DatasetsService) -> None:
+    image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
     _write_image(image_dir / "alpha.png")
     _write_image(image_dir / "beta.png")
     (image_dir / "beta.png").write_bytes((image_dir / "alpha.png").read_bytes())
 
-    dataset = await datasets_service.create_dataset(name="dupes", image_dir=str(image_dir))
+    dataset = await datasets_service.create_dataset(name="dupes", relative_path="images")
     scan = datasets_service.scan_duplicates(dataset)
     assert scan.duplicate_count == 1
 

@@ -53,7 +53,6 @@ class Job(TimestampMixin, SQLModel, table=True):
     resume_from_step: Optional[int] = Field(default=None)
     save_checkpoint_requested: bool = Field(default=False)
     lora_paths_yaml: Optional[str] = Field(default=None, description="YAML-serialized list of LoRA paths")
-    source_job_id: Optional[int] = Field(default=None, foreign_key="jobs.id", index=True)
     progress_status: Optional[str] = Field(default=None)
     running_started_at: Optional[datetime] = Field(default=None)
     accumulated_elapsed_seconds: float = Field(default=0.0)

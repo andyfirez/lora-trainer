@@ -6,21 +6,29 @@ import subprocess
 from dataclasses import dataclass
 
 import psutil
-from src.db.repositories.dataset_repo import DatasetRepository
-from src.db.repositories.job_config_repo import JobConfigRepository
-from src.db.repositories.trained_lora_repo import TrainedLoraRepository
 from src.db.repositories.job_repo import JobRepository
 from src.db.repositories.queue_repo import QueueRepository
+from src.db.repositories.trained_lora_repo import TrainedLoraRepository
 from src.db.session import session_factory
 from src.db.tables.job import JobStatus, JobType
 from src.db.tables.queue_entry import QueueEntry
 from src.services.jobs.handlers import get_job_handler
-from src.services.jobs.service import JobsService
 from src.services.loras.service import TrainedLoraService
-from src.services.sampling.exceptions import SamplingCheckpointsNotFoundError
 from src.settings.app_settings import settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class _PendingSpawn:
+    """Placeholder in _active_jobs while a subprocess is being started."""
+
+    def is_running(self) -> bool:
+        return True
+
+    @property
+    def pid(self) -> None:
+        return None
 
 
 @dataclass
@@ -40,6 +48,9 @@ class _ManagedProcess:
 
     async def wait(self) -> int:
         return await asyncio.to_thread(self.proc.wait)
+
+
+_ActiveJob = _PendingSpawn | _ManagedProcess
 
 
 def _drain_subprocess_output(proc: subprocess.Popen[bytes]) -> list[str]:
@@ -72,7 +83,7 @@ def _summarize_subprocess_failure(lines: list[str], return_code: int, *, max_lin
 class QueueWorker:
     def __init__(self, *, echo_subprocess_output: bool = False) -> None:
         self._echo_subprocess_output = echo_subprocess_output
-        self._active_jobs: dict[int, _ManagedProcess] = {}
+        self._active_jobs: dict[int, _ActiveJob] = {}
         self._poll_task: asyncio.Task[None] | None = None
         self._cancel_task: asyncio.Task[None] | None = None
         self._job_tasks: set[asyncio.Task[None]] = set()
@@ -104,6 +115,8 @@ class QueueWorker:
             self._cancel_task = None
 
         for job_id, managed in list(self._active_jobs.items()):
+            if isinstance(managed, _PendingSpawn):
+                continue
             if managed.is_running() and managed.pid is not None:
                 logger.info("Shutting down — terminating job id=%d pid=%d", job_id, managed.pid)
                 self._kill_process_tree(managed.pid)
@@ -131,10 +144,15 @@ class QueueWorker:
             running_job = await job_repo.get_running()
             return running_job is not None
 
-    async def _get_next_queued_entry(self) -> QueueEntry | None:
+    async def _peek_next_queued_entry(self) -> QueueEntry | None:
         async with session_factory() as session:
             queue_repo = QueueRepository(session)
             return await queue_repo.get_next()
+
+    async def _claim_next_entry(self) -> QueueEntry | None:
+        async with session_factory() as session:
+            queue_repo = QueueRepository(session)
+            return await queue_repo.claim_next()
 
     async def _mark_job_running(self, job_id: int, pid: int) -> None:
         async with session_factory() as session:
@@ -170,7 +188,6 @@ class QueueWorker:
     async def _finalize_job(self, job_id: int, return_code: int, output_lines: list[str] | None = None) -> None:
         async with session_factory() as session:
             job_repo = JobRepository(session)
-            queue_repo = QueueRepository(session)
             job = await job_repo.get_by_id(job_id)
             if job is None:
                 return
@@ -215,26 +232,6 @@ class QueueWorker:
                             trained_lora.id,
                             job_id,
                         )
-                jobs_service = JobsService(
-                    job_repo,
-                    queue_repo,
-                    JobConfigRepository(session),
-                    DatasetRepository(session),
-                )
-                try:
-                    sampling_job = await jobs_service.create_auto_sampling_for_training_job(job)
-                except SamplingCheckpointsNotFoundError:
-                    logger.warning(
-                        "Post-training sampling requested for job id=%d, but no checkpoints were found",
-                        job_id,
-                    )
-                    sampling_job = None
-                if sampling_job is not None:
-                    logger.info(
-                        "Queued post-training sampling job id=%d for training job id=%d",
-                        sampling_job.id,
-                        job_id,
-                    )
                 await session.commit()
 
     async def _watch_cancellations(self) -> None:
@@ -242,6 +239,8 @@ class QueueWorker:
         while True:
             try:
                 for job_id, managed in list(self._active_jobs.items()):
+                    if isinstance(managed, _PendingSpawn):
+                        continue
                     if not managed.is_running():
                         continue
                     if await self._is_job_cancelled(job_id) and managed.pid is not None:
@@ -260,6 +259,10 @@ class QueueWorker:
         if entry.id is None:
             return
         job_id = entry.job_id
+        existing = self._active_jobs.get(job_id)
+        if existing is not None and not isinstance(existing, _PendingSpawn):
+            return
+
         async with session_factory() as session:
             job_repo = JobRepository(session)
             job = await job_repo.get_by_id(job_id)
@@ -267,7 +270,6 @@ class QueueWorker:
                 return
             job_type = job.job_type
 
-        await self._dequeue_entry(entry.id)
         managed: _ManagedProcess | None = None
         output_lines: list[str] = []
         try:
@@ -306,8 +308,13 @@ class QueueWorker:
             try:
                 max_jobs = settings.training.max_concurrent_jobs
                 while await self._active_job_count() < max_jobs:
-                    entry = await self._get_next_queued_entry()
-                    if entry is None or entry.job_id in self._active_jobs:
+                    peek = await self._peek_next_queued_entry()
+                    if peek is None or peek.job_id in self._active_jobs:
+                        break
+                    self._active_jobs[peek.job_id] = _PendingSpawn()
+                    entry = await self._claim_next_entry()
+                    if entry is None or entry.job_id != peek.job_id:
+                        self._active_jobs.pop(peek.job_id, None)
                         break
                     task = asyncio.create_task(self._run_entry(entry))
                     self._job_tasks.add(task)

@@ -14,10 +14,7 @@ from src.db.tables.job import Job, JobStatus, JobType
 from src.db.tables.job_config import ConfigType
 from src.db.tables.queue_entry import QueueEntry
 from src.sampler.config import SamplingConfig
-from src.services.configs.exceptions import (
-    JobConfigNotFoundError,
-    JobConfigValidationError,
-)
+from src.services.configs.exceptions import JobConfigValidationError
 from src.services.configs.service import JobConfigService
 from src.services.datasets.training_validation import validate_dataset_for_training
 from src.services.jobs.exceptions import (
@@ -32,15 +29,13 @@ from src.services.jobs.handlers import get_job_handler
 from src.services.jobs.loss_log_reader import read_loss_log
 from src.services.jobs.samples import list_samples_for_output_dir
 from src.services.jobs.sampling_jobs import (
-    find_intermediate_checkpoints,
     prepare_sampling_config_lora_paths,
-    resolve_sampling_lora_paths,
+    resolve_lora_paths_from_sampling_config,
     resolve_sampling_output_dir,
     validate_lora_paths,
     validate_sample_prompts,
 )
 from src.services.loras.paths import assign_unique_training_job_yaml
-from src.services.sampling.exceptions import SamplingCheckpointsNotFoundError
 from src.tagger.config import TaggingConfig, TaggingMode
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
@@ -69,9 +64,6 @@ class JobsService:
             return await self._job_repo.get_by_type(job_type)
         return await self._job_repo.get_all()
 
-    async def list_jobs_by_source(self, source_job_id: int) -> Sequence[Job]:
-        return await self._job_repo.get_by_source_job_id(source_job_id)
-
     async def get_job(self, job_id: int) -> Job:
         job = await self._job_repo.get_by_id(job_id)
         if job is None:
@@ -84,7 +76,6 @@ class JobsService:
         *,
         name: str | None = None,
         lora_paths: list[str] | None = None,
-        source_job_id: int | None = None,
     ) -> Job:
         config = await self._config_service.get_config(config_id)
         job_name = name or config.name
@@ -121,11 +112,7 @@ class JobsService:
         job_lora_paths = (
             lora_paths
             if lora_paths is not None
-            else await resolve_sampling_lora_paths(
-                self._job_repo,
-                source_job_id,
-                runtime_train_config=self._runtime_train_config,
-            )
+            else resolve_lora_paths_from_sampling_config(sampling_config)
         )
         sampling_config, paths = prepare_sampling_config_lora_paths(
             sampling_config,
@@ -140,21 +127,12 @@ class JobsService:
             config_id=config.id,
             config_yaml=config.config_yaml,
             lora_paths_yaml=yaml.safe_dump(paths, allow_unicode=True, sort_keys=False),
-            source_job_id=source_job_id,
         )
         job = await self._job_repo.add(job)
         sampling_config = SamplingConfig.from_yaml(job.config_yaml)
         await self._job_repo.update_output_path(
             job,
-            str(
-                await resolve_sampling_output_dir(
-                    self._job_repo,
-                    sampling_config,
-                    job.id,
-                    source_job_id,
-                    runtime_train_config=self._runtime_train_config,
-                )
-            ),
+            str(resolve_sampling_output_dir(sampling_config, job.id)),
         )
         return job
 
@@ -163,7 +141,6 @@ class JobsService:
         *,
         dataset_id: int,
         dataset_name: str,
-        image_dir: str,
         mode: str = "if_empty",
         threshold: float = 0.35,
         model: str = "wd-v1-4-convnextv2-tagger-v2",
@@ -173,7 +150,6 @@ class JobsService:
     ) -> Job:
         config = TaggingConfig(
             dataset_id=dataset_id,
-            image_dir=image_dir,
             mode=TaggingMode(mode),
             threshold=threshold,
             model=model,
@@ -191,35 +167,6 @@ class JobsService:
         )
         return await self._job_repo.add(job)
 
-    async def create_auto_sampling_for_training_job(self, training_job: Job) -> Job | None:
-        if training_job.id is None or training_job.job_type != JobType.TRAINING:
-            return None
-        train_config = TrainConfig.from_yaml(training_job.config_yaml)
-        if not train_config.sampling_enabled:
-            return None
-        if not train_config.checkpointing_enabled:
-            return None
-        if train_config.sampling_config_id is None:
-            return None
-        try:
-            sampling_config_entity = await self._config_service.get_config(
-                train_config.sampling_config_id
-            )
-        except JobConfigNotFoundError:
-            return None
-        if sampling_config_entity.config_type != ConfigType.SAMPLING:
-            return None
-        runtime_config = self._runtime_train_config(training_job)
-        if not find_intermediate_checkpoints(runtime_config):
-            raise SamplingCheckpointsNotFoundError(training_job.id)
-        job = await self.create_from_config(
-            sampling_config_entity.id,
-            name=f"{training_job.name} post-train sampling",
-            source_job_id=training_job.id,
-        )
-        await self.enqueue_job(job.id)
-        return job
-
     async def delete_job(self, job_id: int) -> None:
         job = await self.get_job(job_id)
         entry = await self._queue_repo.get_by_job_id(job_id)
@@ -234,6 +181,8 @@ class JobsService:
     async def _enqueue_job(self, job: Job, *, reset_runtime: bool) -> QueueEntry:
         if job.id is None:
             raise JobNotFoundError(-1)
+        if job.status == JobStatus.RUNNING:
+            raise JobAlreadyQueuedError(job.id)
         existing = await self._queue_repo.get_by_job_id(job.id)
         if existing is not None:
             raise JobAlreadyQueuedError(job.id)

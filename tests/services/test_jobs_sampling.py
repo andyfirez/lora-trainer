@@ -5,62 +5,66 @@ from src.db.tables.job import JobStatus, JobType
 from src.db.tables.job_config import ConfigType
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
+from src.services.configs.exceptions import JobConfigValidationError
 from src.services.configs.service import JobConfigService
 from src.services.jobs.service import JobsService
 from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
 )
-from src.trainer.config import TrainConfig
 
 
-def test_resolve_sampling_output_path_standalone(tmp_path) -> None:
-    config = SamplingConfig(output_dir=str(tmp_path))
-    path = resolve_sampling_output_path(config, job_id=42, source_train_config=None)
-    assert path == tmp_path / "samples" / "job_42"
+def test_resolve_sampling_output_path_absolute(tmp_path: Path) -> None:
+    output_dir = tmp_path / "samples"
+    config = SamplingConfig(output_dir=str(output_dir))
+    path = resolve_sampling_output_path(config, job_id=42)
+    assert path == output_dir.resolve() / "job_42"
 
 
-def test_resolve_sampling_output_path_train_linked(tmp_path) -> None:
-    config = SamplingConfig(output_dir=str(tmp_path / "ignored"))
-    train_config = TrainConfig(output_dir=str(tmp_path / "output"), lora_name="demo")
-    path = resolve_sampling_output_path(config, job_id=42, source_train_config=train_config)
-    assert path == tmp_path / "output" / "demo" / "samples"
+def test_resolve_sampling_output_path_requires_absolute() -> None:
+    config = SamplingConfig(output_dir="relative/path")
+    with pytest.raises(ValueError, match="absolute path"):
+        resolve_sampling_output_path(config, job_id=1)
+
+
+def test_resolve_sampling_output_path_requires_non_empty() -> None:
+    config = SamplingConfig(output_dir="")
+    with pytest.raises(ValueError, match="output_dir is required"):
+        resolve_sampling_output_path(config, job_id=1)
 
 
 @pytest.mark.asyncio
-async def test_create_from_config_train_linked_resolves_lora_paths(
+async def test_create_from_config_resolves_lora_paths_from_request(
     jobs_service: JobsService,
     config_service: JobConfigService,
-    create_training_job,
-    tmp_path,
+    minimal_sampling_yaml: str,
+    sampling_output_dir: Path,
+    tmp_path: Path,
 ) -> None:
     lora_path = tmp_path / "custom.safetensors"
     lora_path.write_bytes(b"lora")
     sampling_config = await config_service.create_config(
         name="sampling",
         config_type=ConfigType.SAMPLING,
-        config_yaml=f"output_dir: {tmp_path.as_posix()}\nsample_prompts:\n  - test prompt\n",
+        config_yaml=minimal_sampling_yaml,
     )
-    training_job = await create_training_job()
 
     sampling_job = await jobs_service.create_from_config(
         sampling_config.id,
         lora_paths=[str(lora_path)],
-        source_job_id=training_job.id,
     )
 
-    train_config = TrainConfig.from_yaml(training_job.config_yaml)
     assert sampling_job.job_type == JobType.SAMPLING
-    assert sampling_job.source_job_id == training_job.id
     assert jobs_service.get_lora_paths(sampling_job) == [str(lora_path)]
-    assert sampling_job.output_path == str(Path(train_config.output_dir) / train_config.lora_name / "samples")
+    assert sampling_job.output_path == str(sampling_output_dir / f"job_{sampling_job.id}")
 
 
 @pytest.mark.asyncio
 async def test_create_from_config_standalone_resolves_lora_paths_from_config(
     jobs_service: JobsService,
     config_service: JobConfigService,
-    tmp_path,
+    sampling_output_dir: Path,
+    tmp_path: Path,
 ) -> None:
     lora_a = tmp_path / "a.safetensors"
     lora_b = tmp_path / "b.safetensors"
@@ -70,7 +74,7 @@ async def test_create_from_config_standalone_resolves_lora_paths_from_config(
         name="sampling",
         config_type=ConfigType.SAMPLING,
         config_yaml=f"""
-output_dir: {tmp_path.as_posix()}
+output_dir: {sampling_output_dir.as_posix()}
 lora_paths:
   - {lora_a.as_posix()}
   - {lora_b.as_posix()}
@@ -95,77 +99,34 @@ parameters:
 async def test_create_from_config_standalone_has_empty_lora_paths(
     jobs_service: JobsService,
     config_service: JobConfigService,
-    tmp_path,
+    minimal_sampling_yaml: str,
+    sampling_output_dir: Path,
 ) -> None:
     sampling_config = await config_service.create_config(
         name="sampling",
         config_type=ConfigType.SAMPLING,
-        config_yaml=f"output_dir: {tmp_path.as_posix()}\nsample_prompts:\n  - test prompt\n",
+        config_yaml=minimal_sampling_yaml,
     )
 
-    sampling_job = await jobs_service.create_from_config(
-        sampling_config.id,
-    )
+    sampling_job = await jobs_service.create_from_config(sampling_config.id)
 
     assert jobs_service.get_lora_paths(sampling_job) == []
-    assert sampling_job.output_path == str(tmp_path / "samples" / f"job_{sampling_job.id}")
-
-
-@pytest.mark.asyncio
-async def test_create_from_config_train_linked_auto_resolves_checkpoints(
-    jobs_service: JobsService,
-    config_service: JobConfigService,
-    training_dataset,
-    tmp_path,
-) -> None:
-    output_dir = tmp_path / "output"
-    training_config = await config_service.create_config(
-        name="training",
-        config_type=ConfigType.TRAINING,
-        config_yaml=f"""
-output_dir: {output_dir.as_posix()}
-lora_name: demo
-output_format: safetensors
-concepts:
-  - dataset_id: {training_dataset.id}
-""",
-    )
-    training_job = await jobs_service.create_from_config(training_config.id)
-    train_config = TrainConfig.from_yaml(training_job.config_yaml)
-    work_dir = output_dir / train_config.lora_name
-    work_dir.mkdir(parents=True)
-    epoch_path = work_dir / f"{train_config.lora_name}_epoch1.safetensors"
-    step_path = work_dir / f"{train_config.lora_name}_step10.safetensors"
-    epoch_path.write_bytes(b"epoch")
-    step_path.write_bytes(b"step")
-
-    sampling_config = await config_service.create_config(
-        name="sampling",
-        config_type=ConfigType.SAMPLING,
-        config_yaml="sample_prompts:\n  - test prompt\n",
-    )
-
-    sampling_job = await jobs_service.create_from_config(
-        sampling_config.id,
-        source_job_id=training_job.id,
-    )
-
-    assert jobs_service.get_lora_paths(sampling_job) == [str(epoch_path), str(step_path)]
-    assert sampling_job.output_path == str(work_dir / "samples")
+    assert sampling_job.output_path == str(sampling_output_dir / f"job_{sampling_job.id}")
 
 
 @pytest.mark.asyncio
 async def test_create_from_config_rejects_missing_sample_prompts(
     jobs_service: JobsService,
     config_service: JobConfigService,
-    tmp_path,
+    sampling_output_dir: Path,
+    tmp_path: Path,
 ) -> None:
     lora_path = tmp_path / "model.safetensors"
     lora_path.write_bytes(b"lora")
     sampling_config = await config_service.create_config(
         name="sampling",
         config_type=ConfigType.SAMPLING,
-        config_yaml=f"output_dir: {tmp_path.as_posix()}\n",
+        config_yaml=f'output_dir: {sampling_output_dir.as_posix()}\n',
     )
 
     with pytest.raises(SamplingPromptsNotConfiguredError):
@@ -205,13 +166,14 @@ async def test_get_job_logs_tail(
 async def test_create_from_config_rejects_missing_lora_path(
     jobs_service: JobsService,
     config_service: JobConfigService,
-    tmp_path,
+    minimal_sampling_yaml: str,
+    tmp_path: Path,
 ) -> None:
     missing_path = tmp_path / "missing.safetensors"
     sampling_config = await config_service.create_config(
         name="sampling",
         config_type=ConfigType.SAMPLING,
-        config_yaml="base_model_name: x\nsample_prompts:\n  - test\n",
+        config_yaml=minimal_sampling_yaml,
     )
 
     with pytest.raises(SamplingLoRAPathNotFoundError):
@@ -222,58 +184,24 @@ async def test_create_from_config_rejects_missing_lora_path(
 
 
 @pytest.mark.asyncio
-async def test_auto_sampling_enqueues_intermediate_checkpoints(
-    jobs_service: JobsService,
+async def test_create_sampling_config_requires_absolute_output_dir(
     config_service: JobConfigService,
-    training_dataset,
-    session,
-    tmp_path,
 ) -> None:
-    output_dir = tmp_path / "output"
+    with pytest.raises(JobConfigValidationError, match="absolute path"):
+        await config_service.create_config(
+            name="sampling",
+            config_type=ConfigType.SAMPLING,
+            config_yaml="output_dir: relative\nsample_prompts:\n  - test\n",
+        )
 
-    sampling_config = await config_service.create_config(
-        name="post-train sampling",
-        config_type=ConfigType.SAMPLING,
-        config_yaml=f"""
-output_dir: {output_dir.as_posix()}
-sample_prompts:
-  - test prompt
-""",
-    )
-    config_yaml = f"""
-output_dir: {output_dir.as_posix()}
-lora_name: demo
-output_format: safetensors
-checkpointing_enabled: true
-sampling_enabled: true
-sampling_config_id: {sampling_config.id}
-concepts:
-  - dataset_id: {training_dataset.id}
-"""
-    training_config = await config_service.create_config(
-        name="training",
-        config_type=ConfigType.TRAINING,
-        config_yaml=config_yaml,
-    )
-    training_job = await jobs_service.create_from_config(training_config.id)
-    train_config = TrainConfig.from_yaml(training_job.config_yaml)
-    work_dir = output_dir / train_config.lora_name
-    work_dir.mkdir(parents=True)
-    epoch_path = work_dir / f"{train_config.lora_name}_epoch1.safetensors"
-    step_path = work_dir / f"{train_config.lora_name}_step10.safetensors"
-    final_path = work_dir / f"{train_config.lora_name}.safetensors"
-    epoch_path.write_bytes(b"epoch")
-    step_path.write_bytes(b"step")
-    final_path.write_bytes(b"final")
-    await jobs_service._job_repo.update_status(training_job, JobStatus.COMPLETED)
-    await session.commit()
 
-    sampling_job = await jobs_service.create_auto_sampling_for_training_job(training_job)
-
-    assert sampling_job is not None
-    assert sampling_job.status == JobStatus.QUEUED
-    assert jobs_service.get_lora_paths(sampling_job) == [str(epoch_path), str(step_path)]
-    assert sampling_job.output_path == str(work_dir / "samples")
-    queue_entry = await jobs_service._queue_repo.get_by_job_id(sampling_job.id)
-    assert queue_entry is not None
-    assert queue_entry.job_id == sampling_job.id
+@pytest.mark.asyncio
+async def test_create_sampling_config_requires_output_dir(
+    config_service: JobConfigService,
+) -> None:
+    with pytest.raises(JobConfigValidationError, match="output_dir is required"):
+        await config_service.create_config(
+            name="sampling",
+            config_type=ConfigType.SAMPLING,
+            config_yaml='output_dir: ""\nsample_prompts:\n  - test\n',
+        )
