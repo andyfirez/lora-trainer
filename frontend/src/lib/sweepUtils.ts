@@ -70,35 +70,7 @@ function effectiveValues(param: SweepParameter | undefined): unknown[] {
 export function getParameters(config: Record<string, unknown>): SweepParameters {
   const raw = config.parameters;
   if (raw && typeof raw === "object") return raw as SweepParameters;
-  const legacy: SweepParameters = {};
-  const prompts = config.sample_prompts;
-  if (Array.isArray(prompts)) {
-    legacy.prompt =
-      prompts.length > 1
-        ? { mode: "vary", values: prompts }
-        : { mode: "fixed", value: prompts[0] ?? "" };
-  }
-  if (config.base_model_name != null) {
-    legacy.base_model_name = { mode: "fixed", value: config.base_model_name };
-  }
-  if (config.sample_negative_prompt != null) {
-    legacy.negative_prompt = { mode: "fixed", value: config.sample_negative_prompt };
-  }
-  if (config.sample_steps != null) legacy.steps = { mode: "fixed", value: config.sample_steps };
-  if (config.sample_cfg_scale != null) legacy.cfg_scale = { mode: "fixed", value: config.sample_cfg_scale };
-  if (config.sample_width != null) legacy.width = { mode: "fixed", value: config.sample_width };
-  if (config.sample_height != null) legacy.height = { mode: "fixed", value: config.sample_height };
-  if (config.sample_scheduler != null) legacy.scheduler = { mode: "fixed", value: config.sample_scheduler };
-  if (Array.isArray(config.lora_paths) && config.lora_paths.length) {
-    const paths = config.lora_paths.filter((p) => p != null && String(p).trim());
-    const entries = paths.map((path) => ({ path: String(path), trigger: "" }));
-    if (entries.length === 1) {
-      legacy.lora_path = { mode: "fixed", value: entries[0] };
-    } else if (entries.length > 1) {
-      legacy.lora_path = { mode: "vary", values: entries };
-    }
-  }
-  return legacy;
+  return {};
 }
 
 export function emptyLoraEntry(): LoraEntry {

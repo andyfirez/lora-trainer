@@ -2,7 +2,6 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
-
 from typing import Sequence
 
 import yaml
@@ -15,6 +14,7 @@ from src.services.configs.exceptions import (
     JobConfigValidationError,
 )
 from src.services.configs.versioning import (
+    normalize_sampling_config_yaml,
     normalize_training_config_yaml,
     yaml_configs_equal,
 )
@@ -49,7 +49,7 @@ class JobConfigService:
             raise JobConfigNotFoundError(config_id)
         if config.config_type == ConfigType.TRAINING:
             return await self._normalize_training_config_record(config)
-        return config
+        return await self._normalize_sampling_config_record(config)
 
     async def create_config(
         self,
@@ -63,7 +63,7 @@ class JobConfigService:
         stored_yaml = (
             normalize_training_config_yaml(config_yaml)
             if config_type == ConfigType.TRAINING
-            else config_yaml
+            else normalize_sampling_config_yaml(config_yaml)
         )
         job_config = JobConfig(
             name=name,
@@ -90,8 +90,7 @@ class JobConfigService:
             if config.config_type == ConfigType.TRAINING:
                 await self._update_training_config_yaml(config, config_yaml)
             else:
-                await self._validate_config_yaml(config.config_type, config_yaml)
-                config.config_yaml = config_yaml
+                await self._update_sampling_config_yaml(config, config_yaml)
         config.updated_at = datetime.now(timezone.utc)
         self._config_repo._session.add(config)
         await self._config_repo._session.flush()
@@ -128,6 +127,24 @@ class JobConfigService:
         await self._config_repo._session.refresh(config)
         return config
 
+    async def _normalize_sampling_config_record(self, config: JobConfig) -> JobConfig:
+        normalized_yaml = normalize_sampling_config_yaml(config.config_yaml)
+        if normalized_yaml == config.config_yaml:
+            return config
+        config.config_yaml = normalized_yaml
+        config.updated_at = datetime.now(timezone.utc)
+        self._config_repo._session.add(config)
+        await self._config_repo._session.flush()
+        await self._config_repo._session.refresh(config)
+        return config
+
+    async def _update_sampling_config_yaml(self, config: JobConfig, config_yaml: str) -> None:
+        await self._validate_config_yaml(ConfigType.SAMPLING, config_yaml)
+        normalized = normalize_sampling_config_yaml(config_yaml)
+        if yaml.safe_load(normalized) == yaml.safe_load(config.config_yaml):
+            return
+        config.config_yaml = normalized
+
     async def _update_training_config_yaml(self, config: JobConfig, config_yaml: str) -> None:
         await self._validate_config_yaml(ConfigType.TRAINING, config_yaml)
         if yaml_configs_equal(config_yaml, config.config_yaml):
@@ -149,7 +166,7 @@ class JobConfigService:
                 config.validate_gpu()
                 await self._validate_training_config(config)
             else:
-                config = SamplingConfig.from_yaml(config_yaml)
+                config = SamplingConfig.from_yaml(normalize_sampling_config_yaml(config_yaml))
                 config.validate_gpu()
                 self._validate_sampling_config(config)
         except JobConfigValidationError:

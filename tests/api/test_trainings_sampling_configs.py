@@ -17,7 +17,12 @@ from src.services.configs.service import JobConfigService
 from src.services.datasets.service import DatasetsService
 from src.services.jobs.service import JobsService
 
-SAMPLING_YAML = f"output_dir: {{output_dir}}\nsample_prompts:\n  - prompt\n"
+SAMPLING_YAML = f"""output_dir: {{output_dir}}
+parameters:
+  prompt:
+    mode: fixed
+    value: prompt
+"""
 
 
 @pytest.fixture

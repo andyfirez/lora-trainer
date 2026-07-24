@@ -167,6 +167,8 @@ def sampling_output_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def minimal_sampling_yaml(sampling_output_dir: Path) -> str:
     return f"""output_dir: {sampling_output_dir.as_posix()}
-sample_prompts:
-  - test prompt
+parameters:
+  prompt:
+    mode: fixed
+    value: test prompt
 """

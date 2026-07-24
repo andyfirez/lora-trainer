@@ -141,6 +141,7 @@ async def test_get_job_logs_tail(
     jobs_service: JobsService,
     session,
     tmp_path,
+    sampling_output_dir: Path,
 ) -> None:
     log_path = tmp_path / "sampling_job_1.log"
     log_path.write_text("line1\nline2\nline3\n", encoding="utf-8")
@@ -149,7 +150,12 @@ async def test_get_job_logs_tail(
     sampling_job = Job(
         job_type=JobType.SAMPLING,
         name="sample",
-        config_yaml="base_model_name: x",
+        config_yaml=f"""output_dir: {sampling_output_dir.as_posix()}
+parameters:
+  prompt:
+    mode: fixed
+    value: test
+""",
         lora_paths_yaml="[]",
         log_path=str(log_path),
     )
@@ -191,7 +197,12 @@ async def test_create_sampling_config_requires_absolute_output_dir(
         await config_service.create_config(
             name="sampling",
             config_type=ConfigType.SAMPLING,
-            config_yaml="output_dir: relative\nsample_prompts:\n  - test\n",
+            config_yaml="""output_dir: /tmp/out
+parameters:
+  prompt:
+    mode: fixed
+    value: test
+""",
         )
 
 
@@ -203,5 +214,5 @@ async def test_create_sampling_config_requires_output_dir(
         await config_service.create_config(
             name="sampling",
             config_type=ConfigType.SAMPLING,
-            config_yaml='output_dir: ""\nsample_prompts:\n  - test\n',
+            config_yaml='output_dir: ""\nparameters:\n  prompt:\n    mode: fixed\n    value: test\n',
         )

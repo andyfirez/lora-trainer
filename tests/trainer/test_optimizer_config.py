@@ -59,7 +59,9 @@ def test_train_config_yaml_roundtrip_per_part_learning_rate() -> None:
     assert restored.text_encoder_2.learning_rate == pytest.approx(5e-5)
 
 
-def test_train_config_from_yaml_migrates_legacy_learning_rate() -> None:
+def test_migrate_training_yaml_moves_legacy_learning_rate() -> None:
+    from src.db.migrations.training_yaml import migrate_training_yaml
+
     yaml_str = """
 learning_rate: 0.0003
 unet:
@@ -67,8 +69,12 @@ unet:
 text_encoder_1:
   train: true
   learning_rate: 0.00005
+concepts:
+  - dataset_id: 1
 """
-    config = TrainConfig.from_yaml(yaml_str)
+    migrated = migrate_training_yaml(yaml_str)
+    assert migrated is not None
+    config = TrainConfig.from_yaml(migrated)
     assert config.unet.learning_rate == pytest.approx(3e-4)
     assert config.text_encoder_1.learning_rate == pytest.approx(5e-5)
     assert config.text_encoder_2.learning_rate == pytest.approx(3e-4)

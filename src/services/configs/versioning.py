@@ -1,8 +1,10 @@
-"""Helpers for training config normalization."""
+"""Helpers for training and sampling config normalization."""
 
 import re
 
 import yaml
+from src.db.migrations.sampling_yaml import migrate_sampling_yaml_raw
+from src.sampler.config import SamplingConfig
 from src.trainer.config import TrainConfig
 
 _LORA_VERSION_SUFFIX_RE = re.compile(r"_v\d+$")
@@ -13,11 +15,26 @@ def strip_lora_version_suffix(name: str) -> str:
 
 
 def normalize_training_config_yaml(config_yaml: str) -> str:
-    config = TrainConfig.from_yaml(config_yaml)
+    from src.db.migrations.training_yaml import migrate_training_yaml_raw
+
+    data = yaml.safe_load(config_yaml) or {}
+    if not isinstance(data, dict):
+        data = {}
+    migrated_data = migrate_training_yaml_raw(data)
+    prepared = yaml.dump(migrated_data, allow_unicode=True, sort_keys=False)
+    config = TrainConfig.from_yaml(prepared)
     base_name = strip_lora_version_suffix(config.lora_name)
-    if config.lora_name == base_name:
-        return config_yaml
-    return config.model_copy(update={"lora_name": base_name}).to_yaml()
+    if config.lora_name != base_name:
+        config = config.model_copy(update={"lora_name": base_name})
+    return config.to_yaml()
+
+
+def normalize_sampling_config_yaml(config_yaml: str) -> str:
+    data = yaml.safe_load(config_yaml) or {}
+    if not isinstance(data, dict):
+        data = {}
+    migrated_data = migrate_sampling_yaml_raw(data)
+    return SamplingConfig.model_validate(migrated_data).to_yaml()
 
 
 def canonical_yaml(yaml_str: str) -> str:

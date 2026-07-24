@@ -204,21 +204,7 @@ class TrainConfig(BaseModel):
     @classmethod
     def from_yaml(cls, yaml_str: str) -> "TrainConfig":
         data = yaml.safe_load(yaml_str)
-        if isinstance(data, dict):
-            cls._migrate_legacy_learning_rate(data)
         return cls.model_validate(data)
-
-    @staticmethod
-    def _migrate_legacy_learning_rate(data: dict) -> None:
-        legacy_lr = data.pop("learning_rate", None)
-        if legacy_lr is None:
-            return
-        for part in ("unet", "text_encoder_1", "text_encoder_2"):
-            part_data = data.get(part)
-            if part_data is None:
-                data[part] = {"learning_rate": legacy_lr}
-            elif isinstance(part_data, dict) and "learning_rate" not in part_data:
-                part_data["learning_rate"] = legacy_lr
 
     def resolve_concepts(self, paths: dict[int, ResolvedConceptPaths]) -> TrainConfig:
         from src.trainer.concept_resolution import ResolvedConceptPaths

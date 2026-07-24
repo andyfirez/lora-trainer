@@ -65,7 +65,15 @@ def test_prepare_merges_job_and_config_paths(tmp_path: Path) -> None:
     b = tmp_path / "b.safetensors"
     a.write_bytes(b"x")
     b.write_bytes(b"x")
-    config = SamplingConfig(lora_paths=[str(a)])
+    config = SamplingConfig(
+        lora_paths=[str(a)],
+        parameters=SweepParameters(
+            lora_path=SweepParameter(
+                mode=SweepMode.FIXED,
+                value={"path": str(a), "trigger": ""},
+            )
+        ),
+    )
     updated, paths = prepare_sampling_config_lora_paths(config, [str(b)])
     assert paths == [str(a), str(b)]
     assert updated.parameters.lora_path.mode == SweepMode.VARY
