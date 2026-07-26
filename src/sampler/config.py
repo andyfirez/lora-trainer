@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import yaml
 from pydantic import BaseModel, Field
@@ -14,10 +14,17 @@ from src.sampler.sweep.models import (
     SweepParameters,
 )
 from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
-from src.trainer.gpu_config_validation import validate_gpu_config
+from src.trainer.gpu_resolution import (
+    FORBIDDEN_GLOBAL_GPU_KEYS,
+    resolve_gpu_config,
+    strip_global_gpu_keys,
+    strip_gpu_overrides_matching_defaults,
+)
 
 if TYPE_CHECKING:
+    from src.settings.models import GpuDefaultsSettings
     from src.trainer.config import TrainConfig
+    from src.trainer.gpu_resolution import ResolvedGpuConfig
 
 DEFAULT_BASE_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 
@@ -47,18 +54,22 @@ FORBIDDEN_DEPRECATED_SAMPLING_KEYS: frozenset[str] = frozenset(
 
 FORBIDDEN_LEGACY_SAMPLING_KEYS: frozenset[str] = LEGACY_FLAT_SAMPLING_KEYS | FORBIDDEN_DEPRECATED_SAMPLING_KEYS
 
+FORBIDDEN_ENTITY_GPU_KEYS: frozenset[str] = FORBIDDEN_GLOBAL_GPU_KEYS
+
 
 class SamplingConfig(BaseModel):
     """SDXL LoRA sampling configuration with unified parameter sweep support."""
 
     output_dir: str = ""
-    sample_vae_tiling: bool = True
+    sample_vae_tiling: bool | None = None
     sample_vae_fp32: bool = False
     sample_offload_unet_before_decode: bool = True
-    attention_mechanism: Literal["default", "sdpa", "xformers"] = "sdpa"
-    mixed_precision: WeightDtype = WeightDtype.FLOAT_16
-    vae_dtype: VaeDtype = VaeDtype.AUTO
-    tf32: bool = True
+    mixed_precision: WeightDtype | None = None
+    vae_dtype: VaeDtype | None = None
+
+    # Snapshot/runtime GPU fields (explicit in job YAML; omitted from entity YAML)
+    tf32: bool | None = None
+    attention_mechanism: str | None = None
 
     lora_paths: list[str] = Field(default_factory=list)
     include_base_model_sample: bool = False
@@ -71,23 +82,72 @@ class SamplingConfig(BaseModel):
         return [str(p) for p in prompts if p is not None and str(p).strip()]
 
     @classmethod
-    def from_yaml(cls, yaml_str: str) -> "SamplingConfig":
-        data = yaml.safe_load(yaml_str)
+    def from_yaml(cls, yaml_str: str, *, snapshot: bool = False) -> "SamplingConfig":
+        data = yaml.safe_load(yaml_str) or {}
+        if not isinstance(data, dict):
+            data = {}
+        if not snapshot:
+            data = strip_global_gpu_keys(data)
         return cls.model_validate(data)
 
+    @classmethod
+    def from_snapshot_yaml(cls, yaml_str: str) -> "SamplingConfig":
+        return cls.from_yaml(yaml_str, snapshot=True)
+
+    def resolve_gpu(self, defaults: "GpuDefaultsSettings") -> "ResolvedGpuConfig":
+        from src.trainer.gpu_resolution import ResolvedGpuConfig
+
+        if self.tf32 is not None and self.attention_mechanism is not None:
+            return ResolvedGpuConfig(
+                tf32=self.tf32,
+                attention_mechanism=self.attention_mechanism,  # type: ignore[arg-type]
+                mixed_precision=self.mixed_precision or defaults.mixed_precision,
+                vae_dtype=self.vae_dtype or defaults.vae_dtype,
+                sample_vae_tiling=(
+                    self.sample_vae_tiling
+                    if self.sample_vae_tiling is not None
+                    else defaults.sample_vae_tiling
+                ),
+            )
+        return resolve_gpu_config(
+            defaults=defaults,
+            mixed_precision=self.mixed_precision,
+            vae_dtype=self.vae_dtype,
+            sample_vae_tiling=self.sample_vae_tiling,
+        )
+
+    def with_resolved_gpu(self, defaults: "GpuDefaultsSettings") -> "SamplingConfig":
+        resolved = self.resolve_gpu(defaults)
+        return self.model_copy(update=resolved.as_train_fields())
+
+    def _entity_yaml_data(self) -> dict[str, object]:
+        from src.settings.app_settings import settings
+
+        data = self.model_dump(mode="json", exclude_none=True)
+        for field in FORBIDDEN_ENTITY_GPU_KEYS:
+            data.pop(field, None)
+        return strip_gpu_overrides_matching_defaults(data, settings.gpu_defaults)
+
     def to_yaml(self) -> str:
-        payload = self.model_dump(mode="json")
-        return yaml.dump(payload, allow_unicode=True, sort_keys=False)
+        return yaml.dump(self._entity_yaml_data(), allow_unicode=True, sort_keys=False)
+
+    def to_snapshot_yaml(self) -> str:
+        data = self.model_dump(mode="json", exclude_none=True)
+        return yaml.dump(data, allow_unicode=True, sort_keys=False)
 
     @classmethod
     def default_yaml(cls) -> str:
         return cls().to_yaml()
 
     def validate_gpu(self) -> None:
+        from src.settings.app_settings import settings
+        from src.trainer.gpu_config_validation import validate_gpu_config
+
+        resolved = self.resolve_gpu(settings.gpu_defaults)
         validate_gpu_config(
-            attention_mechanism=self.attention_mechanism,
-            mixed_precision=self.mixed_precision,
-            vae_dtype=self.vae_dtype,
+            attention_mechanism=resolved.attention_mechanism,
+            mixed_precision=resolved.mixed_precision,
+            vae_dtype=resolved.vae_dtype,
         )
 
     def effective_prompts(self) -> list[str]:
@@ -129,7 +189,10 @@ class SamplingConfig(BaseModel):
         return False
 
     def train_config_field_updates(self) -> dict[str, object]:
+        from src.settings.app_settings import settings
+
         params = self.parameters
+        resolved = self.resolve_gpu(settings.gpu_defaults)
         return {
             "sample_prompts": self.effective_prompts(),
             "sample_negative_prompt": self.effective_negative_prompt(),
@@ -138,7 +201,7 @@ class SamplingConfig(BaseModel):
             "sample_width": params.width.first_value(),
             "sample_height": params.height.first_value(),
             "sample_scheduler": self.effective_scheduler(),
-            "sample_vae_tiling": self.sample_vae_tiling,
+            "sample_vae_tiling": resolved.sample_vae_tiling,
             "sample_vae_fp32": self.sample_vae_fp32,
             "sample_offload_unet_before_decode": self.sample_offload_unet_before_decode,
         }
@@ -147,15 +210,17 @@ class SamplingConfig(BaseModel):
         return self.train_config_field_updates()
 
     def to_train_config(self) -> "TrainConfig":
+        from src.settings.app_settings import settings
         from src.trainer.config import ModelPartConfig, TrainConfig
 
+        resolved = self.resolve_gpu(settings.gpu_defaults)
         base = TrainConfig(
             base_model_name=self.effective_base_model_name(),
             output_dir=self.output_dir,
-            attention_mechanism=self.attention_mechanism,
-            mixed_precision=self.mixed_precision,
-            vae_dtype=self.vae_dtype,
-            tf32=self.tf32,
+            mixed_precision=resolved.mixed_precision,
+            vae_dtype=resolved.vae_dtype,
+            tf32=resolved.tf32,
+            attention_mechanism=resolved.attention_mechanism,
             unet=ModelPartConfig(train=True, weight_dtype=WeightDtype.FLOAT_16),
             text_encoder_1=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),
             text_encoder_2=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),

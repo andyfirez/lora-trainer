@@ -141,7 +141,7 @@ async def run_sampling_job(job_id: int) -> int:
             lora_paths_yaml = job.lora_paths_yaml
             output_path = job.output_path
 
-        sampling_config = SamplingConfig.from_yaml(config_yaml)
+        sampling_config = SamplingConfig.from_snapshot_yaml(config_yaml)
         job_lora_paths = [str(p) for p in (yaml.safe_load(lora_paths_yaml or "[]") or [])]
         sampling_config, effective_lora_paths = prepare_sampling_config_lora_paths(
             sampling_config,

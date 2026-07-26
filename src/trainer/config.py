@@ -16,10 +16,18 @@ import yaml
 from pydantic import BaseModel, Field, model_validator
 
 from src.trainer.optimizer_config import OptimizerConfig
+from src.trainer.gpu_resolution import (
+    FORBIDDEN_GLOBAL_GPU_KEYS,
+    resolve_gpu_config,
+    strip_global_gpu_keys,
+    strip_gpu_overrides_matching_defaults,
+)
 
 if TYPE_CHECKING:
     from src.sampler.config import SamplingConfig
+    from src.settings.models import GpuDefaultsSettings
     from src.trainer.concept_resolution import ResolvedConceptPaths
+    from src.trainer.gpu_resolution import ResolvedGpuConfig
 
 
 class OutputFormat(StrEnum):
@@ -84,6 +92,8 @@ FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({
 })
 
 FORBIDDEN_DEPRECATED_CONCEPT_KEYS: frozenset[str] = frozenset({"image_dir", "prepared_dir"})
+
+FORBIDDEN_ENTITY_GPU_KEYS: frozenset[str] = FORBIDDEN_GLOBAL_GPU_KEYS
 
 TrainablePart: TypeAlias = Literal["unet", "text_encoder_1", "text_encoder_2"]
 
@@ -159,7 +169,7 @@ class TrainConfig(BaseModel):
 
     # Optimization
     gradient_checkpointing: bool = True
-    mixed_precision: WeightDtype = WeightDtype.FLOAT_16
+    mixed_precision: WeightDtype | None = None
     seed: Optional[int] = None
 
     # Caching (latents + text encoder outputs)
@@ -168,12 +178,12 @@ class TrainConfig(BaseModel):
     cache_text_encoder_outputs: bool = True
     cache_text_encoder_outputs_to_disk: bool = False
 
-    # Attention backend
-    attention_mechanism: Literal["default", "sdpa", "xformers"] = "sdpa"
+    # GPU overrides (sparse in entity YAML; resolved values in job snapshots)
+    vae_dtype: VaeDtype | None = None
 
-    # Precision
-    vae_dtype: VaeDtype = VaeDtype.AUTO
-    tf32: bool = True
+    # Snapshot/runtime GPU fields (explicit in job YAML; omitted from entity YAML)
+    tf32: bool | None = None
+    attention_mechanism: Literal["default", "sdpa", "xformers"] | None = None
 
     # DataLoader
     num_dataloader_workers: int = Field(default=0, ge=0)
@@ -202,9 +212,51 @@ class TrainConfig(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     @classmethod
-    def from_yaml(cls, yaml_str: str) -> "TrainConfig":
-        data = yaml.safe_load(yaml_str)
+    def from_yaml(cls, yaml_str: str, *, snapshot: bool = False) -> "TrainConfig":
+        data = yaml.safe_load(yaml_str) or {}
+        if not isinstance(data, dict):
+            data = {}
+        if not snapshot:
+            data = strip_global_gpu_keys(data)
         return cls.model_validate(data)
+
+    @classmethod
+    def from_snapshot_yaml(cls, yaml_str: str) -> "TrainConfig":
+        return cls.from_yaml(yaml_str, snapshot=True)
+
+    def resolve_gpu(self, defaults: "GpuDefaultsSettings") -> "ResolvedGpuConfig":
+        from src.trainer.gpu_resolution import ResolvedGpuConfig
+
+        if self.tf32 is not None and self.attention_mechanism is not None:
+            return ResolvedGpuConfig(
+                tf32=self.tf32,
+                attention_mechanism=self.attention_mechanism,
+                mixed_precision=self.mixed_precision or defaults.mixed_precision,
+                vae_dtype=self.vae_dtype or defaults.vae_dtype,
+                sample_vae_tiling=defaults.sample_vae_tiling,
+            )
+        return resolve_gpu_config(
+            defaults=defaults,
+            mixed_precision=self.mixed_precision,
+            vae_dtype=self.vae_dtype,
+        )
+
+    def with_resolved_gpu(self, defaults: "GpuDefaultsSettings") -> "TrainConfig":
+        resolved = self.resolve_gpu(defaults)
+        return self.model_copy(update=resolved.as_train_fields())
+
+    def _entity_yaml_data(self) -> dict[str, object]:
+        from src.settings.app_settings import settings
+
+        data = self.model_dump(mode="json", exclude_none=True)
+        for concept in data.get("concepts", []):
+            concept.pop("image_dir", None)
+            concept.pop("prepared_dir", None)
+        for field in RUNTIME_SAMPLING_FIELDS:
+            data.pop(field, None)
+        for field in FORBIDDEN_ENTITY_GPU_KEYS:
+            data.pop(field, None)
+        return strip_gpu_overrides_matching_defaults(data, settings.gpu_defaults)
 
     def resolve_concepts(self, paths: dict[int, ResolvedConceptPaths]) -> TrainConfig:
         from src.trainer.concept_resolution import ResolvedConceptPaths
@@ -246,6 +298,9 @@ class TrainConfig(BaseModel):
         )
 
     def to_yaml(self) -> str:
+        return yaml.dump(self._entity_yaml_data(), allow_unicode=True, sort_keys=False)
+
+    def to_snapshot_yaml(self) -> str:
         data = self.model_dump(mode="json", exclude_none=True)
         for concept in data.get("concepts", []):
             concept.pop("image_dir", None)
@@ -269,10 +324,12 @@ class TrainConfig(BaseModel):
         return getattr(self, part).learning_rate
 
     def validate_gpu(self) -> None:
+        from src.settings.app_settings import settings
         from src.trainer.gpu_config_validation import validate_gpu_config
 
+        resolved = self.resolve_gpu(settings.gpu_defaults)
         validate_gpu_config(
-            attention_mechanism=self.attention_mechanism,
-            mixed_precision=self.mixed_precision,
-            vae_dtype=self.vae_dtype,
+            attention_mechanism=resolved.attention_mechanism,
+            mixed_precision=resolved.mixed_precision,
+            vae_dtype=resolved.vae_dtype,
         )

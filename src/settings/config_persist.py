@@ -5,7 +5,13 @@ import tomllib
 from pathlib import Path
 
 from src.settings.app_settings import settings
-from src.settings.models import DatabaseSettings, ServerSettings, StorageSettings, TrainingSettings
+from src.settings.models import (
+    DatabaseSettings,
+    GpuDefaultsSettings,
+    ServerSettings,
+    StorageSettings,
+    TrainingSettings,
+)
 
 
 def get_config_path() -> Path:
@@ -44,6 +50,7 @@ def _current_config_data() -> dict[str, dict[str, object]]:
         "database": settings.database.model_dump(),
         "training": settings.training.model_dump(),
         "storage": settings.storage.model_dump(),
+        "gpu_defaults": settings.gpu_defaults.model_dump(),
     }
 
 
@@ -64,6 +71,42 @@ def persist_training_settings(
         data["server"] = ServerSettings.model_validate(settings.server).model_dump()
     if "database" not in data:
         data["database"] = DatabaseSettings.model_validate(settings.database).model_dump()
+    if "storage" not in data:
+        data["storage"] = StorageSettings.model_validate(settings.storage).model_dump()
+    if "gpu_defaults" not in data:
+        data["gpu_defaults"] = GpuDefaultsSettings.model_validate(settings.gpu_defaults).model_dump()
+
+    _write_toml(get_config_path(), data)
+
+
+def persist_gpu_defaults(
+    *,
+    tf32: bool | None = None,
+    attention_mechanism: str | None = None,
+    mixed_precision: str | None = None,
+    vae_dtype: str | None = None,
+    sample_vae_tiling: bool | None = None,
+) -> None:
+    data = _current_config_data()
+    gpu_defaults = dict(data.get("gpu_defaults", settings.gpu_defaults.model_dump()))
+    if tf32 is not None:
+        gpu_defaults["tf32"] = tf32
+    if attention_mechanism is not None:
+        gpu_defaults["attention_mechanism"] = attention_mechanism
+    if mixed_precision is not None:
+        gpu_defaults["mixed_precision"] = mixed_precision
+    if vae_dtype is not None:
+        gpu_defaults["vae_dtype"] = vae_dtype
+    if sample_vae_tiling is not None:
+        gpu_defaults["sample_vae_tiling"] = sample_vae_tiling
+    data["gpu_defaults"] = gpu_defaults
+
+    if "server" not in data:
+        data["server"] = ServerSettings.model_validate(settings.server).model_dump()
+    if "database" not in data:
+        data["database"] = DatabaseSettings.model_validate(settings.database).model_dump()
+    if "training" not in data:
+        data["training"] = TrainingSettings.model_validate(settings.training).model_dump()
     if "storage" not in data:
         data["storage"] = StorageSettings.model_validate(settings.storage).model_dump()
 
@@ -92,6 +135,8 @@ def persist_storage_settings(
         data["database"] = DatabaseSettings.model_validate(settings.database).model_dump()
     if "training" not in data:
         data["training"] = TrainingSettings.model_validate(settings.training).model_dump()
+    if "gpu_defaults" not in data:
+        data["gpu_defaults"] = GpuDefaultsSettings.model_validate(settings.gpu_defaults).model_dump()
 
     _write_toml(get_config_path(), data)
 
@@ -127,3 +172,27 @@ def apply_training_settings(
     if updates:
         settings.training = settings.training.model_copy(update=updates)
     return settings.training
+
+
+def apply_gpu_defaults(
+    *,
+    tf32: bool | None = None,
+    attention_mechanism: str | None = None,
+    mixed_precision: str | None = None,
+    vae_dtype: str | None = None,
+    sample_vae_tiling: bool | None = None,
+) -> GpuDefaultsSettings:
+    updates: dict[str, object] = {}
+    if tf32 is not None:
+        updates["tf32"] = tf32
+    if attention_mechanism is not None:
+        updates["attention_mechanism"] = attention_mechanism
+    if mixed_precision is not None:
+        updates["mixed_precision"] = mixed_precision
+    if vae_dtype is not None:
+        updates["vae_dtype"] = vae_dtype
+    if sample_vae_tiling is not None:
+        updates["sample_vae_tiling"] = sample_vae_tiling
+    if updates:
+        settings.gpu_defaults = settings.gpu_defaults.model_copy(update=updates)
+    return settings.gpu_defaults

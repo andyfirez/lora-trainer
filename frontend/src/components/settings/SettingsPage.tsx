@@ -5,11 +5,13 @@ import PageHeader from "@/components/ui/PageHeader";
 import Tabs from "@/components/ui/Tabs";
 import WorkerSettingsTab from "@/components/settings/WorkerSettingsTab";
 import StorageSettingsTab from "@/components/settings/StorageSettingsTab";
+import GpuDefaultsSettingsTab from "@/components/settings/GpuDefaultsSettingsTab";
 import SystemInfoTab from "@/components/settings/SystemInfoTab";
 
 const TABS = [
   { value: "worker", label: "Worker" },
   { value: "storage", label: "Storage" },
+  { value: "gpu", label: "GPU" },
   { value: "system", label: "System" },
 ] as const;
 
@@ -25,7 +27,15 @@ export default function SettingsPage() {
         description="Global application settings and system information"
       />
       <Tabs tabs={[...TABS]} value={tab} onChange={setTab} />
-      {tab === "worker" ? <WorkerSettingsTab /> : tab === "storage" ? <StorageSettingsTab /> : <SystemInfoTab />}
+      {tab === "worker" ? (
+        <WorkerSettingsTab />
+      ) : tab === "storage" ? (
+        <StorageSettingsTab />
+      ) : tab === "gpu" ? (
+        <GpuDefaultsSettingsTab />
+      ) : (
+        <SystemInfoTab />
+      )}
     </div>
   );
 }

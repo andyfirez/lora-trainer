@@ -58,7 +58,6 @@ concepts:
 
 # Optimization
 gradient_checkpointing: true
-mixed_precision: float16
 
 # Checkpointing
 checkpointing_enabled: true
@@ -118,11 +117,5 @@ parameters:
   seed:
     mode: fixed
     value: null
-
-attention_mechanism: sdpa
-mixed_precision: float16
-vae_dtype: auto
-tf32: true
-sample_vae_tiling: true
 `,
 };

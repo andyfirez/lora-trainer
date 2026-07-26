@@ -11,6 +11,7 @@ from src.trainer.config import (
     RUNTIME_SAMPLING_FIELDS,
     TrainConfig,
 )
+from src.trainer.gpu_resolution import strip_gpu_overrides_matching_defaults
 
 
 def _migrate_learning_rate(data: dict[str, Any]) -> None:
@@ -30,12 +31,24 @@ def _strip_deprecated_training_keys(data: dict[str, Any]) -> None:
         data.pop(key, None)
     for key in RUNTIME_SAMPLING_FIELDS:
         data.pop(key, None)
+    data.pop("tf32", None)
+    data.pop("attention_mechanism", None)
+
+
+def _normalize_gpu_overrides(data: dict[str, Any]) -> None:
+    from src.settings.app_settings import settings
+
+    normalized = strip_gpu_overrides_matching_defaults(data, settings.gpu_defaults)
+    for key in list(data.keys()):
+        if key not in normalized:
+            data.pop(key, None)
 
 
 def migrate_training_yaml_raw(data: dict[str, Any]) -> dict[str, Any]:
     migrated = dict(data)
     _migrate_learning_rate(migrated)
     _strip_deprecated_training_keys(migrated)
+    _normalize_gpu_overrides(migrated)
     return migrated
 
 

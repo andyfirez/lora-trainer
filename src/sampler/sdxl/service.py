@@ -25,6 +25,7 @@ from src.trainer.sdxl.lora_targets import (
     SDXL_UNET_LORA_TARGET_MODULES,
 )
 from src.storage.config_paths import resolve_config_base_model
+from src.settings.app_settings import settings
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 from src.trainer.sdxl.sampling import PromptEmbedCache
 
@@ -111,8 +112,9 @@ class SDXLLoRASampler:
         self._prompt_embed_cache.clear()
         self._output_dir.mkdir(parents=True, exist_ok=True)
         config.validate_gpu()
+        gpu = config.resolve_gpu(settings.gpu_defaults)
 
-        if config.tf32:
+        if gpu.tf32:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
 
@@ -205,13 +207,14 @@ class SDXLLoRASampler:
 
     def _load_stack(self, config: TrainConfig, *, enable_lora: bool) -> _SamplingStack:
         device = torch.device("cuda")
-        vae_dtype = resolve_vae_dtype(config.vae_dtype)
+        gpu = config.resolve_gpu(settings.gpu_defaults)
+        vae_dtype = resolve_vae_dtype(gpu.vae_dtype)
         resolved_base_model = resolve_config_base_model(config.base_model_name)
         self._log.info(
             "Loading SDXL components from %s (lora=%s, attention=%s)...",
             resolved_base_model,
             enable_lora,
-            config.attention_mechanism,
+            gpu.attention_mechanism,
         )
         load_started = time.perf_counter()
         components = load_sdxl_components(
@@ -219,7 +222,7 @@ class SDXLLoRASampler:
             unet_dtype=config.unet.weight_dtype,
             text_encoder_1_dtype=config.text_encoder_1.weight_dtype,
             text_encoder_2_dtype=config.text_encoder_2.weight_dtype,
-            vae_dtype=config.vae_dtype,
+            vae_dtype=gpu.vae_dtype,
         )
         self._log.info("SDXL components loaded from disk in %.1fs", time.perf_counter() - load_started)
 
@@ -272,7 +275,7 @@ class SDXLLoRASampler:
         text_encoder_2 = text_encoder_2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
         vae = vae.to(device=device, dtype=vae_dtype)
         self._log.info("GPU transfer finished in %.1fs", time.perf_counter() - gpu_started)
-        configure_unet_attention(unet, config.attention_mechanism, self._log)
+        configure_unet_attention(unet, gpu.attention_mechanism, self._log)
         self._log.info("Pipeline ready for sampling")
 
         return _SamplingStack(

@@ -1,9 +1,12 @@
 """Pydantic schemas for application settings API."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from src.settings.gpu_info import GpuInfo
-from src.settings.models import DatabaseSettings, ServerSettings, StorageSettings
+from src.settings.models import DatabaseSettings, GpuDefaultsSettings, ServerSettings, StorageSettings
+from src.trainer.config import VaeDtype, WeightDtype
 
 
 class TrainingSystemInfo(BaseModel):
@@ -18,6 +21,7 @@ class SettingsResponse(BaseModel):
     database: DatabaseSettings
     storage: StorageSettings
     training: TrainingSystemInfo
+    gpu_defaults: GpuDefaultsSettings
     config_file: str
     app_version: str
     gpu: GpuInfo
@@ -29,3 +33,8 @@ class SettingsPatch(BaseModel):
     datasets_root: str | None = None
     base_models_root: str | None = None
     lora_root: str | None = None
+    tf32: bool | None = None
+    attention_mechanism: Literal["default", "sdpa", "xformers"] | None = None
+    mixed_precision: WeightDtype | None = None
+    vae_dtype: VaeDtype | None = None
+    sample_vae_tiling: bool | None = None

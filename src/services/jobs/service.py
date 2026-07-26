@@ -36,6 +36,7 @@ from src.services.jobs.sampling_jobs import (
     validate_sample_prompts,
 )
 from src.services.loras.paths import assign_unique_training_job_yaml
+from src.settings.app_settings import settings
 from src.tagger.config import TaggingConfig, TaggingMode
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
@@ -81,7 +82,8 @@ class JobsService:
         job_name = name or config.name
         if config.config_type == ConfigType.TRAINING:
             train_config = TrainConfig.from_yaml(config.config_yaml)
-            for concept in train_config.concepts:
+            snapshot_config = train_config.with_resolved_gpu(settings.gpu_defaults)
+            for concept in snapshot_config.concepts:
                 dataset = await self._dataset_repo.get_by_id(concept.dataset_id)
                 if dataset is None:
                     raise JobConfigValidationError(
@@ -90,8 +92,8 @@ class JobsService:
                 try:
                     validate_dataset_for_training(
                         dataset,
-                        train_config.resolution,
-                        enable_bucket=train_config.enable_bucket,
+                        snapshot_config.resolution,
+                        enable_bucket=snapshot_config.enable_bucket,
                     )
                 except Exception as exc:
                     raise JobConfigValidationError(str(exc)) from exc
@@ -99,7 +101,7 @@ class JobsService:
                 job_type=JobType.TRAINING,
                 name=job_name,
                 config_id=config.id,
-                config_yaml=config.config_yaml,
+                config_yaml=snapshot_config.to_snapshot_yaml(),
             )
             job = await self._job_repo.add(job)
             if job.id is not None:
@@ -121,15 +123,16 @@ class JobsService:
         if paths:
             validate_lora_paths(paths)
         validate_sample_prompts(sampling_config)
+        snapshot_config = sampling_config.with_resolved_gpu(settings.gpu_defaults)
         job = Job(
             job_type=JobType.SAMPLING,
             name=job_name,
             config_id=config.id,
-            config_yaml=config.config_yaml,
+            config_yaml=snapshot_config.to_snapshot_yaml(),
             lora_paths_yaml=yaml.safe_dump(paths, allow_unicode=True, sort_keys=False),
         )
         job = await self._job_repo.add(job)
-        sampling_config = SamplingConfig.from_yaml(job.config_yaml)
+        sampling_config = SamplingConfig.from_snapshot_yaml(job.config_yaml)
         await self._job_repo.update_output_path(
             job,
             str(resolve_sampling_output_dir(sampling_config, job.id)),
@@ -313,4 +316,4 @@ class JobsService:
         )
 
     def _runtime_train_config(self, job: Job) -> TrainConfig:
-        return TrainConfig.from_yaml(job.config_yaml)
+        return TrainConfig.from_snapshot_yaml(job.config_yaml)

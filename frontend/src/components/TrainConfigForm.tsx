@@ -16,6 +16,9 @@ import {
   type OptimizerType,
 } from "@/lib/optimizerPresets";
 import type { Dataset } from "@/types";
+import type { GpuDefaultsInfo } from "@/lib/api/settings";
+import { InheritedSelectField } from "@/components/ui/InheritedGpuField";
+import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
 
 type Config = Record<string, any>;
 
@@ -26,6 +29,7 @@ function stripLoraVersionSuffix(name: string): string {
 interface TrainConfigFormProps {
   config: Config;
   onChange: (config: Config) => void;
+  gpuDefaults?: GpuDefaultsInfo;
 }
 
 const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
@@ -270,7 +274,7 @@ function stripInlineSamplingFields(next: Config): Config {
   return cleaned;
 }
 
-export default function TrainConfigForm({ config, onChange }: TrainConfigFormProps) {
+export default function TrainConfigForm({ config, onChange, gpuDefaults }: TrainConfigFormProps) {
   const concepts: Config[] = config.concepts ?? [];
   const { data: datasets, isLoading: datasetsLoading } = useSWR("/datasets", () => datasetsApi.list());
 
@@ -279,7 +283,12 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
   }
 
   function set(key: string, value: unknown) {
-    let next: Config = { ...config, [key]: value };
+    let next: Config = { ...config };
+    if (value === undefined) {
+      delete next[key];
+    } else {
+      next = { ...next, [key]: value };
+    }
     if (key === "cache_latents" && value === false) {
       next = { ...next, cache_latents_to_disk: false };
     }
@@ -863,13 +872,34 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
       <section className={sectionClass}>
         <div className={sectionTitleClass}>Optimization</div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          <SelectInput
-            label="Mixed Precision"
-            value={config.mixed_precision ?? "bfloat16"}
-            onChange={(v) => set("mixed_precision", v)}
-            options={weightDtypeOptions}
-            paramKey="mixed_precision"
-          />
+          {gpuDefaults ? (
+            <>
+              <InheritedSelectField
+                label="Mixed Precision"
+                value={config.mixed_precision}
+                globalDefault={gpuDefaults.mixed_precision}
+                options={MIXED_PRECISION_OPTIONS}
+                onChange={(v) => set("mixed_precision", v)}
+                paramKey="mixed_precision"
+              />
+              <InheritedSelectField
+                label="VAE Dtype"
+                value={config.vae_dtype}
+                globalDefault={gpuDefaults.vae_dtype}
+                options={VAE_DTYPE_OPTIONS}
+                onChange={(v) => set("vae_dtype", v)}
+                paramKey="vae_dtype"
+              />
+            </>
+          ) : (
+            <SelectInput
+              label="Mixed Precision"
+              value={config.mixed_precision ?? "float16"}
+              onChange={(v) => set("mixed_precision", v)}
+              options={weightDtypeOptions}
+              paramKey="mixed_precision"
+            />
+          )}
           <NumberInput
             label="Seed (optional)"
             value={config.seed ?? null}
@@ -942,26 +972,8 @@ export default function TrainConfigForm({ config, onChange }: TrainConfigFormPro
           )}
         </div>
 
-        {/* Attention & Precision */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mt-4">
-          <SelectInput
-            label="Attention Mechanism"
-            value={config.attention_mechanism ?? "sdpa"}
-            onChange={(v) => set("attention_mechanism", v)}
-            paramKey="attention_mechanism"
-            options={[
-              { value: "sdpa", label: "SDPA (default, PyTorch 2.x)" },
-              { value: "xformers", label: "xformers" },
-              { value: "default", label: "diffusers default" },
-            ]}
-          />
-          <div className="flex flex-col gap-2 pb-1">
-            <CheckboxInput
-              label="TF32 (Ampere+ GPUs)"
-              checked={config.tf32 ?? true}
-              onChange={(v) => set("tf32", v)}
-              paramKey="tf32"
-            />
+          <div className="flex items-end pb-1">
             <CheckboxInput
               label="torch.compile (slower start)"
               checked={config.torch_compile ?? false}

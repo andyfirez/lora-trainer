@@ -174,7 +174,6 @@ async def test_create_sampling_config_rejects_unsupported_gpu_settings(
             config_type=ConfigType.SAMPLING,
             config_yaml=(
                 minimal_sampling_yaml
-                + "attention_mechanism: xformers\n"
                 + "mixed_precision: bfloat16\n"
             ),
         )

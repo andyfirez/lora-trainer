@@ -4,9 +4,9 @@ import { useState } from "react";
 import ParamGroup from "@/components/sweep/ParamGroup";
 import SweepField from "@/components/sweep/SweepField";
 import SweepPathField from "@/components/sweep/SweepPathField";
+import { InheritedCheckboxField, InheritedSelectField } from "@/components/ui/InheritedGpuField";
 import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
 import { labelClassName } from "@/components/ui/Input";
-import { selectClassName } from "@/components/ui/Select";
 import {
   SWEEP_PARAM_LABELS,
   type SweepParamKey,
@@ -14,12 +14,15 @@ import {
   getParameters,
   setParameter,
 } from "@/lib/sweepUtils";
+import type { GpuDefaultsInfo } from "@/lib/api/settings";
+import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
 
 type Config = Record<string, unknown>;
 
 interface SamplingParametersSectionProps {
   config: Config;
   onChange: (config: Config) => void;
+  gpuDefaults?: GpuDefaultsInfo;
 }
 
 const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
@@ -42,11 +45,21 @@ function param(config: Config, key: SweepParamKey) {
   );
 }
 
-export default function SamplingParametersSection({ config, onChange }: SamplingParametersSectionProps) {
+export default function SamplingParametersSection({
+  config,
+  onChange,
+  gpuDefaults,
+}: SamplingParametersSectionProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   function set(key: string, value: unknown) {
-    onChange({ ...config, [key]: value });
+    const next: Config = { ...config };
+    if (value === undefined) {
+      delete next[key];
+    } else {
+      next[key] = value;
+    }
+    onChange(next);
   }
 
   function updateParam(key: SweepParamKey, value: ReturnType<typeof param>) {
@@ -148,59 +161,35 @@ export default function SamplingParametersSection({ config, onChange }: Sampling
         </button>
         {advancedOpen && (
           <div className="space-y-4">
-            <div>
-              <label className={labelClassName}>Attention</label>
-              <select
-                className={`${selectClassName} max-w-[14rem] mt-1`}
-                value={(config.attention_mechanism as string) ?? "sdpa"}
-                onChange={(e) => set("attention_mechanism", e.target.value)}
-              >
-                <option value="xformers">xformers</option>
-                <option value="sdpa">SDPA (PyTorch 2.x)</option>
-                <option value="default">Default</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClassName}>Mixed Precision</label>
-              <select
-                className={`${selectClassName} max-w-[14rem] mt-1`}
-                value={(config.mixed_precision as string) ?? "float16"}
-                onChange={(e) => set("mixed_precision", e.target.value)}
-              >
-                <option value="bfloat16">bfloat16</option>
-                <option value="float16">float16</option>
-                <option value="float32">float32</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClassName}>VAE Dtype</label>
-              <select
-                className={`${selectClassName} max-w-[14rem] mt-1`}
-                value={(config.vae_dtype as string) ?? "auto"}
-                onChange={(e) => set("vae_dtype", e.target.value)}
-              >
-                <option value="auto">Auto</option>
-                <option value="bfloat16">bfloat16</option>
-                <option value="float16">float16</option>
-                <option value="float32">float32</option>
-              </select>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={(config.tf32 as boolean) ?? true}
-                onChange={(e) => set("tf32", e.target.checked)}
-              />
-              <span className="text-sm">TF32 matmul</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={(config.sample_vae_tiling as boolean) ?? true}
-                onChange={(e) => set("sample_vae_tiling", e.target.checked)}
-              />
-              <span className="text-sm">VAE tiling</span>
-            </label>
+            {gpuDefaults ? (
+              <>
+                <InheritedSelectField
+                  label="Mixed Precision"
+                  value={config.mixed_precision as string | undefined}
+                  globalDefault={gpuDefaults.mixed_precision}
+                  options={MIXED_PRECISION_OPTIONS}
+                  onChange={(v) => set("mixed_precision", v)}
+                  paramKey="mixed_precision"
+                />
+                <InheritedSelectField
+                  label="VAE Dtype"
+                  value={config.vae_dtype as string | undefined}
+                  globalDefault={gpuDefaults.vae_dtype}
+                  options={VAE_DTYPE_OPTIONS}
+                  onChange={(v) => set("vae_dtype", v)}
+                  paramKey="vae_dtype"
+                />
+                <InheritedCheckboxField
+                  label="VAE tiling"
+                  value={config.sample_vae_tiling as boolean | undefined}
+                  globalDefault={gpuDefaults.sample_vae_tiling}
+                  onChange={(v) => set("sample_vae_tiling", v)}
+                  paramKey="sample_vae_tiling"
+                />
+              </>
+            ) : (
+              <p className="text-sm text-muted">Loading GPU defaults…</p>
+            )}
           </div>
         )}
       </section>

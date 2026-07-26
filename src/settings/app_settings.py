@@ -8,7 +8,13 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict, TomlConfigSettingsSource
 from pydantic_settings.sources import PydanticBaseSettingsSource
 
-from src.settings.models import DatabaseSettings, ServerSettings, StorageSettings, TrainingSettings
+from src.settings.models import (
+    DatabaseSettings,
+    GpuDefaultsSettings,
+    ServerSettings,
+    StorageSettings,
+    TrainingSettings,
+)
 
 
 def _default_config_path() -> Path:
@@ -29,6 +35,7 @@ class AppSettings(BaseSettings):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     training: TrainingSettings = Field(default_factory=TrainingSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
+    gpu_defaults: GpuDefaultsSettings = Field(default_factory=GpuDefaultsSettings)
 
     @classmethod
     def settings_customise_sources(

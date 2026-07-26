@@ -858,7 +858,6 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
       "Data type for VAE operations during training and sampling. auto selects based on GPU capability. Lower precision saves VRAM during latent caching and sampling decode.",
     defaultValue: "auto",
     constraints: "auto | float32 | float16 | bfloat16",
-    yamlOnly: true,
     recommendedValue: "auto",
     valueOptions: [
       { value: "auto", description: "Automatically select based on GPU capability." },
@@ -1084,7 +1083,6 @@ export const TRAIN_PARAMETER_METADATA: ParameterMeta[] = [
     description:
       "Enables tiled VAE decoding during post-train sampling, trading a small speed penalty for lower peak VRAM usage when generating large images.",
     defaultValue: "true",
-    yamlOnly: true,
     recommendedValue: "true",
     valueOptions: [
       { value: "true", description: "Tile VAE decode to reduce peak VRAM." },

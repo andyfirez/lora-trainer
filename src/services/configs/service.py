@@ -24,6 +24,7 @@ from src.storage.paths import StoragePaths
 from src.trainer.config import (
     FORBIDDEN_DEPRECATED_CONCEPT_KEYS,
     FORBIDDEN_DEPRECATED_TRAIN_KEYS,
+    FORBIDDEN_ENTITY_GPU_KEYS,
     FORBIDDEN_INLINE_SAMPLING_KEYS,
     TrainConfig,
 )
@@ -161,11 +162,23 @@ class JobConfigService:
                         "Deprecated or inline sampling parameters are not allowed: "
                         + ", ".join(sorted(forbidden))
                     )
+                global_gpu = FORBIDDEN_ENTITY_GPU_KEYS & raw.keys()
+                if global_gpu:
+                    raise JobConfigValidationError(
+                        "GPU settings tf32 and attention_mechanism belong in Settings → GPU: "
+                        + ", ".join(sorted(global_gpu))
+                    )
                 self._validate_raw_concepts(raw.get("concepts"))
                 config = TrainConfig.from_yaml(config_yaml)
                 config.validate_gpu()
                 await self._validate_training_config(config)
             else:
+                global_gpu = FORBIDDEN_ENTITY_GPU_KEYS & raw.keys()
+                if global_gpu:
+                    raise JobConfigValidationError(
+                        "GPU settings tf32 and attention_mechanism belong in Settings → GPU: "
+                        + ", ".join(sorted(global_gpu))
+                    )
                 config = SamplingConfig.from_yaml(normalize_sampling_config_yaml(config_yaml))
                 config.validate_gpu()
                 self._validate_sampling_config(config)

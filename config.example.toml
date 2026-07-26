@@ -16,3 +16,10 @@ cancel_poll_interval_seconds = 1
 datasets_root = "~/lora-trainer/datasets"
 base_models_root = "~/lora-trainer/base-models"
 lora_root = "~/lora-trainer/lora"
+
+[gpu_defaults]
+tf32 = true
+attention_mechanism = "sdpa"
+mixed_precision = "float16"
+vae_dtype = "auto"
+sample_vae_tiling = true

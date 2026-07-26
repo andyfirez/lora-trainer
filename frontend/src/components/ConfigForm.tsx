@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import useSWR from "swr";
 import { Save } from "lucide-react";
 import { inputClassName } from "@/components/ui/Input";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import { trainingsApi } from "@/lib/api/trainings";
 import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
+import { settingsApi } from "@/lib/api/settings";
+import { applySparseGpuOverrides } from "@/lib/gpuConfigUtils";
 import { SamplingConfig, TrainConfig } from "@/lib/defaultConfig";
 import TrainConfigForm from "@/components/TrainConfigForm";
 import SamplingConfigForm from "@/components/SamplingConfigForm";
@@ -44,6 +47,8 @@ export default function ConfigForm({
   const [tab, setTab] = useState<Tab>("form");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { data: settingsData } = useSWR("/settings", () => settingsApi.get());
+  const gpuDefaults = settingsData?.gpu_defaults;
 
   const config = useMemo(() => {
     try {
@@ -55,7 +60,9 @@ export default function ConfigForm({
 
   function handleConfigChange(newConfig: Record<string, unknown>) {
     try {
-      setYaml(yamlStringify(newConfig));
+      const sparse =
+        gpuDefaults != null ? applySparseGpuOverrides(newConfig, gpuDefaults) : newConfig;
+      setYaml(yamlStringify(sparse));
     } catch {
       // ignore serialization errors
     }
@@ -184,9 +191,9 @@ export default function ConfigForm({
 
       {tab === "form" ? (
         configType === "training" ? (
-          <TrainConfigForm config={config} onChange={handleConfigChange} />
+          <TrainConfigForm config={config} onChange={handleConfigChange} gpuDefaults={gpuDefaults} />
         ) : (
-          <SamplingConfigForm config={config} onChange={handleConfigChange} />
+          <SamplingConfigForm config={config} onChange={handleConfigChange} gpuDefaults={gpuDefaults} />
         )
       ) : (
         <div className="rounded-xl overflow-hidden border border-border" style={{ height: 520 }}>

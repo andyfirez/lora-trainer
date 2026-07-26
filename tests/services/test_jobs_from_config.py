@@ -1,6 +1,8 @@
 import pytest
+import yaml
 from src.db.tables.job import JobType
 from src.db.tables.job_config import ConfigType
+from src.sampler.config import SamplingConfig
 from src.services.configs.service import JobConfigService
 from src.services.jobs.service import JobsService
 from src.trainer.config import TrainConfig
@@ -23,7 +25,7 @@ async def test_create_training_job_from_config(
     assert job.job_type == JobType.TRAINING
     assert job.name == "my training run"
     assert job.config_id == config.id
-    runtime = TrainConfig.from_yaml(job.config_yaml)
+    runtime = TrainConfig.from_snapshot_yaml(job.config_yaml)
     assert runtime.lora_name.endswith(f"_j{job.id}")
     assert "_v1" not in job.config_yaml
     assert "base_model_name:" in job.config_yaml
@@ -79,6 +81,65 @@ concepts:
 
     job = await jobs_service.create_from_config(config.id, name="versioned run")
 
-    runtime = TrainConfig.from_yaml(job.config_yaml)
+    runtime = TrainConfig.from_snapshot_yaml(job.config_yaml)
     assert runtime.lora_name.endswith(f"_j{job.id}")
     assert runtime.base_model_name == "changed"
+
+
+@pytest.mark.asyncio
+async def test_create_training_job_snapshots_resolved_gpu_fields(
+    jobs_service: JobsService,
+    config_service: JobConfigService,
+    minimal_training_yaml: str,
+    monkeypatch,
+) -> None:
+    from src.settings.app_settings import settings
+    from src.settings.models import GpuDefaultsSettings
+
+    monkeypatch.setattr(settings, "gpu_defaults", GpuDefaultsSettings())
+    config = await config_service.create_config(
+        name="gpu snapshot training",
+        config_type=ConfigType.TRAINING,
+        config_yaml=minimal_training_yaml,
+    )
+
+    job = await jobs_service.create_from_config(config.id)
+
+    snapshot = yaml.safe_load(job.config_yaml) or {}
+    assert snapshot["tf32"] is True
+    assert snapshot["attention_mechanism"] == "sdpa"
+    assert snapshot["mixed_precision"] == "float16"
+    assert snapshot["vae_dtype"] == "auto"
+
+    runtime = TrainConfig.from_snapshot_yaml(job.config_yaml)
+    assert runtime.tf32 is True
+    assert runtime.attention_mechanism == "sdpa"
+
+
+@pytest.mark.asyncio
+async def test_create_sampling_job_snapshots_resolved_gpu_fields(
+    jobs_service: JobsService,
+    config_service: JobConfigService,
+    minimal_sampling_yaml: str,
+    monkeypatch,
+) -> None:
+    from src.settings.app_settings import settings
+    from src.settings.models import GpuDefaultsSettings
+
+    monkeypatch.setattr(settings, "gpu_defaults", GpuDefaultsSettings())
+    config = await config_service.create_config(
+        name="gpu snapshot sampling",
+        config_type=ConfigType.SAMPLING,
+        config_yaml=minimal_sampling_yaml,
+    )
+
+    job = await jobs_service.create_from_config(config.id)
+
+    snapshot = yaml.safe_load(job.config_yaml) or {}
+    assert snapshot["tf32"] is True
+    assert snapshot["attention_mechanism"] == "sdpa"
+    assert snapshot["sample_vae_tiling"] is True
+
+    runtime = SamplingConfig.from_snapshot_yaml(job.config_yaml)
+    assert runtime.tf32 is True
+    assert runtime.attention_mechanism == "sdpa"

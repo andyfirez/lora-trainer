@@ -48,6 +48,7 @@ from src.trainer.sdxl.mixed_precision import (
     cast_trainable_params_to_fp32,
     create_grad_scaler,
 )
+from src.settings.app_settings import settings
 from src.storage.config_paths import resolve_config_base_model
 from src.trainer.sdxl.model_loader import load_sdxl_components
 from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
@@ -109,10 +110,11 @@ class SDXLLoRATrainer:
                 "after configuring the pytorch-cu130 index in pyproject.toml."
             )
         device = torch.device("cuda")
-        weight_dtype = _DTYPE_MAP[config.mixed_precision]
-        grad_scaler = create_grad_scaler(config.mixed_precision)
+        gpu = config.resolve_gpu(settings.gpu_defaults)
+        weight_dtype = _DTYPE_MAP[gpu.mixed_precision]
+        grad_scaler = create_grad_scaler(gpu.mixed_precision)
 
-        if config.tf32:
+        if gpu.tf32:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
 
@@ -138,7 +140,7 @@ class SDXLLoRATrainer:
             unet_dtype=config.unet.weight_dtype,
             text_encoder_1_dtype=config.text_encoder_1.weight_dtype,
             text_encoder_2_dtype=config.text_encoder_2.weight_dtype,
-            vae_dtype=config.vae_dtype,
+            vae_dtype=gpu.vae_dtype,
         )
         tokenizer_1 = components.tokenizer_1
         tokenizer_2 = components.tokenizer_2
@@ -210,7 +212,7 @@ class SDXLLoRATrainer:
         if config.gradient_checkpointing:
             unet.enable_gradient_checkpointing()
 
-        configure_unet_attention(unet, config.attention_mechanism, log)
+        configure_unet_attention(unet, gpu.attention_mechanism, log)
 
         # UNet always on GPU.
         unet = unet.to(device)

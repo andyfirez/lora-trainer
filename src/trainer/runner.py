@@ -196,7 +196,7 @@ async def _run(job_id: int) -> None:
         config_yaml = job.config_yaml
         resume_checkpoint_path = job.resume_checkpoint_path
 
-    config = TrainConfig.from_yaml(config_yaml)
+    config = TrainConfig.from_snapshot_yaml(config_yaml)
     async with session_factory() as session:
         dataset_repo = DatasetRepository(session)
         crop_repo = DatasetImageCropRepository(session)

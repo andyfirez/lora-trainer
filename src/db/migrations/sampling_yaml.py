@@ -129,6 +129,16 @@ def migrate_sampling_yaml_raw(data: dict[str, Any]) -> dict[str, Any]:
     elif "lora_paths" in migrated and not file_paths:
         migrated["lora_paths"] = []
 
+    migrated.pop("tf32", None)
+    migrated.pop("attention_mechanism", None)
+    from src.settings.app_settings import settings
+    from src.trainer.gpu_resolution import strip_gpu_overrides_matching_defaults
+
+    normalized = strip_gpu_overrides_matching_defaults(migrated, settings.gpu_defaults)
+    for key in list(migrated.keys()):
+        if key not in normalized and key in {"mixed_precision", "vae_dtype", "sample_vae_tiling"}:
+            migrated.pop(key, None)
+
     return migrated
 
 

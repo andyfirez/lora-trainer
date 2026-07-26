@@ -1,6 +1,10 @@
 """Nested configuration models for TOML + env settings."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+from src.trainer.config import VaeDtype, WeightDtype
 
 
 class ServerSettings(BaseModel):
@@ -24,3 +28,11 @@ class StorageSettings(BaseModel):
     datasets_root: str = "~/lora-trainer/datasets"
     base_models_root: str = "~/lora-trainer/base-models"
     lora_root: str = "~/lora-trainer/lora"
+
+
+class GpuDefaultsSettings(BaseModel):
+    tf32: bool = True
+    attention_mechanism: Literal["default", "sdpa", "xformers"] = "sdpa"
+    mixed_precision: WeightDtype = WeightDtype.FLOAT_16
+    vae_dtype: VaeDtype = VaeDtype.AUTO
+    sample_vae_tiling: bool = True

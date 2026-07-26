@@ -11,7 +11,7 @@ class TrainingJobHandler(BaseJobHandler):
         return [sys.executable, "-u", "-m", "src.trainer.runner", "--job-id", str(job_id)]
 
     def validate_config_yaml(self, config_yaml: str) -> None:
-        config = TrainConfig.from_yaml(config_yaml)
+        config = TrainConfig.from_snapshot_yaml(config_yaml)
         config.validate_gpu()
         if not config.concepts:
             raise ValueError("At least one training concept is required")

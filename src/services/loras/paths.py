@@ -21,7 +21,7 @@ class TrainedLoraPaths:
 
 
 def runtime_train_config(job: Job) -> TrainConfig:
-    return TrainConfig.from_yaml(job.config_yaml)
+    return TrainConfig.from_snapshot_yaml(job.config_yaml)
 
 
 def lora_work_dir_exists(relative_path: str) -> bool:
@@ -101,6 +101,6 @@ def unique_lora_name(base_name: str, job_id: int) -> str:
 def assign_unique_training_job_yaml(config_yaml: str, job_id: int) -> str:
     from src.services.configs.versioning import strip_lora_version_suffix
 
-    config = TrainConfig.from_yaml(config_yaml)
+    config = TrainConfig.from_snapshot_yaml(config_yaml)
     base_name = strip_lora_version_suffix(config.lora_name)
-    return config.model_copy(update={"lora_name": unique_lora_name(base_name, job_id)}).to_yaml()
+    return config.model_copy(update={"lora_name": unique_lora_name(base_name, job_id)}).to_snapshot_yaml()
