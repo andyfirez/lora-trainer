@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   ImageIcon,
+  FileImage,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -23,6 +24,7 @@ const NAV = [
   { href: "/trainings", label: "Trainings", icon: FileCog },
   { href: "/loras", label: "LoRAs", icon: Sparkles },
   { href: "/sampling", label: "Sampling", icon: ImageIcon },
+  { href: "/png-info", label: "PNG Info", icon: FileImage },
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/parameters", label: "Parameters", icon: BookOpen },
 ];

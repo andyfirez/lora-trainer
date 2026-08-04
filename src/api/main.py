@@ -32,7 +32,18 @@ from src.api.exception_handlers import (
     trained_lora_not_found_handler,
     trained_lora_reproduce_handler,
 )
-from src.api.routers import datasets, files, jobs, loras, queues, sampling_configs, settings as settings_router, storage, trainings
+from src.api.routers import (
+    datasets,
+    files,
+    jobs,
+    loras,
+    png_info,
+    queues,
+    sampling_configs,
+    settings as settings_router,
+    storage,
+    trainings,
+)
 from src.db.session import run_migrations
 from src.services.configs.exceptions import (
     JobConfigNotFoundError,
@@ -129,6 +140,7 @@ app.include_router(datasets.router)
 app.include_router(files.router)
 app.include_router(settings_router.router)
 app.include_router(storage.router)
+app.include_router(png_info.router)
 
 
 @app.get("/health")

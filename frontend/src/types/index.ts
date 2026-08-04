@@ -235,3 +235,12 @@ export interface CreateJobFromConfigRequest {
   lora_paths?: string[];
   enqueue?: boolean;
 }
+
+export interface PngInfoResponse {
+  info: string;
+  items: Record<string, string>;
+  parameters: Record<string, string | number>;
+  width: number;
+  height: number;
+  preview_base64: string | null;
+}
