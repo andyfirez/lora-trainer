@@ -14,8 +14,7 @@ from src.api.schemas.loras import (
     LoraSamplesResponse,
     ReproduceLoraRequest,
 )
-from src.services.loras.exceptions import LoraNotFoundError
-from src.services.loras.paths import resolve_weights_path, resolve_work_dir
+from src.services.loras.paths import resolve_sample_base_dir
 from src.services.runnable.exceptions import RunnableOperationNotSupportedError
 
 router = APIRouter(prefix="/loras", tags=["loras"])
@@ -86,10 +85,10 @@ async def get_lora_loss(
 @router.get("/{lora_id}/samples", response_model=LoraSamplesResponse)
 async def get_lora_samples(lora_id: int, service: LoraServiceDep) -> LoraSamplesResponse:
     lora = await service.get_lora(lora_id)
-    output_dir = resolve_work_dir(lora)
+    output_dir = resolve_sample_base_dir(lora)
     samples = []
     for sample, kind, metadata in service.list_samples(lora):
-        relative = sample.relative_to(output_dir).as_posix()
+        relative = sample.relative_to(output_dir.resolve()).as_posix()
         samples.append(
             LoraSampleResponse(
                 filename=sample.name,
@@ -102,19 +101,10 @@ async def get_lora_samples(lora_id: int, service: LoraServiceDep) -> LoraSamples
     return LoraSamplesResponse(samples=samples)
 
 
-@router.get("/{lora_id}/weights")
-async def download_lora_weights(lora_id: int, service: LoraServiceDep) -> FileResponse:
-    lora = await service.get_lora(lora_id)
-    path = resolve_weights_path(lora)
-    if not path.is_file():
-        raise LoraNotFoundError(lora_id)
-    return FileResponse(path, filename=path.name)
-
-
 @router.get("/{lora_id}/sample-file/{file_path:path}")
 async def get_lora_sample_file(lora_id: int, file_path: str, service: LoraServiceDep) -> FileResponse:
     lora = await service.get_lora(lora_id)
-    base = resolve_work_dir(lora).resolve()
+    base = resolve_sample_base_dir(lora).resolve()
     target = (base / file_path).resolve()
     if not str(target).startswith(str(base)) or not target.is_file():
         raise RunnableOperationNotSupportedError("Lora", lora_id, "sample file")

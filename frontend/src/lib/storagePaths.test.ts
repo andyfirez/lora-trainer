@@ -84,4 +84,25 @@ describe("partitionFolderContents", () => {
     assert.equal(result.folders.length, 0);
     assert.equal(result.items.length, 1);
   });
+
+  it("shows catalog item when current path equals its relative_path", () => {
+    const result = partitionFolderContents({
+      entries: [],
+      catalogItems: catalog,
+      currentPath: "flat_dataset",
+    });
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0]?.id, 2);
+  });
+
+  it("shows draft catalog items without relative_path at root", () => {
+    const drafts = [{ id: 99, relative_path: "" }];
+    const result = partitionFolderContents({
+      entries: [],
+      catalogItems: drafts,
+      currentPath: "",
+    });
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0]?.id, 99);
+  });
 });

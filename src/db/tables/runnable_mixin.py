@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Optional
 
+import sqlalchemy as sa
 from sqlmodel import Field
 
 
@@ -30,7 +31,15 @@ class RunnableMixin:
     """
 
     name: str = Field(index=True)
-    status: RunnableStatus = Field(default=RunnableStatus.DRAFT, index=True)
+    status: RunnableStatus = Field(
+        default=RunnableStatus.DRAFT,
+        index=True,
+        sa_type=sa.Enum(
+            RunnableStatus,
+            values_callable=lambda statuses: [status.value for status in statuses],
+            native_enum=False,
+        ),
+    )
     config_yaml: Optional[str] = Field(default=None, description="Snapshot YAML — source of truth")
     queue_position: Optional[int] = Field(default=None, index=True)
     error_message: Optional[str] = Field(default=None)

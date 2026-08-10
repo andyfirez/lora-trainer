@@ -38,6 +38,13 @@ def resolve_work_dir(lora: Lora) -> Path:
     return StoragePaths.resolve(StorageKind.LORA, lora.relative_path)
 
 
+def resolve_sample_base_dir(lora: Lora) -> Path:
+    """Base directory for sample files — prefers active run output_path."""
+    if lora.output_path:
+        return Path(lora.output_path)
+    return resolve_work_dir(lora)
+
+
 def resolve_weights_path(lora: Lora) -> Path:
     path = Path(lora.weights_relpath)
     if path.is_absolute():

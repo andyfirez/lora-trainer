@@ -1,6 +1,6 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
-export { BASE_URL };
+const SERVER_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+/** Browser requests go through Next.js rewrite (/api → backend) to avoid CORS and wrong host. */
+export const BASE_URL = typeof window !== "undefined" ? "/api" : SERVER_BASE_URL;
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {

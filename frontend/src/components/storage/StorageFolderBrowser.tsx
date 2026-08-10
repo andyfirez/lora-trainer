@@ -30,7 +30,7 @@ export default function StorageFolderBrowser<T extends { id: number; relative_pa
 }: StorageFolderBrowserProps<T>) {
   const browseKey = `/storage/browse?kind=${kind}&path=${currentPath}`;
   const { data: browse, isLoading: browseLoading, error } = useSWR(browseKey, () =>
-    storageApi.browse(kind, currentPath)
+    storageApi.browse(kind, currentPath),
   );
 
   const loading = catalogLoading || browseLoading;

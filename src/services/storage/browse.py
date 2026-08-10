@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.services.loras.weights import work_dir_has_weights
 from src.storage.paths import StorageKind, StoragePaths
 
 
@@ -11,6 +12,7 @@ class StorageEntry:
     name: str
     relative_path: str
     is_dir: bool
+    is_lora_work_dir: bool = False
 
 
 class StorageBrowseService:
@@ -31,6 +33,24 @@ class StorageBrowseService:
                 continue
             entries.append(StorageEntry(name=child.name, relative_path=rel, is_dir=child.is_dir()))
         return entries
+
+    def list_lora_entries(self, relative_path: str = "") -> list[StorageEntry]:
+        entries = self.list_entries(StorageKind.LORA, relative_path)
+        result: list[StorageEntry] = []
+        for entry in entries:
+            if not entry.is_dir:
+                result.append(entry)
+                continue
+            work_dir = StoragePaths.resolve(StorageKind.LORA, entry.relative_path)
+            result.append(
+                StorageEntry(
+                    name=entry.name,
+                    relative_path=entry.relative_path,
+                    is_dir=True,
+                    is_lora_work_dir=work_dir_has_weights(work_dir),
+                )
+            )
+        return result
 
     def list_model_entries(self, relative_path: str = "") -> list[StorageEntry]:
         entries = self.list_entries(StorageKind.BASE_MODELS, relative_path)

@@ -21,9 +21,12 @@ function progressPercent(step: number | null, total: number | null): number | nu
 export default function LoraRunPanel({ lora, lossGraphRunKey }: LoraRunPanelProps) {
   const id = lora.id;
   const isRunning = lora.status === "running";
+  const isQueued = lora.status === "queued";
   const showLogs =
-    isRunning || lora.status === "completed" || lora.status === "failed" || lora.status === "cancelled";
-  const showLossGraph = showLogs;
+    isRunning || isQueued || lora.status === "completed" || lora.status === "failed" || lora.status === "cancelled";
+  const showLossGraph =
+    lora.config_yaml != null &&
+    (isRunning || lora.status === "completed" || lora.status === "failed" || lora.status === "cancelled");
 
   const trainStep = lora.progress_step ?? 0;
   const trainPct =
@@ -31,10 +34,34 @@ export default function LoraRunPanel({ lora, lossGraphRunKey }: LoraRunPanelProp
 
   return (
     <div className="space-y-6">
-      {isRunning && lora.save_checkpoint_requested && (
-        <div className="rounded-lg bg-warning/10 border border-warning/30 text-warning px-4 py-3 text-sm">
-          Saving checkpoint before stopping…
-        </div>
+      {isQueued && (
+        <JobProgressBar
+          title="Waiting in queue"
+          step={null}
+          total={null}
+          percent={0}
+          active={false}
+          elapsedSeconds={lora.elapsed_seconds}
+          showBar={false}
+          headerRight={
+            lora.queue_position != null ? (
+              <span className="text-muted">Position #{lora.queue_position}</span>
+            ) : undefined
+          }
+        />
+      )}
+
+      {isRunning && trainPct == null && (
+        <JobProgressBar
+          title="Starting training"
+          step={null}
+          total={null}
+          percent={0}
+          active
+          elapsedSeconds={lora.elapsed_seconds}
+          showSpinner
+          showBar={false}
+        />
       )}
 
       {isRunning && trainPct != null && (
@@ -84,26 +111,6 @@ export default function LoraRunPanel({ lora, lossGraphRunKey }: LoraRunPanelProp
       {lora.status === "failed" && lora.error_message && (
         <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">
           <strong>Error:</strong> {lora.error_message}
-        </div>
-      )}
-
-      {lora.output_path && (
-        <div className="bg-surface rounded-xl border border-border p-4">
-          <div className="text-xs text-muted mb-1">Output</div>
-          <code className="text-success text-sm">{lora.output_path}</code>
-        </div>
-      )}
-
-      {lora.last_checkpoint_path && (
-        <div className="bg-surface rounded-xl border border-border p-4">
-          <div className="text-xs text-muted mb-1">Last Checkpoint</div>
-          <code className="text-success text-sm break-all">{lora.last_checkpoint_path}</code>
-          {lora.last_checkpoint_epoch != null && (
-            <div className="text-xs text-muted mt-1">
-              epoch {lora.last_checkpoint_epoch}
-              {lora.last_checkpoint_step != null && ` · step ${lora.last_checkpoint_step}`}
-            </div>
-          )}
         </div>
       )}
     </div>

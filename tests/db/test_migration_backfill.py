@@ -137,6 +137,34 @@ def test_backfill_migrates_legacy_jobs_into_loras_and_samplings(tmp_path) -> Non
     conn.close()
 
 
+@pytest.mark.asyncio
+async def test_backfilled_lora_status_reads_through_orm(tmp_path) -> None:
+    """Regression: migrated rows store lowercase status values; ORM must read them."""
+    db_path = tmp_path / "orm-read.db"
+    cfg = _alembic_config(db_path)
+
+    command.upgrade(cfg, "015")
+    _seed_legacy_rows(db_path)
+    command.upgrade(cfg, "head")
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from src.db.repositories.lora_repo import LoraRepository
+    from src.db.tables.runnable_mixin import RunnableStatus
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path.as_posix()}")
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        loras = await LoraRepository(session).list_all()
+        statuses = {lora.name: lora.status for lora in loras}
+    await engine.dispose()
+
+    assert statuses["completed-lora"] == RunnableStatus.COMPLETED
+    assert statuses["running-job"] == RunnableStatus.ORPHAN
+    assert statuses["failed-job"] == RunnableStatus.FAILED
+
+
 def test_downgrade_from_head_recreates_legacy_table_shells(tmp_path) -> None:
     db_path = tmp_path / "downgrade.db"
     cfg = _alembic_config(db_path)

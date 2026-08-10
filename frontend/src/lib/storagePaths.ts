@@ -50,6 +50,15 @@ export function isDirectChild(itemPath: string, folderPath: string): boolean {
   return remainder.length > 0 && !remainder.includes("/");
 }
 
+export function isCatalogItemAtPath(itemPath: string, folderPath: string): boolean {
+  const item = normalizeRelativePath(itemPath);
+  const folder = normalizeRelativePath(folderPath);
+  if (item === folder) {
+    return true;
+  }
+  return isDirectChild(itemPath, folderPath);
+}
+
 export function partitionFolderContents<T extends CatalogItem>({
   entries,
   catalogItems,
@@ -64,7 +73,13 @@ export function partitionFolderContents<T extends CatalogItem>({
     catalogItems.map((item) => [normalizeRelativePath(item.relative_path), item] as const)
   );
 
-  const items = catalogItems.filter((item) => isDirectChild(item.relative_path, folder));
+  const items = catalogItems.filter((item) => {
+    const itemPath = normalizeRelativePath(item.relative_path);
+    if (!folder && !itemPath) {
+      return true;
+    }
+    return isCatalogItemAtPath(item.relative_path, folder);
+  });
 
   const folders = entries.filter((entry) => {
     if (!entry.is_dir) return false;

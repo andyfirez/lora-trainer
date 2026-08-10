@@ -6,6 +6,7 @@ export interface StorageEntry {
   name: string;
   relative_path: string;
   is_dir: boolean;
+  is_lora_work_dir?: boolean;
 }
 
 export interface StorageBrowseResponse {

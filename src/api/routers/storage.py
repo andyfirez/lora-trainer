@@ -19,18 +19,25 @@ async def browse_storage(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    service = StorageBrowseService()
+    browse = StorageBrowseService()
     if kind == StorageKind.BASE_MODELS:
-        entries = service.list_model_entries(relative_path)
+        entries = browse.list_model_entries(relative_path)
+    elif kind == StorageKind.LORA:
+        entries = browse.list_lora_entries(relative_path)
     else:
-        entries = service.list_entries(kind, relative_path)
+        entries = browse.list_entries(kind, relative_path)
 
     return StorageBrowseResponse(
         kind=kind,
         root=str(StoragePaths.root_for(kind)),
         relative_path=relative_path.strip().strip("/\\"),
         entries=[
-            StorageEntryResponse(name=e.name, relative_path=e.relative_path, is_dir=e.is_dir)
+            StorageEntryResponse(
+                name=e.name,
+                relative_path=e.relative_path,
+                is_dir=e.is_dir,
+                is_lora_work_dir=e.is_lora_work_dir,
+            )
             for e in entries
         ],
     )

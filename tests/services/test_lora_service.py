@@ -105,3 +105,28 @@ async def test_reproduce_creates_new_lora_from_snapshot(lora_service: LoraServic
     assert reproduced.name == "original-copy"
     assert reproduced.status == RunnableStatus.DRAFT
     assert reproduced.config_yaml is not None
+
+
+@pytest.mark.asyncio
+async def test_list_loras_shows_completed_when_weights_relpath_stale(
+    lora_service: LoraService,
+    storage_roots,
+) -> None:
+    from src.db.tables.lora import Lora
+
+    work_dir = storage_roots["lora"] / "stale-weights"
+    work_dir.mkdir()
+    (work_dir / "stale-weights.safetensors").write_bytes(b"weights")
+
+    await lora_service._repo.add(
+        Lora(
+            name="stale-weights",
+            relative_path="stale-weights",
+            weights_relpath="stale-weights/missing.safetensors",
+            base_model_name="unknown",
+            status=RunnableStatus.COMPLETED,
+        )
+    )
+
+    loras = await lora_service.list_loras()
+    assert "stale-weights" in {lora.name for lora in loras}

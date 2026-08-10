@@ -18,7 +18,9 @@ from src.services.loras.exceptions import (
 )
 from src.services.loras.paths import (
     lora_artifacts_exist,
+    lora_work_dir_exists,
     resolve_completed_lora_paths,
+    resolve_work_dir,
 )
 from src.services.loras.relocation import find_relocated_lora
 from src.services.runnable import queue, runtime
@@ -47,15 +49,29 @@ class LoraService:
 
     async def list_loras(self) -> Sequence[Lora]:
         StoragePaths.ensure_root(StorageKind.LORA)
-        await self._sync_discovered_loras()
+        await self.sync_discovered_loras()
         loras = await self._repo.list_all()
         return [lora for lora in loras if self._is_visible(lora)]
 
+    async def sync_discovered_loras(self) -> None:
+        await self._sync_discovered_loras()
+
     @staticmethod
     def _is_visible(lora: Lora) -> bool:
-        if lora.status == RunnableStatus.COMPLETED:
-            return lora_artifacts_exist(lora)
-        return True
+        if lora.status != RunnableStatus.COMPLETED:
+            return True
+        if lora_artifacts_exist(lora):
+            return True
+        if not lora.relative_path:
+            return False
+        if not lora_work_dir_exists(lora.relative_path):
+            return False
+        from src.services.loras.weights import work_dir_has_weights
+
+        try:
+            return work_dir_has_weights(resolve_work_dir(lora))
+        except (ValueError, OSError):
+            return False
 
     async def get_lora(self, lora_id: int) -> Lora:
         lora = await self._repo.get_by_id(lora_id)
@@ -74,6 +90,13 @@ class LoraService:
 
         for item in discovered:
             if item.relative_path in existing_paths:
+                for lora in all_loras:
+                    if lora.relative_path == item.relative_path:
+                        if lora.weights_relpath != item.weights_relpath:
+                            lora.weights_relpath = item.weights_relpath
+                            self._repo._session.add(lora)
+                            changed = True
+                        break
                 continue
 
             relocated = find_relocated_lora(stale_loras, item)

@@ -1,13 +1,10 @@
 "use client";
 
-import useSWR from "swr";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback } from "react";
 import { PlusCircle } from "lucide-react";
-import { lorasApi } from "@/lib/api/loras";
-import StorageFolderBrowser from "@/components/storage/StorageFolderBrowser";
-import LoraFolderItem from "@/components/lora/LoraFolderItem";
+import LoraStorageFolderBrowser from "@/components/lora/LoraStorageFolderBrowser";
 import PageHeader from "@/components/ui/PageHeader";
 import { normalizeRelativePath } from "@/lib/storagePaths";
 
@@ -15,7 +12,6 @@ function LorasPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentPath = normalizeRelativePath(searchParams.get("path") ?? "");
-  const { data: loras, isLoading } = useSWR("/loras", () => lorasApi.list());
 
   const navigateToPath = useCallback(
     (path: string, replace = false) => {
@@ -34,7 +30,7 @@ function LorasPageContent() {
         router.push(href);
       }
     },
-    [router, searchParams]
+    [router, searchParams],
   );
 
   const handleNavigate = useCallback(
@@ -46,8 +42,11 @@ function LorasPageContent() {
         (current.startsWith(`${normalized}/`) && normalized.split("/").length < current.split("/").length);
       navigateToPath(path, isBack);
     },
-    [currentPath, navigateToPath]
+    [currentPath, navigateToPath],
   );
+
+  const emptyHint =
+    "Complete a training job or place LoRA weights under the LoRA root to auto-discover.";
 
   return (
     <div className="space-y-6">
@@ -65,14 +64,10 @@ function LorasPageContent() {
         }
       />
 
-      <StorageFolderBrowser
-        kind="lora"
-        items={loras ?? []}
+      <LoraStorageFolderBrowser
         currentPath={currentPath}
         onNavigate={handleNavigate}
-        catalogLoading={isLoading}
-        emptyHint="Complete a training job or place LoRA weights under the LoRA root to auto-discover."
-        renderItem={(lora) => <LoraFolderItem lora={lora} />}
+        emptyHint={emptyHint}
       />
     </div>
   );

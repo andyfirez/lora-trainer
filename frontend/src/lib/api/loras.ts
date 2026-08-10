@@ -1,4 +1,4 @@
-import { api, BASE_URL } from "@/lib/api/client";
+import { api } from "@/lib/api/client";
 import type { LoraResponse, RunnableSamplesResponse } from "@/types";
 
 export interface LogsResponse {
@@ -46,7 +46,6 @@ export const lorasApi = {
     return api.get<LossResponse>(`/loras/${id}/loss${qs ? `?${qs}` : ""}`);
   },
   getSamples: (id: number) => api.get<RunnableSamplesResponse>(`/loras/${id}/samples`),
-  downloadWeightsUrl: (id: number) => `${BASE_URL}/loras/${id}/weights`,
   reproduce: (id: number, body: ReproduceLoraRequest = {}) =>
     api.post<LoraResponse>(`/loras/${id}/reproduce`, body),
 };

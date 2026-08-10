@@ -4,24 +4,70 @@ import { use, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
-import { ArrowLeft, Download, Loader2, Play, RotateCcw, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Loader2, Play, RotateCcw, Square } from "lucide-react";
 import { lorasApi } from "@/lib/api/loras";
 import { useCancelLora } from "@/hooks/useCancelLora";
 import StatusBadge from "@/components/StatusBadge";
 import StopJobDialog from "@/components/StopJobDialog";
 import LoraRunPanel from "@/components/lora/LoraRunPanel";
+import LoraOverviewPanel from "@/components/lora/LoraOverviewPanel";
+import LoraCheckpointPanel from "@/components/lora/LoraCheckpointPanel";
+import LoraSamplesPanel from "@/components/lora/LoraSamplesPanel";
+import LoraConfigPanel from "@/components/lora/LoraConfigPanel";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import { ModalError, ModalFooter } from "@/components/ui/Modal";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Checkbox from "@/components/ui/Checkbox";
 
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
-
 interface Props {
   params: Promise<{ id: string }>;
+}
+
+function LoraStatusBanner({ lora }: { lora: import("@/types").LoraResponse }) {
+  if (lora.status === "queued" && lora.queue_position != null) {
+    return (
+      <div className="rounded-xl border border-accent/30 bg-accent-muted px-4 py-3 text-sm text-text">
+        In queue — position #{lora.queue_position}
+      </div>
+    );
+  }
+
+  if (lora.status === "running" && lora.save_checkpoint_requested) {
+    return (
+      <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning flex items-center gap-2">
+        <AlertTriangle size={16} />
+        Saving checkpoint before stopping…
+      </div>
+    );
+  }
+
+  if (lora.status === "failed" && lora.error_message) {
+    return (
+      <div className="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-sm text-error">
+        <strong>Training failed:</strong> {lora.error_message}
+      </div>
+    );
+  }
+
+  if (lora.path_missing && lora.status === "completed") {
+    return (
+      <div className="rounded-xl border border-warning/30 bg-warning-muted px-4 py-3 text-sm text-text flex items-center gap-2">
+        <AlertTriangle size={16} className="text-warning shrink-0" />
+        Artifacts not found on disk — paths may be stale.
+      </div>
+    );
+  }
+
+  if (lora.status === "completed") {
+    return (
+      <div className="rounded-xl border border-success/30 bg-success-muted px-4 py-3 text-sm text-text">
+        Training completed successfully.
+      </div>
+    );
+  }
+
+  return null;
 }
 
 export default function LoraDetailPage({ params }: Props) {
@@ -87,17 +133,25 @@ export default function LoraDetailPage({ params }: Props) {
     return <div className="text-error py-20">LoRA not found</div>;
   }
 
+  const subtitle = [lora.base_model_name, lora.relative_path].filter(Boolean).join(" · ");
+
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center gap-3">
-        <Link href="/loras" className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-text" aria-label="Back to LoRAs">
-          <ArrowLeft size={18} />
-        </Link>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-text font-display">{lora.name}</h1>
-          <div className="flex items-center gap-3 mt-1 flex-wrap">
-            <StatusBadge status={lora.status} />
-            <span className="text-muted truncate">{lora.base_model_name}</span>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            href="/loras"
+            className="p-2 rounded-lg border border-border text-muted hover:text-text hover:bg-white/5"
+            aria-label="Back to LoRAs"
+          >
+            <ArrowLeft size={16} />
+          </Link>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-text font-display truncate">{lora.name}</h1>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <StatusBadge status={lora.status} />
+              {subtitle && <p className="text-xs text-muted truncate">{subtitle}</p>}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
@@ -116,15 +170,6 @@ export default function LoraDetailPage({ params }: Props) {
               <Square size={13} /> {lora.status === "running" ? "Stop" : "Cancel"}
             </Button>
           )}
-          {lora.status === "completed" && (
-            <a
-              href={lorasApi.downloadWeightsUrl(loraId)}
-              download
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-transparent hover:bg-white/5 text-text transition-colors"
-            >
-              <Download size={14} /> Weights
-            </a>
-          )}
           {lora.config_yaml && (
             <Button variant="secondary" size="sm" onClick={openReproduceModal}>
               <Play size={13} /> Reproduce
@@ -133,28 +178,19 @@ export default function LoraDetailPage({ params }: Props) {
         </div>
       </div>
 
-      <Card className="space-y-2 text-sm">
-        <div className="text-muted break-all">Relative path: {lora.relative_path}</div>
-        <div className="text-muted break-all">Weights: {lora.resolved_weights_path}</div>
-        <div className="text-muted break-all">Work dir: {lora.resolved_work_dir}</div>
-      </Card>
+      <LoraStatusBanner lora={lora} />
 
-      <LoraRunPanel lora={lora} lossGraphRunKey={lora.id} />
-
-      {lora.config_yaml && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-medium text-muted">Config YAML</h2>
-          <Card padding="none" className="overflow-hidden" style={{ height: 400 }}>
-            <MonacoEditor
-              height="400px"
-              defaultLanguage="yaml"
-              theme="vs-dark"
-              value={lora.config_yaml}
-              options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }}
-            />
-          </Card>
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <LoraRunPanel lora={lora} lossGraphRunKey={lora.id} />
+          <LoraSamplesPanel loraId={loraId} status={lora.status} />
+          <LoraConfigPanel name={lora.name} configYaml={lora.config_yaml} />
         </div>
-      )}
+        <div className="space-y-6">
+          <LoraOverviewPanel lora={lora} />
+          <LoraCheckpointPanel lora={lora} />
+        </div>
+      </div>
 
       <StopJobDialog
         open={cancelLora.dialogLora != null}
