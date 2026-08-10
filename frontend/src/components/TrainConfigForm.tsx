@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { Plus, X } from "lucide-react";
-import StoragePathInput from "@/components/StoragePathInput";
+import PathInput from "@/components/PathInput";
 import FieldHint from "@/components/FieldHint";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
@@ -402,21 +402,22 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
       <section className={sectionClass}>
         <div className={sectionTitleClass}>Model</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <StoragePathInput
+          <PathInput
             label="Base Model"
             value={config.base_model_name ?? ""}
             onChange={(v) => set("base_model_name", v)}
             placeholder="sdxl-base"
-            kind="base_models"
-            allowFiles
+            kind="model"
+            pickerTitle="Select base model"
             {...trainHint("base_model_name")}
           />
-          <StoragePathInput
+          <PathInput
             label="Output Folder"
             value={config.output_dir ?? ""}
             onChange={(v) => set("output_dir", v)}
             placeholder=""
-            kind="lora"
+            kind="directory"
+            pickerTitle="Select output folder"
             {...trainHint("output_dir")}
           />
         </div>

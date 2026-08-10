@@ -39,6 +39,27 @@ async def _create_dataset_with_resolution(
 
 
 @pytest.mark.asyncio
+async def test_update_dataset_absolute_path_normalized(
+    storage_roots,
+    datasets_service: DatasetsService,
+) -> None:
+    image_dir = storage_roots["datasets"] / "images"
+    image_dir.mkdir()
+    other_dir = storage_roots["datasets"] / "other"
+    other_dir.mkdir()
+
+    dataset = await datasets_service.create_dataset(name="original", relative_path="images")
+    updated = await datasets_service.update_dataset(
+        dataset.id,
+        name=None,
+        relative_path=str(other_dir),
+        description=None,
+    )
+
+    assert updated.relative_path == "other"
+
+
+@pytest.mark.asyncio
 async def test_update_dataset_name_and_image_dir(
     storage_roots,
     datasets_service: DatasetsService,

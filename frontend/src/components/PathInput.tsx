@@ -15,6 +15,7 @@ interface PathInputProps {
   placeholder?: string;
   hint?: string;
   hintAnchor?: string;
+  warning?: string | null;
 }
 
 export default function PathInput({
@@ -26,6 +27,7 @@ export default function PathInput({
   placeholder,
   hint,
   hintAnchor,
+  warning,
 }: PathInputProps) {
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +75,7 @@ export default function PathInput({
           {picking ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
         </button>
       </div>
+      {warning && <p className="mt-1 text-xs text-warning">{warning}</p>}
       {error && <p className="mt-1 text-xs text-error">{error}</p>}
     </div>
   );

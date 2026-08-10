@@ -169,7 +169,8 @@ class DatasetsService:
         relative_path: str,
         description: Optional[str] = None,
     ) -> Dataset:
-        validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, relative_path)
+        normalized = StoragePaths.normalize_input_path(StorageKind.DATASETS, relative_path)
+        validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, normalized)
         if not StoragePaths.dataset_dir_exists(validated):
             raise DatasetDirectoryNotFoundError(validated)
         existing = await self._repo.get_by_name(name)
@@ -186,7 +187,8 @@ class DatasetsService:
         relative_path: str,
         description: Optional[str] = None,
     ) -> Dataset:
-        validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, relative_path)
+        normalized = StoragePaths.normalize_input_path(StorageKind.DATASETS, relative_path)
+        validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, normalized)
         copy_dataset_import(Path(source_dir), validated)
         return await self.create_dataset(name=name, relative_path=validated, description=description)
 
@@ -213,7 +215,8 @@ class DatasetsService:
                 raise DatasetNameConflictError(name)
             dataset.name = name
         if relative_path is not None:
-            validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, relative_path)
+            normalized = StoragePaths.normalize_input_path(StorageKind.DATASETS, relative_path)
+            validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, normalized)
             if not StoragePaths.dataset_dir_exists(validated):
                 raise DatasetDirectoryNotFoundError(validated)
             if validated != dataset.relative_path:

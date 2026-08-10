@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import StoragePathInput from "@/components/StoragePathInput";
+import PathInput from "@/components/PathInput";
 import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
@@ -60,11 +60,12 @@ export default function EditDatasetModal({ open, dataset, onClose, onSaved }: Pr
             className={inputClassName}
           />
         </div>
-        <StoragePathInput
-          label="Path inside datasets root"
+        <PathInput
+          label="Dataset folder"
           value={relativePath}
           onChange={setRelativePath}
-          kind="datasets"
+          kind="directory"
+          pickerTitle="Select dataset folder"
           placeholder="anime/girl_01"
           warning={dataset.path_missing ? "Folder not found on disk" : null}
         />

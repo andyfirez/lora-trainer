@@ -75,8 +75,10 @@ class StoragePaths:
             return False
 
     @classmethod
-    def resolve_training_work_dir(cls, output_dir_relative: str, lora_name: str) -> Path:
-        return cls.resolve_lora_path(output_dir_relative) / lora_name
+    def resolve_training_work_dir(cls, output_dir: str, lora_name: str) -> Path:
+        from src.storage.config_paths import resolve_config_output_dir
+
+        return resolve_config_output_dir(output_dir) / lora_name
 
     @classmethod
     def resolve_base_model(cls, relative_path: str) -> Path:
@@ -130,6 +132,16 @@ class StoragePaths:
             return True
         except ValueError:
             return False
+
+    @classmethod
+    def normalize_input_path(cls, kind: StorageKind, path: str) -> str:
+        stripped = path.strip()
+        if Path(stripped).is_absolute():
+            converted = cls.to_relative(kind, stripped)
+            if converted is None:
+                raise ValueError(f"Path must be under {kind} root: {cls.root_for(kind)}")
+            return converted
+        return stripped.strip().strip("/\\")
 
     @classmethod
     def validate_relative_path(cls, kind: StorageKind, relative_path: str) -> str:
