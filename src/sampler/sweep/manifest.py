@@ -33,8 +33,7 @@ class ManifestGridEntry(BaseModel):
 
 class SweepManifest(BaseModel):
     version: int = 1
-    config_id: int | None = None
-    job_id: int | None = None
+    sampling_id: int | None = None
     total_images: int = 0
     images: list[ManifestImageEntry] = Field(default_factory=list)
     grids: list[ManifestGridEntry] = Field(default_factory=list)

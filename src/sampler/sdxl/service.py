@@ -66,7 +66,7 @@ class SDXLLoRASampler:
         log: logging.Logger | None = None,
         concept_metadata: dict[int, ConceptTrainingMetadata] | None = None,
         compose_grids: bool = True,
-        job_id: int | None = None,
+        sampling_id: int | None = None,
     ) -> None:
         self._config = config
         self._sampling_config = sampling_config
@@ -78,7 +78,7 @@ class SDXLLoRASampler:
         self._prompt_embed_cache = PromptEmbedCache()
         self._concept_metadata = concept_metadata or {}
         self._compose_grids = compose_grids
-        self._job_id = job_id
+        self._sampling_id = sampling_id
 
     def run(self) -> None:
         if self._sampling_config is not None:
@@ -93,7 +93,7 @@ class SDXLLoRASampler:
                 self._sampling_config,
                 base_train_config=self._config,
                 output_dir=self._output_dir,
-                job_id=self._job_id,
+                sampling_id=self._sampling_id,
                 progress_status_callback=self._progress_status_callback,
                 progress_callback=self._progress_callback,
                 log=self._log,

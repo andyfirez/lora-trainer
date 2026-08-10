@@ -1,10 +1,12 @@
-"""Training runner — CLI entry point spawned by the queue worker.
+"""Training runner — CLI entry point spawned by the runnable worker.
 
 Usage:
-    python -m src.trainer.runner --job-id <id>
+    python -m src.trainer.runner --lora-id <id>
 
-Loads the job's config_yaml from SQLite, runs the SDXL LoRA trainer,
-and writes progress + final status back to the DB synchronously.
+Loads the Lora's config_yaml from SQLite, runs the SDXL LoRA trainer, and
+writes progress back to the DB synchronously. Final status (completed/failed)
+is derived by the worker from this process's exit code — this runner only
+sets status explicitly for a graceful cancellation (stop-after-save/cache).
 """
 
 import argparse
@@ -15,21 +17,22 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from pathlib import Path
 from typing import Any
 
-from src.storage.paths import StoragePaths
-
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
-from src.db.repositories.job_repo import JobRepository
+from src.db.repositories.lora_repo import LoraRepository
 from src.db.session import session_factory
-from src.db.tables.job import Job, JobStatus
+from src.db.tables.lora import Lora
+from src.db.tables.runnable_mixin import RunnableStatus
 from src.services.datasets.service import reconcile_datasets_for_training
 from src.services.datasets.training_validation import validate_dataset_for_training
+from src.services.runnable import runtime
 from src.services.worker.progress_loop import (
     run_in_progress_loop,
     start_progress_loop,
     submit_to_progress_loop,
 )
 from src.settings.app_settings import settings
+from src.storage.paths import StoragePaths
 from src.trainer.concept_resolution import resolve_concept_paths
 from src.trainer.concept_training_metadata import resolve_concept_training_metadata
 from src.trainer.config import TrainConfig
@@ -51,15 +54,15 @@ logger = logging.getLogger(__name__)
 _progress_loop = start_progress_loop("progress-db-loop")
 
 
-async def _get_active_job(repo: JobRepository, job_id: int) -> Job | None:
-    job = await repo.get_by_id(job_id)
-    if job is None or job.status == JobStatus.CANCELLED:
+async def _get_active_lora(repo: LoraRepository, lora_id: int) -> Lora | None:
+    lora = await repo.get_by_id(lora_id)
+    if lora is None or lora.status == RunnableStatus.CANCELLED:
         return None
-    return job
+    return lora
 
 
 async def _update_progress(
-    job_id: int,
+    lora_id: int,
     step: int,
     total: int,
     loss: float,
@@ -68,91 +71,93 @@ async def _update_progress(
     epoch_total: int,
 ) -> None:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await _get_active_job(repo, job_id)
-        if job is not None:
-            await repo.update_progress(
-                job,
-                step,
-                total,
-                loss=loss,
-                avr_loss=avr_loss,
-                epoch=epoch,
-                epoch_total=epoch_total,
-            )
+        repo = LoraRepository(session)
+        lora = await _get_active_lora(repo, lora_id)
+        if lora is not None:
+            lora.progress_step = step
+            lora.progress_total = total
+            lora.progress_loss = loss
+            lora.progress_avr_loss = avr_loss
+            lora.progress_epoch = epoch
+            lora.progress_epoch_total = epoch_total
+            session.add(lora)
             await session.commit()
 
 
-async def _update_status(job_id: int, status: JobStatus, error: str | None = None) -> None:
+async def _mark_cancelled(lora_id: int) -> None:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await repo.get_by_id(job_id)
-        if job is not None:
-            if job.status == JobStatus.CANCELLED and status != JobStatus.CANCELLED:
-                return
-            await repo.update_status(job, status, error_message=error)
+        repo = LoraRepository(session)
+        lora = await repo.get_by_id(lora_id)
+        if lora is not None and lora.status != RunnableStatus.CANCELLED:
+            runtime.cancel(lora)
+            lora.save_checkpoint_requested = False
+            session.add(lora)
             await session.commit()
 
 
-async def _set_log_path(job_id: int, log_path: str) -> None:
+async def _set_log_path(lora_id: int, log_path: str) -> None:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await repo.get_by_id(job_id)
-        if job is not None:
-            await repo.update_log_path(job, log_path)
+        repo = LoraRepository(session)
+        lora = await repo.get_by_id(lora_id)
+        if lora is not None:
+            lora.log_path = log_path
+            session.add(lora)
             await session.commit()
 
 
-async def _set_output_path(job_id: int, output_path: str) -> None:
+async def _set_output_path(lora_id: int, output_path: str) -> None:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await repo.get_by_id(job_id)
-        if job is not None:
-            await repo.update_output_path(job, output_path)
+        repo = LoraRepository(session)
+        lora = await repo.get_by_id(lora_id)
+        if lora is not None:
+            lora.output_path = output_path
+            session.add(lora)
             await session.commit()
 
 
-async def _update_checkpoint_info(job_id: int, checkpoint_path: str, epoch: int, step: int) -> None:
+async def _update_checkpoint_info(lora_id: int, checkpoint_path: str, epoch: int, step: int) -> None:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await repo.get_by_id(job_id)
-        if job is not None:
-            await repo.update_last_checkpoint(
-                job,
-                checkpoint_path=checkpoint_path,
-                epoch=epoch,
-                step=step,
-            )
+        repo = LoraRepository(session)
+        lora = await repo.get_by_id(lora_id)
+        if lora is not None:
+            lora.last_checkpoint_path = checkpoint_path
+            lora.last_checkpoint_epoch = epoch
+            lora.last_checkpoint_step = step
+            session.add(lora)
             await session.commit()
 
 
-async def _clear_resume_state(job_id: int) -> None:
+async def _clear_resume_state(lora_id: int) -> None:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await repo.get_by_id(job_id)
-        if job is not None:
-            await repo.clear_resume_state(job)
+        repo = LoraRepository(session)
+        lora = await repo.get_by_id(lora_id)
+        if lora is not None:
+            lora.resume_checkpoint_path = None
+            lora.resume_from_epoch = None
+            lora.resume_from_step = None
+            session.add(lora)
             await session.commit()
 
 
-async def _consume_save_checkpoint_request(job_id: int) -> bool:
+async def _consume_save_checkpoint_request(lora_id: int) -> bool:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await repo.get_by_id(job_id)
-        if job is None or not job.save_checkpoint_requested:
+        repo = LoraRepository(session)
+        lora = await repo.get_by_id(lora_id)
+        if lora is None or not lora.save_checkpoint_requested:
             return False
-        await repo.request_checkpoint_save(job, False)
+        lora.save_checkpoint_requested = False
+        session.add(lora)
         await session.commit()
         return True
 
 
-async def _is_stop_requested(job_id: int) -> bool:
+async def _is_stop_requested(lora_id: int) -> bool:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await repo.get_by_id(job_id)
-        if job is None or job.status == JobStatus.CANCELLED:
+        repo = LoraRepository(session)
+        lora = await repo.get_by_id(lora_id)
+        if lora is None or lora.status == RunnableStatus.CANCELLED:
             return True
-        return job.save_checkpoint_requested
+        return lora.save_checkpoint_requested
 
 
 def _submit_to_progress_loop(coro: Any) -> None:
@@ -163,7 +168,7 @@ def _run_in_progress_loop(coro: Any, timeout_s: float = 1.0) -> Any:
     return run_in_progress_loop(_progress_loop, coro, timeout_s=timeout_s)
 
 
-def _make_progress_callback(job_id: int):
+def _make_progress_callback(lora_id: int):
     def callback(
         step: int,
         total: int,
@@ -174,27 +179,31 @@ def _make_progress_callback(job_id: int):
         _lr: float,
     ) -> None:
         _submit_to_progress_loop(
-            _update_progress(job_id, step, total, loss, avr_loss, epoch, epoch_total),
+            _update_progress(lora_id, step, total, loss, avr_loss, epoch, epoch_total),
         )
 
     return callback
 
 
-def _build_log_path(job_id: int) -> Path:
+def _build_log_path(lora_id: int) -> Path:
     logs_dir = Path(settings.training.logs_dir)
     logs_dir.mkdir(parents=True, exist_ok=True)
-    return logs_dir / f"job_{job_id}.log"
+    return logs_dir / f"lora_{lora_id}.log"
 
 
-async def _run(job_id: int) -> None:
+async def _run(lora_id: int) -> None:
     async with session_factory() as session:
-        repo = JobRepository(session)
-        job = await repo.get_by_id(job_id)
-        if job is None:
-            logger.error("Job id=%d not found in DB", job_id)
+        repo = LoraRepository(session)
+        lora = await repo.get_by_id(lora_id)
+        if lora is None:
+            logger.error("Lora id=%d not found in DB", lora_id)
             sys.exit(1)
-        config_yaml = job.config_yaml
-        resume_checkpoint_path = job.resume_checkpoint_path
+        config_yaml = lora.config_yaml
+        resume_checkpoint_path = lora.resume_checkpoint_path
+
+    if not config_yaml:
+        logger.error("Lora id=%d has no config_yaml", lora_id)
+        sys.exit(1)
 
     config = TrainConfig.from_snapshot_yaml(config_yaml)
     async with session_factory() as session:
@@ -228,7 +237,7 @@ async def _run(job_id: int) -> None:
     if resume_checkpoint_path:
         config.resume_from_checkpoint = resume_checkpoint_path
     is_resume_run = bool(config.resume_from_checkpoint)
-    log_path = _build_log_path(job_id)
+    log_path = _build_log_path(lora_id)
     metric_logger: MetricLogger | None = None
     if config.logging.use_ui_logger:
         loss_log_path = build_loss_log_path(config)
@@ -239,11 +248,11 @@ async def _run(job_id: int) -> None:
     if config.logging.log_dir:
         tensorboard_writer, tensorboard_dir = setup_tensorboard_writer(
             config.logging.log_dir,
-            job_id,
+            lora_id,
             reset_dir=not is_resume_run,
         )
     training_logger = JobTrainingLogger(
-        job_id=job_id,
+        job_id=lora_id,
         log_path=log_path,
         metric_logger=metric_logger,
         log_every=config.logging.log_every,
@@ -252,24 +261,22 @@ async def _run(job_id: int) -> None:
     )
     if config.logging.log_dir:
         training_logger.logger.info("TensorBoard log dir: %s", tensorboard_dir)
-    await _set_log_path(job_id, str(log_path))
+    await _set_log_path(lora_id, str(log_path))
     work_dir = StoragePaths.resolve_training_work_dir(config.output_dir, config.lora_name)
-    await _set_output_path(job_id, str(work_dir))
+    await _set_output_path(lora_id, str(work_dir))
     if not is_resume_run:
-        await _clear_resume_state(job_id)
+        await _clear_resume_state(lora_id)
     training_logger.logger.info(
-        "Starting SDXL LoRA training for job id=%d: %s/%s", job_id, config.output_dir, config.lora_name
+        "Starting SDXL LoRA training for lora id=%d: %s/%s", lora_id, config.output_dir, config.lora_name
     )
-
-    await _update_status(job_id, JobStatus.RUNNING)
 
     try:
         def _checkpoint_callback(path: str, epoch: int, step: int) -> None:
-            _submit_to_progress_loop(_update_checkpoint_info(job_id, path, epoch, step))
+            _submit_to_progress_loop(_update_checkpoint_info(lora_id, path, epoch, step))
 
         def _save_checkpoint_requested() -> bool:
             try:
-                return bool(_run_in_progress_loop(_consume_save_checkpoint_request(job_id)))
+                return bool(_run_in_progress_loop(_consume_save_checkpoint_request(lora_id)))
             except FutureTimeoutError:
                 return False
             except Exception:
@@ -278,7 +285,7 @@ async def _run(job_id: int) -> None:
 
         def _stop_requested() -> bool:
             try:
-                return bool(_run_in_progress_loop(_is_stop_requested(job_id)))
+                return bool(_run_in_progress_loop(_is_stop_requested(lora_id)))
             except FutureTimeoutError:
                 return False
             except Exception:
@@ -287,7 +294,7 @@ async def _run(job_id: int) -> None:
 
         trainer = SDXLLoRATrainer(
             config,
-            progress_callback=_make_progress_callback(job_id),
+            progress_callback=_make_progress_callback(lora_id),
             training_logger=training_logger,
             checkpoint_callback=_checkpoint_callback,
             save_checkpoint_requested_callback=_save_checkpoint_requested,
@@ -295,34 +302,28 @@ async def _run(job_id: int) -> None:
             concept_metadata=concept_metadata,
         )
         trainer.train()
-        await _update_status(job_id, JobStatus.COMPLETED)
-        training_logger.logger.info("Job id=%d completed successfully", job_id)
+        training_logger.logger.info("Lora id=%d completed successfully", lora_id)
     except TrainingCancelledAfterSave:
-        await _update_status(job_id, JobStatus.CANCELLED)
-        training_logger.logger.info("Job id=%d cancelled after saving checkpoint", job_id)
+        await _mark_cancelled(lora_id)
+        training_logger.logger.info("Lora id=%d cancelled after saving checkpoint", lora_id)
     except TrainingCancelledDuringCache:
-        await _update_status(job_id, JobStatus.CANCELLED)
-        training_logger.logger.info("Job id=%d cancelled during cache/setup", job_id)
+        await _mark_cancelled(lora_id)
+        training_logger.logger.info("Lora id=%d cancelled during cache/setup", lora_id)
     except Exception as exc:
-        training_logger.logger.exception("Job id=%d failed: %s", job_id, exc)
-        await _update_status(job_id, JobStatus.FAILED, error=str(exc))
+        training_logger.logger.exception("Lora id=%d failed: %s", lora_id, exc)
         sys.exit(1)
     finally:
         training_logger.finish()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run a LoRA training job")
-    parser.add_argument("--job-id", type=int, required=True, help="TrainingJob ID in the database")
+    parser = argparse.ArgumentParser(description="Run a LoRA training run")
+    parser.add_argument("--lora-id", type=int, required=True, help="Lora ID in the database")
     args = parser.parse_args()
     try:
-        asyncio.run(_run(args.job_id))
-    except Exception as exc:
-        logger.exception("Unhandled error in training runner for job id=%d", args.job_id)
-        try:
-            asyncio.run(_update_status(args.job_id, JobStatus.FAILED, error=str(exc)))
-        except Exception:
-            logger.exception("Failed to persist error status for job id=%d", args.job_id)
+        asyncio.run(_run(args.lora_id))
+    except Exception:
+        logger.exception("Unhandled error in training runner for lora id=%d", args.lora_id)
         sys.exit(1)
 
 

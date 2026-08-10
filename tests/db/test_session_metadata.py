@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.alembic_runner import run_migrations
-from src.db.repositories.job_repo import JobRepository
+from src.db.repositories.lora_repo import LoraRepository
 from src.db.session import register_all_tables
-from src.db.tables.job import Job, JobType
+from src.db.tables.lora import Lora
 
 
 @pytest_asyncio.fixture
@@ -22,41 +22,31 @@ async def session() -> AsyncSession:
 
 
 @pytest.mark.asyncio
-async def test_update_log_path_resolves_source_job_foreign_key(session: AsyncSession, tmp_path) -> None:
-    training_job = Job(
-        job_type=JobType.TRAINING,
-        name="job",
-        config_yaml="base_model_name: x",
-    )
-    session.add(training_job)
-    await session.flush()
-    sampling_job = Job(
-        job_type=JobType.SAMPLING,
-        name="sample",
-        config_yaml="base_model_name: x",
-        lora_paths_yaml="[]",
-    )
-    session.add(sampling_job)
+async def test_lora_repo_round_trips_fields(session: AsyncSession, tmp_path) -> None:
+    lora = Lora(name="test-lora", base_model_name="test-model", config_yaml="base_model_name: x")
+    session.add(lora)
     await session.commit()
-    await session.refresh(sampling_job)
+    await session.refresh(lora)
 
-    repo = JobRepository(session)
-    log_path = tmp_path / "sampling_job.log"
-    await repo.update_log_path(sampling_job, str(log_path))
+    repo = LoraRepository(session)
+    lora.log_path = str(tmp_path / "lora.log")
+    session.add(lora)
     await session.commit()
 
-    assert sampling_job.log_path == str(log_path)
+    fetched = await repo.get_by_name("test-lora")
+    assert fetched is not None
+    assert fetched.log_path == str(tmp_path / "lora.log")
 
 
 @pytest.mark.asyncio
 async def test_session_factory_registers_all_tables_for_subprocess_metadata() -> None:
     register_all_tables()
     table_names = set(SQLModel.metadata.tables.keys())
-    assert "job_configs" in table_names
-    assert "jobs" in table_names
+    assert "loras" in table_names
+    assert "samplings" in table_names
 
 
-def test_run_migrations_applies_initial_schema(tmp_path, monkeypatch) -> None:
+def test_run_migrations_applies_full_schema(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "test.db"
     monkeypatch.setattr("src.settings.app_settings.settings.database.path", str(db_path))
     run_migrations()
@@ -76,8 +66,6 @@ def test_run_migrations_applies_initial_schema(tmp_path, monkeypatch) -> None:
         "alembic_version",
         "datasets",
         "dataset_image_crops",
-        "job_configs",
-        "jobs",
-        "queue_entries",
-        "trained_loras",
+        "loras",
+        "samplings",
     }

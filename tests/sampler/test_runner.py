@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -6,8 +7,9 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.session import register_all_tables
-from src.db.tables.job import Job, JobStatus, JobType
-from src.sampler.job_runner import run_sampling_job
+from src.db.tables.runnable_mixin import RunnableStatus
+from src.db.tables.sampling import Sampling
+from src.sampler.job_runner import run_sampling
 from src.settings.app_settings import settings
 
 
@@ -25,35 +27,30 @@ async def runner_db(tmp_path) -> tuple[AsyncSession, async_sessionmaker[AsyncSes
 
 
 @pytest.mark.asyncio
-async def test_run_invalid_config_writes_log_and_marks_failed(
+async def test_run_invalid_config_writes_log_and_returns_failure_exit_code(
     runner_db: tuple[AsyncSession, async_sessionmaker[AsyncSession], str],
 ) -> None:
     session, test_session_factory, logs_dir = runner_db
-    sampling_job = Job(
-        job_type=JobType.SAMPLING,
+    sampling = Sampling(
         name="bad config",
         config_yaml="not_a_valid_config: [[[",
         lora_paths_yaml="[]\n",
-        status=JobStatus.QUEUED,
+        status=RunnableStatus.RUNNING,
     )
-    session.add(sampling_job)
+    session.add(sampling)
     await session.commit()
-    await session.refresh(sampling_job)
+    await session.refresh(sampling)
 
-    with patch("src.sampler.job_runner.session_factory", test_session_factory), patch.object(
-        settings.training,
-        "logs_dir",
-        logs_dir,
+    with (
+        patch("src.sampler.job_runner.session_factory", test_session_factory),
+        patch.object(settings.training, "logs_dir", logs_dir),
     ):
-        exit_code = await run_sampling_job(sampling_job.id)
+        exit_code = await run_sampling(sampling.id)
 
     assert exit_code == 1
-    await session.refresh(sampling_job)
-    assert sampling_job.status == JobStatus.FAILED
-    assert sampling_job.error_message is not None
-    assert sampling_job.log_path is not None
-    from pathlib import Path
-
-    log_path = Path(logs_dir) / f"job_{sampling_job.id}.log"
+    log_path = Path(logs_dir) / f"sampling_{sampling.id}.log"
     assert log_path.exists()
     assert "failed" in log_path.read_text(encoding="utf-8").lower()
+
+    await session.refresh(sampling)
+    assert sampling.log_path == str(log_path)

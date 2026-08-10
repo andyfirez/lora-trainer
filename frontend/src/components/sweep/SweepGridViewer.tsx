@@ -2,23 +2,22 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { jobsApi } from "@/lib/api/jobs";
-import type { SweepManifestResponse } from "@/types";
+import { samplingsApi } from "@/lib/api/samplings";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface SweepGridViewerProps {
-  jobId: number;
+  samplingId: number;
   status: string;
 }
 
-export default function SweepGridViewer({ jobId, status }: SweepGridViewerProps) {
+export default function SweepGridViewer({ samplingId, status }: SweepGridViewerProps) {
   const [gridIndex, setGridIndex] = useState(0);
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
 
   const { data: manifest } = useSWR(
-    status === "completed" ? `/jobs/${jobId}/sweep-manifest` : null,
-    () => jobsApi.getSweepManifest(jobId),
+    status === "completed" ? `/samplings/${samplingId}/sweep-manifest` : null,
+    () => samplingsApi.getSweepManifest(samplingId),
   );
 
   if (!manifest?.grids.length && !manifest?.images.length) {

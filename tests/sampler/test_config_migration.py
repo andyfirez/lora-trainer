@@ -5,7 +5,14 @@ import yaml
 from src.db.migrations.sampling_yaml import migrate_sampling_yaml, migrate_sampling_yaml_raw
 from src.sampler.config import SamplingConfig
 from src.sampler.sweep.models import SweepMode
-from src.services.configs.versioning import normalize_sampling_config_yaml
+
+
+def _normalize_sampling_config_yaml(config_yaml: str) -> str:
+    import yaml
+
+    data = yaml.safe_load(config_yaml) or {}
+    migrated_data = migrate_sampling_yaml_raw(data if isinstance(data, dict) else {})
+    return SamplingConfig.model_validate(migrated_data).to_yaml()
 
 
 def test_legacy_prompts_migrate_to_parameters() -> None:
@@ -68,7 +75,7 @@ parameters:
 
 def test_build_sampling_field_updates_preserves_prompts() -> None:
     config = SamplingConfig.from_yaml(
-        normalize_sampling_config_yaml("output_dir: /tmp\nsample_prompts:\n  - a\n  - b\n")
+        _normalize_sampling_config_yaml("output_dir: /tmp\nsample_prompts:\n  - a\n  - b\n")
     )
     updates = config.build_sampling_field_updates()
     assert updates["sample_prompts"] == ["a", "b"]

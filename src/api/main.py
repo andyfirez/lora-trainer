@@ -18,37 +18,32 @@ from src.api.exception_handlers import (
     dataset_resolution_mismatch_handler,
     dataset_target_resolution_not_set_handler,
     invalid_dataset_filename_handler,
-    job_already_queued_handler,
-    job_checkpoint_not_found_handler,
-    job_config_not_found_handler,
-    job_config_validation_handler,
-    job_not_cancellable_handler,
-    job_not_found_handler,
-    job_not_resumable_handler,
-    job_operation_not_supported_handler,
-    queue_entry_not_found_handler,
+    lora_checkpoint_not_found_handler,
+    lora_name_conflict_handler,
+    lora_not_found_handler,
+    lora_reproduce_handler,
+    runnable_already_queued_handler,
+    runnable_not_cancellable_handler,
+    runnable_not_found_handler,
+    runnable_not_resumable_handler,
+    runnable_operation_not_supported_handler,
+    runnable_validation_handler,
     sampling_lora_path_not_found_handler,
     sampling_prompts_not_configured_handler,
-    trained_lora_not_found_handler,
-    trained_lora_reproduce_handler,
+    tagging_already_running_handler,
 )
 from src.api.routers import (
     datasets,
     files,
-    jobs,
     loras,
     png_info,
-    queues,
-    sampling_configs,
-    settings as settings_router,
+    samplings,
     storage,
-    trainings,
+)
+from src.api.routers import (
+    settings as settings_router,
 )
 from src.db.session import run_migrations
-from src.services.configs.exceptions import (
-    JobConfigNotFoundError,
-    JobConfigValidationError,
-)
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetImageNotFoundError,
@@ -60,40 +55,45 @@ from src.services.datasets.exceptions import (
     DatasetTargetResolutionNotSetError,
     InvalidDatasetFilenameError,
 )
-from src.services.jobs.exceptions import (
-    JobAlreadyQueuedError,
-    JobCheckpointNotFoundError,
-    JobNotCancellableError,
-    JobNotFoundError,
-    JobNotResumableError,
-    JobOperationNotSupportedError,
+from src.services.loras.exceptions import (
+    LoraCheckpointNotFoundError,
+    LoraNameConflictError,
+    LoraNotFoundError,
+    LoraReproduceError,
 )
-from src.services.loras.exceptions import TrainedLoraNotFoundError, TrainedLoraReproduceError
-from src.services.queues.exceptions import QueueEntryNotFoundError
+from src.services.runnable.exceptions import (
+    RunnableAlreadyQueuedError,
+    RunnableNotCancellableError,
+    RunnableNotFoundError,
+    RunnableNotResumableError,
+    RunnableOperationNotSupportedError,
+    RunnableValidationError,
+)
 from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
 )
-from src.services.worker.service import QueueWorker
+from src.services.tagging.exceptions import TaggingAlreadyRunningError
+from src.services.worker.service import RunnableWorker
 from src.settings.app_settings import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _EXCEPTION_HANDLERS: dict[type[Exception], object] = {
-    JobNotFoundError: job_not_found_handler,
-    JobAlreadyQueuedError: job_already_queued_handler,
-    JobNotCancellableError: job_not_cancellable_handler,
-    JobNotResumableError: job_not_resumable_handler,
-    JobCheckpointNotFoundError: job_checkpoint_not_found_handler,
-    JobOperationNotSupportedError: job_operation_not_supported_handler,
-    QueueEntryNotFoundError: queue_entry_not_found_handler,
-    JobConfigNotFoundError: job_config_not_found_handler,
-    JobConfigValidationError: job_config_validation_handler,
-    TrainedLoraNotFoundError: trained_lora_not_found_handler,
-    TrainedLoraReproduceError: trained_lora_reproduce_handler,
+    RunnableNotFoundError: runnable_not_found_handler,
+    RunnableAlreadyQueuedError: runnable_already_queued_handler,
+    RunnableNotCancellableError: runnable_not_cancellable_handler,
+    RunnableNotResumableError: runnable_not_resumable_handler,
+    RunnableOperationNotSupportedError: runnable_operation_not_supported_handler,
+    RunnableValidationError: runnable_validation_handler,
+    LoraNotFoundError: lora_not_found_handler,
+    LoraNameConflictError: lora_name_conflict_handler,
+    LoraReproduceError: lora_reproduce_handler,
+    LoraCheckpointNotFoundError: lora_checkpoint_not_found_handler,
     SamplingLoRAPathNotFoundError: sampling_lora_path_not_found_handler,
     SamplingPromptsNotConfiguredError: sampling_prompts_not_configured_handler,
+    TaggingAlreadyRunningError: tagging_already_running_handler,
     DatasetNotFoundError: dataset_not_found_handler,
     DatasetNameConflictError: dataset_name_conflict_handler,
     DatasetDirectoryNotFoundError: dataset_dir_not_found_handler,
@@ -110,9 +110,9 @@ _EXCEPTION_HANDLERS: dict[type[Exception], object] = {
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Starting up — running database migrations")
     await run_migrations()
-    worker = QueueWorker(echo_subprocess_output=False)
+    worker = RunnableWorker(echo_subprocess_output=False)
     await worker.start()
-    app.state.queue_worker = worker
+    app.state.runnable_worker = worker
     yield
     await worker.stop()
     logger.info("Shutting down")
@@ -131,11 +131,8 @@ app.add_middleware(
 for exc_type, handler in _EXCEPTION_HANDLERS.items():
     app.add_exception_handler(exc_type, handler)  # type: ignore[arg-type]
 
-app.include_router(trainings.router)
-app.include_router(sampling_configs.router)
 app.include_router(loras.router)
-app.include_router(jobs.router)
-app.include_router(queues.router)
+app.include_router(samplings.router)
 app.include_router(datasets.router)
 app.include_router(files.router)
 app.include_router(settings_router.router)

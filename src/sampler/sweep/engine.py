@@ -48,7 +48,7 @@ class SweepEngine:
         *,
         base_train_config: TrainConfig,
         output_dir: Path,
-        job_id: int | None = None,
+        sampling_id: int | None = None,
         progress_status_callback: ProgressStatusCallback | None = None,
         progress_callback: ProgressCallback | None = None,
         log: logging.Logger | None = None,
@@ -58,7 +58,7 @@ class SweepEngine:
         self._sampling_config = sampling_config
         self._base_train_config = base_train_config
         self._output_dir = output_dir
-        self._job_id = job_id
+        self._sampling_id = sampling_id
         self._progress_status_callback = progress_status_callback
         self._progress_callback = progress_callback
         self._log = log or logging.getLogger(__name__)
@@ -256,7 +256,7 @@ class SweepEngine:
                     )
                 )
         return SweepManifest(
-            job_id=self._job_id,
+            sampling_id=self._sampling_id,
             total_images=len(combinations),
             images=image_entries,
             grids=grid_entries,

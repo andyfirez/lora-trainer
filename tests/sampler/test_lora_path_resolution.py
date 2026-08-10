@@ -4,7 +4,7 @@ from pathlib import Path
 
 from src.sampler.config import SamplingConfig
 from src.sampler.sweep.models import LoraEntry, SweepMode, SweepParameter, SweepParameters, parse_lora_entry
-from src.services.jobs.sampling_jobs import (
+from src.services.sampling.lora_paths import (
     lora_path_sweep_values,
     prepare_sampling_config_lora_paths,
     resolve_lora_paths_from_sampling_config,

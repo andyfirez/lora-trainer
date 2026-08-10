@@ -51,7 +51,7 @@ export default function AutoTagModal({ open, onClose, onSubmit }: Props) {
       open={open}
       onClose={onClose}
       title="Auto-tag with WD14"
-      description="Runs in the background via the job queue. Uses SmilingWolf booru tagger (ONNX)."
+      description="Runs in the background on the server. Uses SmilingWolf booru tagger (ONNX)."
     >
       {error && <ModalError>{error}</ModalError>}
       <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4">

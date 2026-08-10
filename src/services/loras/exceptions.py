@@ -1,16 +1,22 @@
-class TrainedLoraNotFoundError(Exception):
+class LoraNotFoundError(Exception):
     def __init__(self, lora_id: int) -> None:
         self.lora_id = lora_id
-        super().__init__(f"Trained LoRA {lora_id} not found")
+        super().__init__(f"LoRA {lora_id} not found")
 
 
-class TrainedLoraAlreadyExistsError(Exception):
-    def __init__(self, job_id: int) -> None:
-        self.job_id = job_id
-        super().__init__(f"Trained LoRA already exists for job {job_id}")
+class LoraNameConflictError(Exception):
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(f"A LoRA named '{name}' already exists")
 
 
-class TrainedLoraReproduceError(Exception):
+class LoraReproduceError(Exception):
     def __init__(self, lora_id: int) -> None:
         self.lora_id = lora_id
-        super().__init__(f"Trained LoRA {lora_id} has no frozen training config to reproduce")
+        super().__init__(f"LoRA {lora_id} has no config to reproduce")
+
+
+class LoraCheckpointNotFoundError(Exception):
+    def __init__(self, lora_id: int) -> None:
+        self.lora_id = lora_id
+        super().__init__(f"No checkpoint found for LoRA id={lora_id}")

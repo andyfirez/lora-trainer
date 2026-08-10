@@ -1,24 +1,25 @@
 "use client";
 
-import Link from "next/link";
 import { Sparkles } from "lucide-react";
-import type { TrainedLora } from "@/types";
+import type { LoraResponse } from "@/types";
+import StatusBadge from "@/components/StatusBadge";
 import StorageCatalogRow from "@/components/storage/StorageCatalogRow";
 
 interface LoraFolderItemProps {
-  lora: TrainedLora;
+  lora: LoraResponse;
 }
 
-function LoraMeta({ lora }: { lora: TrainedLora }) {
+function LoraMeta({ lora }: { lora: LoraResponse }) {
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+      <StatusBadge status={lora.status} />
       <span className="truncate max-w-xs">{lora.base_model_name}</span>
       <span>{new Date(lora.created_at).toLocaleDateString()}</span>
-      {lora.job_id != null ? (
-        <Link href={`/jobs/${lora.job_id}`} className="text-accent hover:underline">
-          Job #{lora.job_id}
-        </Link>
-      ) : null}
+      {lora.status === "running" && lora.progress_step != null && lora.progress_total != null && (
+        <span>
+          step {lora.progress_step}/{lora.progress_total}
+        </span>
+      )}
     </span>
   );
 }

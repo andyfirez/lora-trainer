@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from src.services.jobs.loss_log_reader import read_loss_log
+from src.services.runnable.loss_log_reader import read_loss_log
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 

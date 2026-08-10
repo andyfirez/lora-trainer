@@ -4,9 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  ListOrdered,
   Database,
-  FileCog,
   Sparkles,
   BookOpen,
   PanelLeftClose,
@@ -16,12 +14,11 @@ import {
   ImageIcon,
   FileImage,
   Settings,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const NAV = [
-  { href: "/jobs", label: "Jobs", icon: ListOrdered },
-  { href: "/trainings", label: "Trainings", icon: FileCog },
   { href: "/loras", label: "LoRAs", icon: Sparkles },
   { href: "/sampling", label: "Sampling", icon: ImageIcon },
   { href: "/png-info", label: "PNG Info", icon: FileImage },
@@ -55,7 +52,7 @@ export default function Sidebar() {
     });
   };
 
-  const navLink = (href: string, label: string, Icon: typeof ListOrdered, compact: boolean) => {
+  const navLink = (href: string, label: string, Icon: LucideIcon, compact: boolean) => {
     const active = pathname === href || pathname.startsWith(`${href}/`);
     return (
       <Link

@@ -13,8 +13,7 @@ import PreprocessPanel from "@/components/dataset/PreprocessPanel";
 import TagFrequencyPanel from "@/components/dataset/TagFrequencyPanel";
 import Button from "@/components/ui/Button";
 import { datasetsApi } from "@/lib/api/datasets";
-import { jobsApi } from "@/lib/api/jobs";
-import type { DatasetItem, ImagePreprocessState, Job, TaggingMode } from "@/types";
+import type { AutotagStatusResponse, DatasetItem, ImagePreprocessState, TaggingMode } from "@/types";
 
 const PAGE_SIZE = 24;
 const CAPTION_EXTENSION = ".txt";
@@ -25,7 +24,6 @@ export default function DatasetDetailPage() {
   const [page, setPage] = useState(1);
   const [showAutoTag, setShowAutoTag] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [taggingJobId, setTaggingJobId] = useState<number | null>(null);
   const [localItems, setLocalItems] = useState<DatasetItem[]>([]);
   const [cropFilename, setCropFilename] = useState<string | null>(null);
   const [filterIncomplete, setFilterIncomplete] = useState(false);
@@ -65,15 +63,11 @@ export default function DatasetDetailPage() {
     () => datasetsApi.getDuplicates(datasetId)
   );
 
-  const { data: taggingJob } = useSWR<Job | null>(
-    taggingJobId ? `/jobs/${taggingJobId}` : null,
-    () => (taggingJobId ? jobsApi.get(taggingJobId) : null),
+  const { data: taggingStatus, mutate: mutateTaggingStatus } = useSWR<AutotagStatusResponse>(
+    Number.isFinite(datasetId) ? `/datasets/${datasetId}/autotag/status` : null,
+    () => datasetsApi.getAutotagStatus(datasetId),
     {
-      refreshInterval: (latest) => {
-        if (!latest) return 0;
-        if (["completed", "failed", "cancelled"].includes(latest.status)) return 0;
-        return 2000;
-      },
+      refreshInterval: (latest) => (latest?.status === "running" ? 1500 : 0),
     }
   );
 
@@ -83,13 +77,15 @@ export default function DatasetDetailPage() {
     }
   }, [itemsData]);
 
+  const prevTaggingStatus = useRef<string | null>(null);
   useEffect(() => {
-    if (!taggingJob) return;
-    if (["completed", "failed", "cancelled"].includes(taggingJob.status)) {
+    if (!taggingStatus) return;
+    if (taggingStatus.status === "completed" && prevTaggingStatus.current === "running") {
       void mutateItems();
       void mutateStats();
     }
-  }, [taggingJob, mutateItems, mutateStats]);
+    prevTaggingStatus.current = taggingStatus.status;
+  }, [taggingStatus, mutateItems, mutateStats]);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([
@@ -138,14 +134,13 @@ export default function DatasetDetailPage() {
 
   const handleAutoTag = useCallback(
     async (options: { mode: TaggingMode; threshold: number; model: string; strip_rating: boolean }) => {
-      const result = await datasetsApi.autotag(datasetId, {
+      await datasetsApi.autotag(datasetId, {
         ...options,
         caption_extension: CAPTION_EXTENSION,
-        enqueue: true,
       });
-      setTaggingJobId(result.job_id);
+      void mutateTaggingStatus();
     },
-    [datasetId]
+    [datasetId, mutateTaggingStatus]
   );
 
   const handleRemoveDuplicates = useCallback(async () => {
@@ -232,20 +227,17 @@ export default function DatasetDetailPage() {
     return filteredItems.slice(start, start + PAGE_SIZE);
   }, [filteredItems, page]);
 
-  const taggingActive =
-    taggingJob != null && ["pending", "queued", "running"].includes(taggingJob.status);
+  const taggingActive = taggingStatus?.status === "running";
 
   const taggingBannerMessage = (() => {
-    if (!taggingJobId) return null;
-    if (!taggingJob) return `Auto-tagging job #${taggingJobId} started.`;
-    if (taggingJob.status === "completed") return `Auto-tagging job #${taggingJobId} completed.`;
-    if (taggingJob.status === "failed") {
-      return taggingJob.error_message
-        ? `Auto-tagging job #${taggingJobId} failed: ${taggingJob.error_message}`
-        : `Auto-tagging job #${taggingJobId} failed.`;
+    if (!taggingStatus || taggingStatus.status === "idle") return null;
+    if (taggingStatus.status === "running") {
+      return taggingStatus.total > 0
+        ? `Auto-tagging in progress: ${taggingStatus.current}/${taggingStatus.total}.`
+        : "Auto-tagging in progress…";
     }
-    if (taggingJob.status === "cancelled") return `Auto-tagging job #${taggingJobId} was cancelled.`;
-    return `Auto-tagging job #${taggingJobId} is ${taggingJob.status}.`;
+    if (taggingStatus.status === "completed") return "Auto-tagging completed.";
+    return taggingStatus.error ? `Auto-tagging failed: ${taggingStatus.error}` : "Auto-tagging failed.";
   })();
 
   if (datasetError) {
@@ -269,7 +261,7 @@ export default function DatasetDetailPage() {
           </Link>
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-text font-display truncate">{dataset.name}</h1>
-            <p className="text-xs text-muted truncate">{dataset.image_dir}</p>
+            <p className="text-xs text-muted truncate">{dataset.relative_path}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -284,23 +276,17 @@ export default function DatasetDetailPage() {
         </div>
       </div>
 
-      {taggingJobId && taggingBannerMessage && (
+      {taggingBannerMessage && (
         <div
           className={`rounded-xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3 ${
-            taggingJob?.status === "failed"
+            taggingStatus?.status === "failed"
               ? "border-error/30 bg-error-muted"
-              : taggingJob?.status === "completed"
+              : taggingStatus?.status === "completed"
                 ? "border-success/30 bg-success-muted"
                 : "border-accent/30 bg-accent-muted"
           }`}
         >
           <span className="text-sm text-text">{taggingBannerMessage}</span>
-          <Link
-            href={`/jobs/${taggingJobId}`}
-            className="shrink-0 text-sm font-medium text-accent hover:text-accent-hover"
-          >
-            Open job →
-          </Link>
         </div>
       )}
 

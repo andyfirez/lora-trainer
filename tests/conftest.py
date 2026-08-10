@@ -10,18 +10,14 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
-from src.db.repositories.job_config_repo import JobConfigRepository
-from src.db.repositories.job_repo import JobRepository
-from src.db.repositories.queue_repo import QueueRepository
-from src.db.repositories.trained_lora_repo import TrainedLoraRepository
+from src.db.repositories.lora_repo import LoraRepository
+from src.db.repositories.sampling_repo import SamplingRepository
 from src.db.session import register_all_tables
 from src.db.tables.dataset import Dataset
-from src.db.tables.job import Job
-from src.db.tables.job_config import ConfigType
-from src.services.configs.service import JobConfigService
+from src.db.tables.lora import Lora
 from src.services.datasets.service import DatasetsService
-from src.services.jobs.service import JobsService
-from src.services.loras.service import TrainedLoraService
+from src.services.loras.service import LoraService
+from src.services.sampling.service import SamplingService
 from src.settings.app_settings import settings
 
 
@@ -87,34 +83,18 @@ async def session() -> AsyncSession:
 
 
 @pytest_asyncio.fixture
-async def jobs_service(session: AsyncSession) -> JobsService:
-    return JobsService(
-        JobRepository(session),
-        QueueRepository(session),
-        JobConfigRepository(session),
-        DatasetRepository(session),
-    )
-
-
-@pytest_asyncio.fixture
-async def config_service(session: AsyncSession) -> JobConfigService:
-    return JobConfigService(
-        JobConfigRepository(session),
-        DatasetRepository(session),
-    )
-
-
-@pytest_asyncio.fixture
-async def trained_lora_service(session: AsyncSession) -> TrainedLoraService:
-    return TrainedLoraService(
-        TrainedLoraRepository(session),
-        JobRepository(session),
-    )
-
-
-@pytest_asyncio.fixture
 async def datasets_service(session: AsyncSession) -> DatasetsService:
     return DatasetsService(DatasetRepository(session), DatasetImageCropRepository(session))
+
+
+@pytest_asyncio.fixture
+async def lora_service(session: AsyncSession) -> LoraService:
+    return LoraService(LoraRepository(session), DatasetRepository(session))
+
+
+@pytest_asyncio.fixture
+async def sampling_service(session: AsyncSession) -> SamplingService:
+    return SamplingService(SamplingRepository(session))
 
 
 @pytest_asyncio.fixture
@@ -134,25 +114,18 @@ concepts:
 
 
 @pytest_asyncio.fixture
-async def create_training_job(
-    jobs_service: JobsService,
-    config_service: JobConfigService,
+async def create_training_lora(
+    lora_service: LoraService,
     training_dataset: Dataset,
-    storage_roots,
-) -> Callable[..., Awaitable[Job]]:
-    async def _create(name: str = "test", config_yaml: str | None = None) -> Job:
+) -> Callable[..., Awaitable[Lora]]:
+    async def _create(name: str = "test", config_yaml: str | None = None) -> Lora:
         if config_yaml is None:
             config_yaml = f"""base_model_name: test-model
 output_dir: ""
 concepts:
   - dataset_id: {training_dataset.id}
 """
-        config = await config_service.create_config(
-            name=name,
-            config_type=ConfigType.TRAINING,
-            config_yaml=config_yaml,
-        )
-        return await jobs_service.create_from_config(config.id, name=name)
+        return await lora_service.create_lora(name=name, config_yaml=config_yaml)
 
     return _create
 

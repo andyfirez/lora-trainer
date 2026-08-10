@@ -179,8 +179,11 @@ class AutotagRequest(BaseModel):
     caption_extension: str = ".txt"
     strip_rating: bool = True
     filenames: list[str] | None = None
-    enqueue: bool = True
 
 
-class AutotagResponse(BaseModel):
-    job_id: int
+class AutotagStatusResponse(BaseModel):
+    status: str
+    current: int
+    total: int
+    message: str
+    error: str | None = None

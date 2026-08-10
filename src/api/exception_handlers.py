@@ -3,10 +3,6 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from src.services.configs.exceptions import (
-    JobConfigNotFoundError,
-    JobConfigValidationError,
-)
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetImageNotFoundError,
@@ -18,66 +14,68 @@ from src.services.datasets.exceptions import (
     DatasetTargetResolutionNotSetError,
     InvalidDatasetFilenameError,
 )
-from src.services.jobs.exceptions import (
-    JobAlreadyQueuedError,
-    JobCheckpointNotFoundError,
-    JobNotCancellableError,
-    JobNotFoundError,
-    JobNotResumableError,
-    JobOperationNotSupportedError,
+from src.services.loras.exceptions import (
+    LoraCheckpointNotFoundError,
+    LoraNameConflictError,
+    LoraNotFoundError,
+    LoraReproduceError,
 )
-from src.services.loras.exceptions import TrainedLoraNotFoundError, TrainedLoraReproduceError
+from src.services.runnable.exceptions import (
+    RunnableAlreadyQueuedError,
+    RunnableNotCancellableError,
+    RunnableNotFoundError,
+    RunnableNotResumableError,
+    RunnableOperationNotSupportedError,
+    RunnableValidationError,
+)
 from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
 )
+from src.services.tagging.exceptions import TaggingAlreadyRunningError
 
 
-async def job_not_found_handler(request: Request, exc: JobNotFoundError) -> JSONResponse:
+async def runnable_not_found_handler(request: Request, exc: RunnableNotFoundError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
-async def job_already_queued_handler(request: Request, exc: JobAlreadyQueuedError) -> JSONResponse:
+async def runnable_already_queued_handler(request: Request, exc: RunnableAlreadyQueuedError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
-async def job_not_cancellable_handler(request: Request, exc: JobNotCancellableError) -> JSONResponse:
+async def runnable_not_cancellable_handler(request: Request, exc: RunnableNotCancellableError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
-async def job_not_resumable_handler(request: Request, exc: JobNotResumableError) -> JSONResponse:
+async def runnable_not_resumable_handler(request: Request, exc: RunnableNotResumableError) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
-async def job_checkpoint_not_found_handler(request: Request, exc: JobCheckpointNotFoundError) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-
-async def queue_entry_not_found_handler(request: Request, exc: QueueEntryNotFoundError) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-
-async def job_operation_not_supported_handler(
+async def runnable_operation_not_supported_handler(
     request: Request,
-    exc: JobOperationNotSupportedError,
+    exc: RunnableOperationNotSupportedError,
 ) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
-async def job_config_not_found_handler(request: Request, exc: JobConfigNotFoundError) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-
-async def job_config_validation_handler(request: Request, exc: JobConfigValidationError) -> JSONResponse:
+async def runnable_validation_handler(request: Request, exc: RunnableValidationError) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": exc.message})
 
 
-async def trained_lora_not_found_handler(request: Request, exc: TrainedLoraNotFoundError) -> JSONResponse:
+async def lora_not_found_handler(request: Request, exc: LoraNotFoundError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
-async def trained_lora_reproduce_handler(request: Request, exc: TrainedLoraReproduceError) -> JSONResponse:
+async def lora_name_conflict_handler(request: Request, exc: LoraNameConflictError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+async def lora_reproduce_handler(request: Request, exc: LoraReproduceError) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+async def lora_checkpoint_not_found_handler(request: Request, exc: LoraCheckpointNotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 async def sampling_lora_path_not_found_handler(request: Request, exc: SamplingLoRAPathNotFoundError) -> JSONResponse:
@@ -131,3 +129,7 @@ async def dataset_target_resolution_not_set_handler(
 
 async def dataset_preprocess_handler(request: Request, exc: DatasetPreprocessError) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+async def tagging_already_running_handler(request: Request, exc: TaggingAlreadyRunningError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})

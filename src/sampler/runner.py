@@ -1,11 +1,11 @@
-"""Sampling runner — CLI entry point spawned by the queue worker."""
+"""Sampling runner — CLI entry point spawned by the runnable worker."""
 
 import argparse
 import asyncio
 import logging
 import sys
 
-from src.sampler.job_runner import run_sampling_job
+from src.sampler.job_runner import run_sampling
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run a standalone LoRA sampling job")
-    parser.add_argument("--job-id", type=int, required=True, help="Job ID in the database")
+    parser = argparse.ArgumentParser(description="Run a standalone LoRA sampling")
+    parser.add_argument("--sampling-id", type=int, required=True, help="Sampling ID in the database")
     args = parser.parse_args()
     try:
-        exit_code = asyncio.run(run_sampling_job(args.job_id))
+        exit_code = asyncio.run(run_sampling(args.sampling_id))
         if exit_code != 0:
             sys.exit(exit_code)
     except SystemExit:

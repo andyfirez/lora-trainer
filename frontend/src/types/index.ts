@@ -1,15 +1,47 @@
-export type JobStatus = "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
-export type ConfigType = "training" | "sampling";
-export type JobType = "training" | "sampling" | "tagging";
+export type RunnableStatus =
+  | "draft"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "orphan";
 export type TaggingMode = "if_empty" | "overwrite" | "append";
 
-export interface TrainingJobDetails {
+export interface RunnableResponse {
+  id: number;
+  name: string;
+  status: RunnableStatus;
+  queue_position: number | null;
+  error_message: string | null;
+  output_path: string | null;
+  log_path: string | null;
+  running_started_at: string | null;
+  accumulated_elapsed_seconds: number;
+  elapsed_seconds: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoraResponse extends RunnableResponse {
+  config_yaml: string | null;
+  relative_path: string;
+  weights_relpath: string;
+  base_model_name: string;
+  resolved_work_dir: string;
+  resolved_weights_path: string;
+  path_missing: boolean;
+  can_resume: boolean;
+
+  progress_step: number | null;
+  progress_total: number | null;
   progress_loss: number | null;
   progress_avr_loss: number | null;
   progress_epoch: number | null;
   progress_epoch_total: number | null;
   cache_progress_step: number | null;
   cache_progress_total: number | null;
+
   last_checkpoint_path: string | null;
   last_checkpoint_epoch: number | null;
   last_checkpoint_step: number | null;
@@ -19,77 +51,15 @@ export interface TrainingJobDetails {
   save_checkpoint_requested: boolean;
 }
 
-export interface SamplingJobDetails {
-  lora_paths: string[];
-  progress_status: string | null;
-}
-
-export interface TaggingJobDetails {
-  progress_status: string | null;
-  dataset_id: number;
-}
-
-export interface Job {
-  id: number;
-  job_type: JobType;
-  name: string;
-  status: JobStatus;
-  config_id: number | null;
+export interface SamplingResponse extends RunnableResponse {
   config_yaml: string;
-  output_path: string | null;
-  log_path: string | null;
-  pid: number | null;
-  error_message: string | null;
+  lora_paths: string[];
   progress_step: number | null;
   progress_total: number | null;
-  training: TrainingJobDetails | null;
-  sampling: SamplingJobDetails | null;
-  tagging: TaggingJobDetails | null;
-  can_resume: boolean;
-  elapsed_seconds: number | null;
-  created_at: string;
-  updated_at: string;
+  progress_status: string | null;
 }
 
-export interface JobConfig {
-  id: number;
-  name: string;
-  config_type: ConfigType;
-  config_yaml: string;
-  description: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TrainedLora {
-  id: number;
-  name: string;
-  relative_path: string;
-  weights_relpath: string;
-  resolved_work_dir: string;
-  resolved_weights_path: string;
-  path_missing: boolean;
-  job_id: number | null;
-  config_id: number | null;
-  config_yaml: string | null;
-  base_model_name: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface QueueEntry {
-  id: number;
-  job_id: number;
-  position: number;
-  added_at: string;
-}
-
-export interface QueueEntryWithJob {
-  entry: QueueEntry;
-  job: Job;
-}
-
-export interface JobSample {
+export interface RunnableSample {
   filename: string;
   path: string;
   url: string;
@@ -97,8 +67,8 @@ export interface JobSample {
   metadata?: Record<string, unknown>;
 }
 
-export interface JobSamplesResponse {
-  samples: JobSample[];
+export interface RunnableSamplesResponse {
+  samples: RunnableSample[];
 }
 
 export interface ManifestImageEntry {
@@ -122,8 +92,7 @@ export interface ManifestGridEntry {
 
 export interface SweepManifestResponse {
   version: number;
-  config_id: number | null;
-  job_id: number | null;
+  sampling_id: number | null;
   total_images: number;
   images: ManifestImageEntry[];
   grids: ManifestGridEntry[];
@@ -223,17 +192,14 @@ export interface AutotagRequest {
   caption_extension?: string;
   strip_rating?: boolean;
   filenames?: string[];
-  enqueue?: boolean;
 }
 
-export interface AutotagResponse {
-  job_id: number;
-}
-
-export interface CreateJobFromConfigRequest {
-  name?: string;
-  lora_paths?: string[];
-  enqueue?: boolean;
+export interface AutotagStatusResponse {
+  status: "idle" | "running" | "completed" | "failed";
+  current: number;
+  total: number;
+  message: string;
+  error: string | null;
 }
 
 export interface PngInfoResponse {

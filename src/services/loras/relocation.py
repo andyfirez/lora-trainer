@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.db.tables.trained_lora import TrainedLora
+from src.db.tables.lora import Lora
 from src.services.loras.discovery import DiscoveredLora
 from src.services.storage.relocation import match_by_basename, unique_match
 
 
-def find_relocated_lora(stale_loras: list[TrainedLora], item: DiscoveredLora) -> TrainedLora | None:
+def find_relocated_lora(stale_loras: list[Lora], item: DiscoveredLora) -> Lora | None:
     by_basename = match_by_basename(
         stale_loras,
         get_relative_path=lambda lora: lora.relative_path,

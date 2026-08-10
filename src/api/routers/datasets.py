@@ -5,33 +5,35 @@ from typing import Sequence
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
-from src.api.dependencies import DatasetsServiceDep, JobsServiceDep
-
-from src.storage.paths import StoragePaths
+from src.api.dependencies import DatasetsServiceDep
 from src.api.schemas.datasets import (
     AutotagRequest,
-    AutotagResponse,
+    AutotagStatusResponse,
     BakeRequest,
     BakeResponse,
     BulkTagRequest,
     BulkTagResponse,
     CaptionResponse,
     CaptionUpdateRequest,
-    DuplicatesResponse,
     CropMetaResponse,
     CropUpdateRequest,
     DatasetCreate,
-    DatasetImport,
     DatasetImagesResponse,
+    DatasetImport,
     DatasetItemResponse,
     DatasetItemsResponse,
     DatasetResponse,
     DatasetUpdate,
+    DuplicatesResponse,
     PreprocessStatusResponse,
     RemoveDuplicatesResponse,
     TagStatResponse,
     TagStatsResponse,
 )
+from src.services.datasets.paths import dataset_image_dir
+from src.services.tagging.manager import tagging_task_manager
+from src.storage.paths import StoragePaths
+from src.tagger.config import TaggingConfig
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -272,27 +274,50 @@ async def bulk_remove_tag(
     return BulkTagResponse(updated_count=updated)
 
 
-@router.post("/{dataset_id}/autotag", response_model=AutotagResponse, status_code=201)
+@router.post("/{dataset_id}/autotag", response_model=AutotagStatusResponse, status_code=202)
 async def autotag_dataset(
     dataset_id: int,
     body: AutotagRequest,
     datasets_service: DatasetsServiceDep,
-    jobs_service: JobsServiceDep,
-) -> AutotagResponse:
+) -> AutotagStatusResponse:
     dataset = await datasets_service.get_dataset(dataset_id)
-    job = await jobs_service.create_tagging_job(
+    config = TaggingConfig(
         dataset_id=dataset_id,
-        dataset_name=dataset.name,
         mode=body.mode,
         threshold=body.threshold,
         model=body.model,
         caption_extension=body.caption_extension,
         strip_rating=body.strip_rating,
-        filenames=body.filenames,
+        filenames=body.filenames or [],
     )
-    if body.enqueue and job.id is not None:
-        await jobs_service.enqueue_job(job.id)
-    return AutotagResponse(job_id=job.id)  # type: ignore[arg-type]
+    state = tagging_task_manager.start(
+        dataset_id,
+        image_dir=dataset_image_dir(dataset),
+        config=config,
+        target_resolution=dataset.target_resolution,
+    )
+    return AutotagStatusResponse(
+        status=state.status.value,
+        current=state.current,
+        total=state.total,
+        message=state.message,
+        error=state.error,
+    )
+
+
+@router.get("/{dataset_id}/autotag/status", response_model=AutotagStatusResponse)
+async def get_autotag_status(dataset_id: int, datasets_service: DatasetsServiceDep) -> AutotagStatusResponse:
+    await datasets_service.get_dataset(dataset_id)
+    state = tagging_task_manager.get_status(dataset_id)
+    if state is None:
+        return AutotagStatusResponse(status="idle", current=0, total=0, message="")
+    return AutotagStatusResponse(
+        status=state.status.value,
+        current=state.current,
+        total=state.total,
+        message=state.message,
+        error=state.error,
+    )
 
 
 @router.get("/{dataset_id}/preprocess/status", response_model=PreprocessStatusResponse)

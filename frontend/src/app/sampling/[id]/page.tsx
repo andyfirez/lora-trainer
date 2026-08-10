@@ -1,16 +1,17 @@
 "use client";
 
-import { use, useState } from "react";
+import { use } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Play, Loader2, Copy } from "lucide-react";
-import { samplingConfigsApi } from "@/lib/api/samplingConfigs";
-import ConfigForm from "@/components/ConfigForm";
+import dynamic from "next/dynamic";
+import { ArrowLeft, Download, Loader2, Play, Square } from "lucide-react";
+import { samplingsApi } from "@/lib/api/samplings";
+import StatusBadge from "@/components/StatusBadge";
+import SamplingRunPanel from "@/components/sampling/SamplingRunPanel";
 import Button from "@/components/ui/Button";
-import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
-import Input from "@/components/ui/Input";
-import Checkbox from "@/components/ui/Checkbox";
+import Card from "@/components/ui/Card";
+
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -18,51 +19,10 @@ interface Props {
 
 export default function SamplingDetailPage({ params }: Props) {
   const { id: idParam } = use(params);
-  const configId = Number(idParam);
-  const router = useRouter();
-  const { data: config, isLoading, mutate } = useSWR(`/sampling-configs/${configId}`, () => samplingConfigsApi.get(configId));
-
-  const [showRunModal, setShowRunModal] = useState(false);
-  const [jobName, setJobName] = useState("");
-  const [enqueue, setEnqueue] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [cloning, setCloning] = useState(false);
-  const [runError, setRunError] = useState<string | null>(null);
-
-  const openRunModal = () => {
-    setJobName(config?.name ?? "");
-    setEnqueue(true);
-    setRunError(null);
-    setShowRunModal(true);
-  };
-
-  const handleClone = async () => {
-    setCloning(true);
-    try {
-      const cloned = await samplingConfigsApi.clone(configId);
-      router.push(`/sampling/${cloned.id}`);
-    } finally {
-      setCloning(false);
-    }
-  };
-
-  const handleRunJob = async () => {
-    if (!jobName.trim()) {
-      setRunError("Job name is required");
-      return;
-    }
-    setSubmitting(true);
-    setRunError(null);
-    try {
-      const job = await samplingConfigsApi.createJob(configId, { name: jobName.trim(), enqueue });
-      setShowRunModal(false);
-      router.push(`/jobs/${job.id}`);
-    } catch (err: unknown) {
-      setRunError(err instanceof Error ? err.message : "Failed to create job");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const id = Number(idParam);
+  const { data: sampling, isLoading, mutate } = useSWR(`/samplings/${id}`, () => samplingsApi.get(id), {
+    refreshInterval: (latest) => (latest?.status === "running" ? 1000 : 2000),
+  });
 
   if (isLoading) {
     return (
@@ -71,57 +31,74 @@ export default function SamplingDetailPage({ params }: Props) {
       </div>
     );
   }
+  if (!sampling) return <div className="text-error">Sampling not found</div>;
 
-  if (!config) {
-    return <div className="text-error py-20">Sampling config not found</div>;
-  }
+  const handleEnqueue = async () => {
+    await samplingsApi.enqueue(id);
+    mutate();
+  };
+  const handleCancel = async () => {
+    await samplingsApi.cancel(id);
+    mutate();
+  };
+  const handleDownloadYaml = () => {
+    const blob = new Blob([sampling.config_yaml], { type: "text/yaml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${sampling.name}.yaml`;
+    a.click();
+  };
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <Link href="/sampling" className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-text" aria-label="Back">
+        <Link
+          href="/sampling"
+          className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-text"
+          aria-label="Back to sampling"
+        >
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-text font-display">{config.name}</h1>
-          <p className="text-muted mt-1">Sampling config</p>
+          <h1 className="text-2xl font-bold text-text font-display">{sampling.name}</h1>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <StatusBadge status={sampling.status} />
+          </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button variant="secondary" onClick={() => void handleClone()} disabled={cloning}>
-            {cloning ? <Loader2 className="animate-spin" size={14} /> : <Copy size={14} />}
-            {cloning ? "Duplicating…" : "Duplicate"}
-          </Button>
-          <Button variant="success" onClick={openRunModal}>
-            <Play size={14} /> Run Sweep
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {(sampling.status === "draft" ||
+            sampling.status === "failed" ||
+            sampling.status === "cancelled" ||
+            sampling.status === "orphan") && (
+            <Button variant="success" size="sm" onClick={() => void handleEnqueue()}>
+              <Play size={13} /> Enqueue
+            </Button>
+          )}
+          {(sampling.status === "queued" || sampling.status === "running") && (
+            <Button variant="danger" size="sm" onClick={() => void handleCancel()}>
+              <Square size={13} /> {sampling.status === "running" ? "Stop" : "Cancel"}
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" onClick={handleDownloadYaml}>
+            <Download size={13} /> YAML
           </Button>
         </div>
       </div>
 
-      <ConfigForm
-        key={config.updated_at}
-        configType="sampling"
-        configId={configId}
-        initialName={config.name}
-        initialDescription={config.description ?? ""}
-        initialYaml={config.config_yaml}
-        saveRedirectBase="/sampling"
-        onSaved={() => void mutate()}
-      />
+      <SamplingRunPanel sampling={sampling} />
 
-      <Modal open={showRunModal} onClose={() => setShowRunModal(false)} title="Run Sampling Sweep">
-        {runError && <ModalError>{runError}</ModalError>}
-        <Input label="Job Name" value={jobName} onChange={(e) => setJobName(e.target.value)} />
-        <Checkbox label="Enqueue immediately" checked={enqueue} onChange={(e) => setEnqueue(e.target.checked)} />
-        <ModalFooter>
-          <Button variant="secondary" onClick={() => setShowRunModal(false)}>
-            Cancel
-          </Button>
-          <Button onClick={() => void handleRunJob()} disabled={submitting}>
-            {submitting ? <Loader2 className="animate-spin" size={14} /> : <Play size={14} />}
-            {submitting ? "Creating…" : "Create Job"}
-          </Button>
-        </ModalFooter>
-      </Modal>
+      <div className="space-y-2">
+        <h2 className="text-sm font-medium text-muted">Config YAML</h2>
+        <Card padding="none" className="overflow-hidden" style={{ height: 400 }}>
+          <MonacoEditor
+            height="100%"
+            language="yaml"
+            theme="vs-dark"
+            value={sampling.config_yaml}
+            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false }}
+          />
+        </Card>
+      </div>
     </div>
   );
 }

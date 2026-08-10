@@ -1,7 +1,7 @@
 import { BASE_URL, api } from "@/lib/api/client";
 import type {
   AutotagRequest,
-  AutotagResponse,
+  AutotagStatusResponse,
   BulkTagResult,
   CropMeta,
   Dataset,
@@ -107,7 +107,8 @@ export const datasetsApi = {
       caption_extension: captionExtension,
     }),
   autotag: (id: number, body: AutotagRequest = {}) =>
-    api.post<AutotagResponse>(`/datasets/${id}/autotag`, body),
+    api.post<AutotagStatusResponse>(`/datasets/${id}/autotag`, body),
+  getAutotagStatus: (id: number) => api.get<AutotagStatusResponse>(`/datasets/${id}/autotag/status`),
 };
 
 export type { DatasetItem, TagStat };

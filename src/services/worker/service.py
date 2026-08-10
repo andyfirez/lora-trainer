@@ -1,4 +1,4 @@
-"""Queue worker — polls SQLite and spawns job subprocesses."""
+"""Runnable worker — polls the loras/samplings tables and spawns subprocesses."""
 
 import asyncio
 import logging
@@ -6,14 +6,11 @@ import subprocess
 from dataclasses import dataclass
 
 import psutil
-from src.db.repositories.job_repo import JobRepository
-from src.db.repositories.queue_repo import QueueRepository
-from src.db.repositories.trained_lora_repo import TrainedLoraRepository
+from src.db.repositories.runnable_queries import RunnableKind, get_by_kind, next_queued
 from src.db.session import session_factory
-from src.db.tables.job import JobStatus, JobType
-from src.db.tables.queue_entry import QueueEntry
-from src.services.jobs.handlers import get_job_handler
-from src.services.loras.service import TrainedLoraService
+from src.db.tables.runnable_mixin import RunnableStatus
+from src.services.runnable import runtime
+from src.services.runnable.handlers import get_runnable_handler
 from src.settings.app_settings import settings
 
 logger = logging.getLogger(__name__)
@@ -21,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class _PendingSpawn:
-    """Placeholder in _active_jobs while a subprocess is being started."""
+    """Placeholder in _active while a subprocess is being started."""
 
     def is_running(self) -> bool:
         return True
@@ -50,7 +47,7 @@ class _ManagedProcess:
         return await asyncio.to_thread(self.proc.wait)
 
 
-_ActiveJob = _PendingSpawn | _ManagedProcess
+_ActiveEntry = _PendingSpawn | _ManagedProcess
 
 
 def _drain_subprocess_output(proc: subprocess.Popen[bytes]) -> list[str]:
@@ -80,17 +77,17 @@ def _summarize_subprocess_failure(lines: list[str], return_code: int, *, max_lin
     return f"Process exited with code {return_code}"
 
 
-class QueueWorker:
+class RunnableWorker:
     def __init__(self, *, echo_subprocess_output: bool = False) -> None:
         self._echo_subprocess_output = echo_subprocess_output
-        self._active_jobs: dict[int, _ActiveJob] = {}
+        self._active: dict[tuple[RunnableKind, int], _ActiveEntry] = {}
         self._poll_task: asyncio.Task[None] | None = None
         self._cancel_task: asyncio.Task[None] | None = None
-        self._job_tasks: set[asyncio.Task[None]] = set()
+        self._entry_tasks: set[asyncio.Task[None]] = set()
 
     async def start(self) -> None:
         logger.info(
-            "Queue worker started — polling every %ds, max %d concurrent job(s)",
+            "Runnable worker started — polling every %ds, max %d concurrent job(s)",
             settings.training.worker_poll_interval_seconds,
             settings.training.max_concurrent_jobs,
         )
@@ -114,17 +111,17 @@ class QueueWorker:
                 pass
             self._cancel_task = None
 
-        for job_id, managed in list(self._active_jobs.items()):
+        for (kind, entity_id), managed in list(self._active.items()):
             if isinstance(managed, _PendingSpawn):
                 continue
             if managed.is_running() and managed.pid is not None:
-                logger.info("Shutting down — terminating job id=%d pid=%d", job_id, managed.pid)
+                logger.info("Shutting down — terminating %s id=%d pid=%d", kind, entity_id, managed.pid)
                 self._kill_process_tree(managed.pid)
 
-        if self._job_tasks:
-            await asyncio.gather(*self._job_tasks, return_exceptions=True)
-        self._job_tasks.clear()
-        logger.info("Queue worker stopped")
+        if self._entry_tasks:
+            await asyncio.gather(*self._entry_tasks, return_exceptions=True)
+        self._entry_tasks.clear()
+        logger.info("Runnable worker stopped")
 
     def _kill_process_tree(self, pid: int) -> None:
         try:
@@ -138,113 +135,58 @@ class QueueWorker:
         except Exception as exc:
             logger.error("Failed to terminate process pid=%d: %s", pid, exc)
 
-    async def _is_any_job_running(self) -> bool:
+    async def _mark_running(self, kind: RunnableKind, entity_id: int, pid: int) -> None:
         async with session_factory() as session:
-            job_repo = JobRepository(session)
-            running_job = await job_repo.get_running()
-            return running_job is not None
-
-    async def _peek_next_queued_entry(self) -> QueueEntry | None:
-        async with session_factory() as session:
-            queue_repo = QueueRepository(session)
-            return await queue_repo.get_next()
-
-    async def _claim_next_entry(self) -> QueueEntry | None:
-        async with session_factory() as session:
-            queue_repo = QueueRepository(session)
-            return await queue_repo.claim_next()
-
-    async def _mark_job_running(self, job_id: int, pid: int) -> None:
-        async with session_factory() as session:
-            repo = JobRepository(session)
-            job = await repo.get_by_id(job_id)
-            if job is not None:
-                await repo.update_status(job, JobStatus.RUNNING, pid=pid)
+            entity = await get_by_kind(session, kind, entity_id)
+            if entity is not None:
+                runtime.mark_running(entity, pid=pid)
+                session.add(entity)
             await session.commit()
 
-    async def _mark_job_spawn_failed(self, job_id: int, error_message: str) -> None:
+    async def _mark_spawn_failed(self, kind: RunnableKind, entity_id: int, error_message: str) -> None:
         async with session_factory() as session:
-            repo = JobRepository(session)
-            job = await repo.get_by_id(job_id)
-            if job is not None and job.status != JobStatus.RUNNING:
-                await repo.update_status(job, JobStatus.FAILED, error_message=error_message)
+            entity = await get_by_kind(session, kind, entity_id)
+            if entity is not None and entity.status != RunnableStatus.RUNNING:
+                runtime.mark_finished(entity, RunnableStatus.FAILED, error_message=error_message)
+                session.add(entity)
             await session.commit()
 
-    async def _dequeue_entry(self, entry_id: int) -> None:
+    async def _is_cancelled(self, kind: RunnableKind, entity_id: int) -> bool:
         async with session_factory() as session:
-            queue_repo = QueueRepository(session)
-            entry = await queue_repo.get_by_id(entry_id)
-            if entry is not None:
-                await queue_repo.shift_positions_down(entry.position)
-                await queue_repo.delete(entry)
-                await session.commit()
+            entity = await get_by_kind(session, kind, entity_id)
+            return entity is not None and entity.status == RunnableStatus.CANCELLED
 
-    async def _is_job_cancelled(self, job_id: int) -> bool:
+    async def _finalize(
+        self,
+        kind: RunnableKind,
+        entity_id: int,
+        return_code: int,
+        output_lines: list[str] | None = None,
+    ) -> None:
         async with session_factory() as session:
-            repo = JobRepository(session)
-            job = await repo.get_by_id(job_id)
-            return job is not None and job.status == JobStatus.CANCELLED
-
-    async def _finalize_job(self, job_id: int, return_code: int, output_lines: list[str] | None = None) -> None:
-        async with session_factory() as session:
-            job_repo = JobRepository(session)
-            job = await job_repo.get_by_id(job_id)
-            if job is None:
+            entity = await get_by_kind(session, kind, entity_id)
+            if entity is None:
                 return
-            if job.status == JobStatus.CANCELLED:
-                logger.info("Job id=%d finished after cancellation (exit code %d)", job_id, return_code)
-                await job_repo.clear_process_state(job)
+            if entity.status == RunnableStatus.CANCELLED:
+                logger.info("%s id=%d finished after cancellation (exit code %d)", kind, entity_id, return_code)
                 await session.commit()
                 return
-            final_status = job.status
-            if job.status == JobStatus.RUNNING:
-                final_status = JobStatus.COMPLETED if return_code == 0 else JobStatus.FAILED
-                if return_code == 0:
-                    error_message = None
-                elif job.error_message:
-                    error_message = job.error_message
-                else:
-                    error_message = _summarize_subprocess_failure(output_lines or [], return_code)
-                await job_repo.update_status(job, final_status, error_message=error_message)
-                await session.commit()
-                logger.info(
-                    "Job id=%d finished with status=%s (exit code %d)",
-                    job_id,
-                    final_status,
-                    return_code,
-                )
-
-            if (
-                return_code == 0
-                and final_status == JobStatus.COMPLETED
-                and job.job_type == JobType.TRAINING
-            ):
-                job = await job_repo.get_by_id(job_id)
-                if job is not None:
-                    lora_service = TrainedLoraService(
-                        TrainedLoraRepository(session),
-                        job_repo,
-                    )
-                    trained_lora = await lora_service.create_from_completed_job(job)
-                    if trained_lora is not None:
-                        logger.info(
-                            "Registered trained LoRA id=%d for job id=%d",
-                            trained_lora.id,
-                            job_id,
-                        )
-                await session.commit()
+            error_message = None if return_code == 0 else _summarize_subprocess_failure(output_lines or [], return_code)
+            await get_runnable_handler(kind).finalize(session, entity_id, return_code, error_message=error_message)
+            await session.commit()
+            logger.info("%s id=%d finished (exit code %d)", kind, entity_id, return_code)
 
     async def _watch_cancellations(self) -> None:
         interval = settings.training.cancel_poll_interval_seconds
         while True:
             try:
-                for job_id, managed in list(self._active_jobs.items()):
+                for (kind, entity_id), managed in list(self._active.items()):
                     if isinstance(managed, _PendingSpawn):
                         continue
                     if not managed.is_running():
                         continue
-                    if await self._is_job_cancelled(job_id) and managed.pid is not None:
-                        logger.info("Cancellation requested for job id=%d, killing pid=%d", job_id, managed.pid)
+                    if await self._is_cancelled(kind, entity_id) and managed.pid is not None:
+                        logger.info("Cancellation requested for %s id=%d, killing pid=%d", kind, entity_id, managed.pid)
                         self._kill_process_tree(managed.pid)
             except asyncio.CancelledError:
                 raise
@@ -252,40 +194,20 @@ class QueueWorker:
                 logger.exception("Cancellation watcher error")
             await asyncio.sleep(interval)
 
-    def _build_command(self, job_id: int, job_type: JobType) -> list[str]:
-        return get_job_handler(job_type).build_command(job_id)
-
-    async def _run_entry(self, entry: QueueEntry) -> None:
-        if entry.id is None:
-            return
-        job_id = entry.job_id
-        existing = self._active_jobs.get(job_id)
-        if existing is not None and not isinstance(existing, _PendingSpawn):
-            return
-
-        async with session_factory() as session:
-            job_repo = JobRepository(session)
-            job = await job_repo.get_by_id(job_id)
-            if job is None:
-                return
-            job_type = job.job_type
-
+    async def _run_entity(self, kind: RunnableKind, entity_id: int) -> None:
         managed: _ManagedProcess | None = None
         output_lines: list[str] = []
         try:
-            logger.info("Spawning %s subprocess for job id=%d", job_type, job_id)
-            proc = subprocess.Popen(
-                self._build_command(job_id, job_type),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-            )
+            logger.info("Spawning %s subprocess for id=%d", kind, entity_id)
+            command = get_runnable_handler(kind).build_command(entity_id)
+            proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             managed = _ManagedProcess(proc)
-            self._active_jobs[job_id] = managed
+            self._active[(kind, entity_id)] = managed
             if managed.pid is not None:
-                await self._mark_job_running(job_id, managed.pid)
+                await self._mark_running(kind, entity_id, managed.pid)
 
             if self._echo_subprocess_output:
-                output_lines = await asyncio.to_thread(_log_subprocess_output, proc, f"{job_type} {job_id}")
+                output_lines = await asyncio.to_thread(_log_subprocess_output, proc, f"{kind} {entity_id}")
                 await managed.wait()
             else:
                 output_lines, _ = await asyncio.gather(
@@ -293,32 +215,38 @@ class QueueWorker:
                     managed.wait(),
                 )
         except Exception as exc:
-            logger.exception("Failed to spawn %s for job id=%d", job_type, job_id)
-            await self._mark_job_spawn_failed(job_id, str(exc))
+            logger.exception("Failed to spawn %s for id=%d", kind, entity_id)
+            await self._mark_spawn_failed(kind, entity_id, str(exc))
         finally:
-            self._active_jobs.pop(job_id, None)
+            self._active.pop((kind, entity_id), None)
             if managed is not None:
-                await self._finalize_job(job_id, managed.returncode or 0, output_lines)
+                await self._finalize(kind, entity_id, managed.returncode or 0, output_lines)
 
-    async def _active_job_count(self) -> int:
-        return sum(1 for managed in self._active_jobs.values() if managed.is_running())
+    async def _active_count(self) -> int:
+        return sum(1 for managed in self._active.values() if managed.is_running())
 
     async def _poll_loop(self) -> None:
         while True:
             try:
                 max_jobs = settings.training.max_concurrent_jobs
-                while await self._active_job_count() < max_jobs:
-                    peek = await self._peek_next_queued_entry()
-                    if peek is None or peek.job_id in self._active_jobs:
+                while await self._active_count() < max_jobs:
+                    async with session_factory() as session:
+                        peeked = await next_queued(session)
+                    if peeked is None or peeked in self._active:
                         break
-                    self._active_jobs[peek.job_id] = _PendingSpawn()
-                    entry = await self._claim_next_entry()
-                    if entry is None or entry.job_id != peek.job_id:
-                        self._active_jobs.pop(peek.job_id, None)
-                        break
-                    task = asyncio.create_task(self._run_entry(entry))
-                    self._job_tasks.add(task)
-                    task.add_done_callback(self._job_tasks.discard)
+                    kind, entity_id = peeked
+                    self._active[(kind, entity_id)] = _PendingSpawn()
+                    async with session_factory() as session:
+                        entity = await get_by_kind(session, kind, entity_id)
+                        if entity is None or entity.status != RunnableStatus.QUEUED:
+                            self._active.pop((kind, entity_id), None)
+                            break
+                        runtime.remove_from_queue(entity)
+                        session.add(entity)
+                        await session.commit()
+                    task = asyncio.create_task(self._run_entity(kind, entity_id))
+                    self._entry_tasks.add(task)
+                    task.add_done_callback(self._entry_tasks.discard)
             except asyncio.CancelledError:
                 raise
             except Exception:

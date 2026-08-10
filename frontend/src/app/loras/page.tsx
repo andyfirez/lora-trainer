@@ -1,8 +1,10 @@
 "use client";
 
 import useSWR from "swr";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback } from "react";
+import { PlusCircle } from "lucide-react";
 import { lorasApi } from "@/lib/api/loras";
 import StorageFolderBrowser from "@/components/storage/StorageFolderBrowser";
 import LoraFolderItem from "@/components/lora/LoraFolderItem";
@@ -51,7 +53,16 @@ function LorasPageContent() {
     <div className="space-y-6">
       <PageHeader
         title="LoRAs"
-        description="Successfully trained LoRA models with frozen configs and artifacts"
+        description="Trained LoRA models with frozen configs and artifacts"
+        actions={
+          <Link
+            href="/loras/new"
+            className="inline-flex items-center gap-2 bg-accent hover:bg-accent-hover text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          >
+            <PlusCircle size={15} />
+            New LoRA
+          </Link>
+        }
       />
 
       <StorageFolderBrowser

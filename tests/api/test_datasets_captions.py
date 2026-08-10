@@ -4,16 +4,12 @@ from PIL import Image
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.api.dependencies import _get_datasets_service, _get_jobs_service
+from src.api.dependencies import _get_datasets_service
 from src.api.main import app
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
-from src.db.repositories.job_config_repo import JobConfigRepository
-from src.db.repositories.job_repo import JobRepository
-from src.db.repositories.queue_repo import QueueRepository
 from src.db.session import register_all_tables
 from src.services.datasets.service import DatasetsService
-from src.services.jobs.service import JobsService
 
 
 @pytest.mark.asyncio
@@ -36,16 +32,7 @@ async def test_dataset_caption_api(storage_roots) -> None:
         async def _override_datasets_service():
             yield datasets_service
 
-        async def _override_jobs_service():
-            yield JobsService(
-                JobRepository(db_session),
-                QueueRepository(db_session),
-                JobConfigRepository(db_session),
-                DatasetRepository(db_session),
-            )
-
         app.dependency_overrides[_get_datasets_service] = _override_datasets_service
-        app.dependency_overrides[_get_jobs_service] = _override_jobs_service
         try:
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -79,12 +66,9 @@ async def test_dataset_caption_api(storage_roots) -> None:
                 assert image.status_code == 200
                 assert image.headers["content-type"].startswith("image/")
 
-                autotag = await client.post(
-                    f"/datasets/{dataset.id}/autotag",
-                    json={"mode": "if_empty", "enqueue": False},
-                )
-                assert autotag.status_code == 201
-                assert "job_id" in autotag.json()
+                status = await client.get(f"/datasets/{dataset.id}/autotag/status")
+                assert status.status_code == 200
+                assert status.json()["status"] == "idle"
         finally:
             app.dependency_overrides.clear()
 
