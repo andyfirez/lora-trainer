@@ -26,7 +26,7 @@ export default function LoraOverviewPanel({ lora }: LoraOverviewPanelProps) {
     <Card className="space-y-4">
       <CardTitle className="text-base">Overview</CardTitle>
 
-      {lora.path_missing && (
+      {lora.path_missing && lora.status === "completed" && (
         <div className="rounded-lg bg-warning/10 border border-warning/30 text-warning px-3 py-2 text-xs flex items-start gap-2">
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <span>Artifacts not found on disk</span>
