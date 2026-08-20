@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.services.runnable.runtime import compute_elapsed_seconds
@@ -30,3 +30,15 @@ class RunnableResponse(BaseModel):
         """Attach a live elapsed-time figure while the entity is running."""
         self.elapsed_seconds = compute_elapsed_seconds(self)  # type: ignore[arg-type]
         return self
+
+
+class RunnableSampleResponse(BaseModel):
+    filename: str
+    path: str
+    url: str
+    kind: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class RunnableSamplesResponse(BaseModel):
+    samples: list[RunnableSampleResponse] = Field(default_factory=list)

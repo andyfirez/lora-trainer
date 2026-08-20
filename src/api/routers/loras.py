@@ -1,117 +1,67 @@
 """LoRA training router — create/enqueue/resume/cancel and artifact access."""
 
-from fastapi import APIRouter
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-
 from src.api.dependencies import LoraServiceDep
-from src.api.schemas.job_logs import JobLogsResponse
+from src.api.routers.runnable import RunnableRouterHooks, build_runnable_router
 from src.api.schemas.job_loss import JobLossResponse
 from src.api.schemas.loras import (
+    CancelLoraRequest,
     CreateLoraRequest,
     LoraResponse,
-    LoraSampleResponse,
-    LoraSamplesResponse,
     ReproduceLoraRequest,
 )
 from src.services.loras.paths import resolve_sample_base_dir
 
-router = APIRouter(prefix="/loras", tags=["loras"])
+router = build_runnable_router(
+    prefix="/loras",
+    tags=["loras"],
+    service_dep=LoraServiceDep,
+    response_cls=LoraResponse,
+    create_cls=CreateLoraRequest,
+    hooks=RunnableRouterHooks(
+        list_entities=lambda service: service.list_loras(),
+        get_entity=lambda service, entity_id: service.get_lora(entity_id),
+        create_entity=lambda service, body: service.create_lora(
+            name=body.name, config_yaml=body.config_yaml
+        ),
+        enqueue_entity=lambda service, entity_id: service.enqueue_lora(entity_id),
+        get_logs=lambda service, entity_id, tail: service.get_logs(entity_id, tail=tail),
+        list_samples=lambda service, entity: service.list_samples(entity),
+        sample_file_path=lambda service, entity, relative: service.sample_file_path(entity, relative),
+        output_dir=resolve_sample_base_dir,
+        to_response=lambda entity, _service: LoraResponse.model_validate(entity),
+    ),
+)
 
 
-class CancelLoraRequest(BaseModel):
-    save_checkpoint: bool = False
-
-
-def _sample_url(lora_id: int, relative: str) -> str:
-    return f"/loras/{lora_id}/sample-file/{relative.replace(chr(92), '/')}"
-
-
-@router.get("/", response_model=list[LoraResponse])
-async def list_loras(service: LoraServiceDep) -> list[LoraResponse]:
-    loras = await service.list_loras()
-    return [LoraResponse.model_validate(lora) for lora in loras]
-
-
-@router.post("/", response_model=LoraResponse, status_code=201)
-async def create_lora(body: CreateLoraRequest, service: LoraServiceDep) -> LoraResponse:
-    lora = await service.create_lora(name=body.name, config_yaml=body.config_yaml)
+@router.post("/{entity_id}/resume", response_model=LoraResponse)
+async def resume_lora(entity_id: int, service: LoraServiceDep) -> LoraResponse:
+    lora = await service.resume_lora(entity_id)
     return LoraResponse.model_validate(lora)
 
 
-@router.get("/{lora_id}", response_model=LoraResponse)
-async def get_lora(lora_id: int, service: LoraServiceDep) -> LoraResponse:
-    lora = await service.get_lora(lora_id)
+@router.post("/{entity_id}/cancel", response_model=LoraResponse)
+async def cancel_lora(entity_id: int, body: CancelLoraRequest, service: LoraServiceDep) -> LoraResponse:
+    lora = await service.cancel_lora(entity_id, save_checkpoint=body.save_checkpoint)
     return LoraResponse.model_validate(lora)
 
 
-@router.post("/{lora_id}/enqueue", response_model=LoraResponse)
-async def enqueue_lora(lora_id: int, service: LoraServiceDep) -> LoraResponse:
-    lora = await service.enqueue_lora(lora_id)
-    return LoraResponse.model_validate(lora)
-
-
-@router.post("/{lora_id}/resume", response_model=LoraResponse)
-async def resume_lora(lora_id: int, service: LoraServiceDep) -> LoraResponse:
-    lora = await service.resume_lora(lora_id)
-    return LoraResponse.model_validate(lora)
-
-
-@router.post("/{lora_id}/cancel", response_model=LoraResponse)
-async def cancel_lora(lora_id: int, body: CancelLoraRequest, service: LoraServiceDep) -> LoraResponse:
-    lora = await service.cancel_lora(lora_id, save_checkpoint=body.save_checkpoint)
-    return LoraResponse.model_validate(lora)
-
-
-@router.get("/{lora_id}/logs", response_model=JobLogsResponse)
-async def get_lora_logs(lora_id: int, service: LoraServiceDep, tail: int = 500) -> JobLogsResponse:
-    lines = await service.get_logs(lora_id, tail=tail)
-    return JobLogsResponse(lines=lines)
-
-
-@router.get("/{lora_id}/loss", response_model=JobLossResponse)
+@router.get("/{entity_id}/loss", response_model=JobLossResponse)
 async def get_lora_loss(
-    lora_id: int,
+    entity_id: int,
     service: LoraServiceDep,
     key: str = "loss/loss",
     limit: int = 2000,
     since_step: int | None = None,
     stride: int = 1,
 ) -> JobLossResponse:
-    return await service.get_loss(lora_id, key=key, limit=limit, since_step=since_step, stride=stride)
+    return await service.get_loss(entity_id, key=key, limit=limit, since_step=since_step, stride=stride)
 
 
-@router.get("/{lora_id}/samples", response_model=LoraSamplesResponse)
-async def get_lora_samples(lora_id: int, service: LoraServiceDep) -> LoraSamplesResponse:
-    lora = await service.get_lora(lora_id)
-    output_dir = resolve_sample_base_dir(lora)
-    samples = []
-    for sample, kind, metadata in service.list_samples(lora):
-        relative = sample.relative_to(output_dir.resolve()).as_posix()
-        samples.append(
-            LoraSampleResponse(
-                filename=sample.name,
-                path=str(sample),
-                url=_sample_url(lora_id, relative),
-                kind=kind,  # type: ignore[arg-type]
-                metadata=metadata,
-            )
-        )
-    return LoraSamplesResponse(samples=samples)
-
-
-@router.get("/{lora_id}/sample-file/{file_path:path}")
-async def get_lora_sample_file(lora_id: int, file_path: str, service: LoraServiceDep) -> FileResponse:
-    lora = await service.get_lora(lora_id)
-    target = service.sample_file_path(lora, file_path)
-    return FileResponse(target)
-
-
-@router.post("/{lora_id}/reproduce", response_model=LoraResponse, status_code=201)
-async def reproduce_lora(lora_id: int, body: ReproduceLoraRequest, service: LoraServiceDep) -> LoraResponse:
-    source = await service.get_lora(lora_id)
+@router.post("/{entity_id}/reproduce", response_model=LoraResponse, status_code=201)
+async def reproduce_lora(entity_id: int, body: ReproduceLoraRequest, service: LoraServiceDep) -> LoraResponse:
+    source = await service.get_lora(entity_id)
     name = body.name or f"{source.name}-copy"
-    lora = await service.reproduce(lora_id, name=name)
+    lora = await service.reproduce(entity_id, name=name)
     if body.enqueue and lora.id is not None:
         lora = await service.enqueue_lora(lora.id)
     return LoraResponse.model_validate(lora)

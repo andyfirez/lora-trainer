@@ -54,7 +54,7 @@ class LoraService:
     async def list_loras(self) -> Sequence[Lora]:
         StoragePaths.ensure_root(StorageKind.LORA)
         await self.sync_discovered_loras()
-        loras = await self._repo.list_all()
+        loras = await self._repo.list_ordered(Lora.created_at.desc())
         return [lora for lora in loras if self._is_visible(lora)]
 
     async def sync_discovered_loras(self) -> None:
@@ -87,7 +87,7 @@ class LoraService:
         discovered = LoraDiscoveryService().discover_lora_work_dirs()
         if not discovered:
             return
-        all_loras = list(await self._repo.list_all())
+        all_loras = list(await self._repo.list_ordered())
         existing_paths: set[str] = {lora.relative_path for lora in all_loras if lora.relative_path}
         stale_loras = [lora for lora in all_loras if lora.relative_path and not lora_artifacts_exist(lora)]
         changed = False

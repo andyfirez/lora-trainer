@@ -36,7 +36,7 @@ class SamplingService:
         self._repo = sampling_repo
 
     async def list_samplings(self) -> Sequence[Sampling]:
-        return await self._repo.list_all()
+        return await self._repo.list_ordered(Sampling.created_at.desc())
 
     async def get_sampling(self, sampling_id: int) -> Sampling:
         sampling = await self._repo.get_by_id(sampling_id)

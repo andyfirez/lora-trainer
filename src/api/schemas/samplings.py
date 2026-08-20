@@ -19,15 +19,3 @@ class CreateSamplingRequest(BaseModel):
     name: str
     config_yaml: str
     lora_paths: Optional[list[str]] = None
-
-
-class SamplingSampleResponse(BaseModel):
-    filename: str
-    path: str
-    url: str
-    kind: Optional[str] = None
-    metadata: dict = Field(default_factory=dict)
-
-
-class SamplingSamplesResponse(BaseModel):
-    samples: list[SamplingSampleResponse] = Field(default_factory=list)

@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 
 from src.api.schemas.runnable import RunnableResponse
 from src.db.tables.runnable_mixin import RunnableStatus
@@ -71,21 +71,13 @@ class LoraResponse(RunnableResponse):
         return data
 
 
-class LoraSampleResponse(BaseModel):
-    filename: str
-    path: str
-    url: str
-    kind: Optional[str] = None
-    metadata: dict = Field(default_factory=dict)
-
-
-class LoraSamplesResponse(BaseModel):
-    samples: list[LoraSampleResponse] = Field(default_factory=list)
-
-
 class CreateLoraRequest(BaseModel):
     name: str
     config_yaml: str
+
+
+class CancelLoraRequest(BaseModel):
+    save_checkpoint: bool = False
 
 
 class ReproduceLoraRequest(BaseModel):

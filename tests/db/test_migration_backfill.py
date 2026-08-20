@@ -156,7 +156,7 @@ async def test_backfilled_lora_status_reads_through_orm(tmp_path) -> None:
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path.as_posix()}")
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
-        loras = await LoraRepository(session).list_all()
+        loras = await LoraRepository(session).list_ordered()
         statuses = {lora.name: lora.status for lora in loras}
     await engine.dispose()
 
