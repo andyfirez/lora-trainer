@@ -2,4 +2,5 @@
 
 
 class PickCancelledError(Exception):
-    pass
+    def __init__(self, message: str = "File picker was cancelled") -> None:
+        super().__init__(message)

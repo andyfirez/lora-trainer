@@ -24,6 +24,7 @@ from src.services.loras.paths import (
 )
 from src.services.loras.relocation import find_relocated_lora
 from src.services.runnable import queue, runtime
+from src.services.runnable.artifacts import list_runnable_samples, read_runnable_logs
 from src.services.runnable.exceptions import (
     RunnableAlreadyQueuedError,
     RunnableNotCancellableError,
@@ -32,10 +33,7 @@ from src.services.runnable.exceptions import (
     RunnableValidationError,
 )
 from src.services.runnable.loss_log_reader import read_loss_log
-from src.services.runnable.samples import (
-    list_samples_for_output_dir,
-    resolve_safe_sample_file,
-)
+from src.services.runnable.samples import resolve_safe_sample_file
 from src.services.runnable.schemas import JobLossResponse
 from src.settings.app_settings import settings
 from src.storage.config_paths import resolve_config_base_model
@@ -43,7 +41,6 @@ from src.storage.paths import StorageKind, StoragePaths
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
 from src.trainer.sdxl.checkpoint_state import find_latest_checkpoint, load_resume_state
-from src.trainer.training_log import JobTrainingLogger
 
 
 class LoraService:
@@ -56,9 +53,6 @@ class LoraService:
         await self.sync_discovered_loras()
         loras = await self._repo.list_ordered(Lora.created_at.desc())
         return [lora for lora in loras if self._is_visible(lora)]
-
-    async def sync_discovered_loras(self) -> None:
-        await self._sync_discovered_loras()
 
     @staticmethod
     def _is_visible(lora: Lora) -> bool:
@@ -83,7 +77,7 @@ class LoraService:
             raise LoraNotFoundError(lora_id)
         return lora
 
-    async def _sync_discovered_loras(self) -> None:
+    async def sync_discovered_loras(self) -> None:
         discovered = LoraDiscoveryService().discover_lora_work_dirs()
         if not discovered:
             return
@@ -262,9 +256,7 @@ class LoraService:
 
     async def get_logs(self, lora_id: int, tail: int = 500) -> list[str]:
         lora = await self.get_lora(lora_id)
-        if not lora.log_path:
-            return []
-        return JobTrainingLogger.read_tail(Path(lora.log_path), lines=tail)
+        return read_runnable_logs(lora, tail)
 
     async def get_loss(
         self,
@@ -283,9 +275,7 @@ class LoraService:
         return read_loss_log(log_path, key=key, limit=limit, since_step=since_step, stride=stride)
 
     def list_samples(self, lora: Lora) -> list[tuple[Path, str, dict]]:
-        if not lora.output_path:
-            return []
-        return list_samples_for_output_dir(Path(lora.output_path))
+        return list_runnable_samples(lora)
 
     def sample_file_path(self, lora: Lora, relative_path: str) -> Path:
         target = resolve_safe_sample_file(resolve_sample_base_dir(lora), relative_path)

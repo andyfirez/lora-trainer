@@ -9,6 +9,7 @@ from src.db.tables.runnable_mixin import RunnableStatus
 from src.db.tables.sampling import Sampling
 from src.sampler.config import SamplingConfig
 from src.services.runnable import queue, runtime
+from src.services.runnable.artifacts import list_runnable_samples, read_runnable_logs
 from src.services.runnable.exceptions import (
     RunnableAlreadyQueuedError,
     RunnableNotCancellableError,
@@ -17,10 +18,7 @@ from src.services.runnable.exceptions import (
     RunnableValidationError,
 )
 from src.services.runnable.handlers.sampling import SamplingHandler
-from src.services.runnable.samples import (
-    list_samples_for_output_dir,
-    resolve_safe_sample_file,
-)
+from src.services.runnable.samples import resolve_safe_sample_file
 from src.services.sampling.lora_paths import (
     prepare_sampling_config_lora_paths,
     resolve_lora_paths_from_sampling_config,
@@ -107,21 +105,15 @@ class SamplingService:
         return sampling
 
     async def get_logs(self, sampling_id: int, tail: int = 500) -> list[str]:
-        from src.trainer.training_log import JobTrainingLogger
-
         sampling = await self.get_sampling(sampling_id)
-        if not sampling.log_path:
-            return []
-        return JobTrainingLogger.read_tail(Path(sampling.log_path), lines=tail)
+        return read_runnable_logs(sampling, tail)
 
     def get_lora_paths(self, sampling: Sampling) -> list[str]:
         data = yaml.safe_load(sampling.lora_paths_yaml or "[]") or []
         return [str(path) for path in data]
 
     def list_samples(self, sampling: Sampling) -> list[tuple[Path, str, dict]]:
-        if not sampling.output_path:
-            return []
-        return list_samples_for_output_dir(Path(sampling.output_path))
+        return list_runnable_samples(sampling)
 
     def get_sweep_manifest(self, sampling: Sampling):
         if not sampling.output_path:

@@ -6,9 +6,7 @@ from pathlib import Path
 
 from src.settings.app_settings import settings
 from src.settings.models import (
-    DatabaseSettings,
     GpuDefaultsSettings,
-    ServerSettings,
     StorageSettings,
     TrainingSettings,
 )
@@ -38,13 +36,7 @@ def _write_toml(path: Path, data: dict[str, object]) -> None:
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
-def _current_config_data() -> dict[str, dict[str, object]]:
-    path = get_config_path()
-    if path.is_file():
-        with path.open("rb") as handle:
-            loaded = tomllib.load(handle)
-        return {key: dict(value) for key, value in loaded.items() if isinstance(value, dict)}
-
+def _section_defaults() -> dict[str, dict[str, object]]:
     return {
         "server": settings.server.model_dump(),
         "database": settings.database.model_dump(),
@@ -54,28 +46,35 @@ def _current_config_data() -> dict[str, dict[str, object]]:
     }
 
 
+def _ensure_all_sections(data: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
+    for section, values in _section_defaults().items():
+        if section not in data:
+            data[section] = values
+    return data
+
+
+def _current_config_data() -> dict[str, dict[str, object]]:
+    path = get_config_path()
+    if path.is_file():
+        with path.open("rb") as handle:
+            loaded = tomllib.load(handle)
+        return {key: dict(value) for key, value in loaded.items() if isinstance(value, dict)}
+
+    return _section_defaults()
+
+
 def persist_training_settings(
     *,
     max_concurrent_jobs: int | None = None,
     worker_poll_interval_seconds: int | None = None,
 ) -> None:
-    data = _current_config_data()
+    data = _ensure_all_sections(_current_config_data())
     training = dict(data.get("training", settings.training.model_dump()))
     if max_concurrent_jobs is not None:
         training["max_concurrent_jobs"] = max_concurrent_jobs
     if worker_poll_interval_seconds is not None:
         training["worker_poll_interval_seconds"] = worker_poll_interval_seconds
     data["training"] = training
-
-    if "server" not in data:
-        data["server"] = ServerSettings.model_validate(settings.server).model_dump()
-    if "database" not in data:
-        data["database"] = DatabaseSettings.model_validate(settings.database).model_dump()
-    if "storage" not in data:
-        data["storage"] = StorageSettings.model_validate(settings.storage).model_dump()
-    if "gpu_defaults" not in data:
-        data["gpu_defaults"] = GpuDefaultsSettings.model_validate(settings.gpu_defaults).model_dump()
-
     _write_toml(get_config_path(), data)
 
 
@@ -87,7 +86,7 @@ def persist_gpu_defaults(
     vae_dtype: str | None = None,
     sample_vae_tiling: bool | None = None,
 ) -> None:
-    data = _current_config_data()
+    data = _ensure_all_sections(_current_config_data())
     gpu_defaults = dict(data.get("gpu_defaults", settings.gpu_defaults.model_dump()))
     if tf32 is not None:
         gpu_defaults["tf32"] = tf32
@@ -100,16 +99,6 @@ def persist_gpu_defaults(
     if sample_vae_tiling is not None:
         gpu_defaults["sample_vae_tiling"] = sample_vae_tiling
     data["gpu_defaults"] = gpu_defaults
-
-    if "server" not in data:
-        data["server"] = ServerSettings.model_validate(settings.server).model_dump()
-    if "database" not in data:
-        data["database"] = DatabaseSettings.model_validate(settings.database).model_dump()
-    if "training" not in data:
-        data["training"] = TrainingSettings.model_validate(settings.training).model_dump()
-    if "storage" not in data:
-        data["storage"] = StorageSettings.model_validate(settings.storage).model_dump()
-
     _write_toml(get_config_path(), data)
 
 
@@ -119,7 +108,7 @@ def persist_storage_settings(
     base_models_root: str | None = None,
     lora_root: str | None = None,
 ) -> None:
-    data = _current_config_data()
+    data = _ensure_all_sections(_current_config_data())
     storage = dict(data.get("storage", settings.storage.model_dump()))
     if datasets_root is not None:
         storage["datasets_root"] = datasets_root
@@ -128,16 +117,6 @@ def persist_storage_settings(
     if lora_root is not None:
         storage["lora_root"] = lora_root
     data["storage"] = storage
-
-    if "server" not in data:
-        data["server"] = ServerSettings.model_validate(settings.server).model_dump()
-    if "database" not in data:
-        data["database"] = DatabaseSettings.model_validate(settings.database).model_dump()
-    if "training" not in data:
-        data["training"] = TrainingSettings.model_validate(settings.training).model_dump()
-    if "gpu_defaults" not in data:
-        data["gpu_defaults"] = GpuDefaultsSettings.model_validate(settings.gpu_defaults).model_dump()
-
     _write_toml(get_config_path(), data)
 
 

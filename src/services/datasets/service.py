@@ -1,5 +1,6 @@
 """Business logic for datasets."""
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -41,7 +42,7 @@ from src.services.datasets.exceptions import (
 from src.services.datasets.formats import IMAGE_EXTENSIONS
 from src.services.datasets.hashing import file_sha256
 from src.services.datasets.import_dataset import copy_dataset_import
-from src.services.datasets.paths import dataset_image_dir, dataset_image_dir_str
+from src.services.datasets.paths import dataset_image_dir
 from src.services.datasets.preprocess import (
     BucketPreprocessConfig,
     CropMeta,
@@ -334,7 +335,7 @@ class DatasetsService:
 
     def _invalidate_te_cache(self, dataset: Dataset, filename: str) -> None:
         invalidate_te_cache_for_image(
-            dataset_image_dir_str(dataset),
+            dataset_image_dir(dataset),
             filename,
             dataset.target_resolution,
         )
@@ -372,26 +373,13 @@ class DatasetsService:
         filenames: list[str] | None = None,
         caption_extension: str = DEFAULT_CAPTION_EXTENSION,
     ) -> int:
-        normalized_tag = tag.strip()
-        if not normalized_tag:
-            return 0
-        image_dir = Path(dataset_image_dir(dataset))
-        targets = filenames if filenames else list_image_filenames(image_dir)
-        updated = 0
-        for filename in targets:
-            try:
-                safe_filename(filename)
-                image_path(image_dir, filename)
-            except (ValueError, FileNotFoundError):
-                continue
-            tags = read_tags(image_dir, filename, caption_extension)
+        def add_tag(tags: list[str], normalized_tag: str) -> bool:
             if normalized_tag in tags:
-                continue
+                return False
             tags.append(normalized_tag)
-            write_tags(image_dir, filename, tags, caption_extension)
-            self._invalidate_te_cache(dataset, filename)
-            updated += 1
-        return updated
+            return True
+
+        return self._bulk_mutate_tags(dataset, tag, filenames, caption_extension, add_tag)
 
     def bulk_remove_tag(
         self,
@@ -399,6 +387,22 @@ class DatasetsService:
         tag: str,
         filenames: list[str] | None = None,
         caption_extension: str = DEFAULT_CAPTION_EXTENSION,
+    ) -> int:
+        def remove_tag(tags: list[str], normalized_tag: str) -> bool:
+            if normalized_tag not in tags:
+                return False
+            tags[:] = [t for t in tags if t != normalized_tag]
+            return True
+
+        return self._bulk_mutate_tags(dataset, tag, filenames, caption_extension, remove_tag)
+
+    def _bulk_mutate_tags(
+        self,
+        dataset: Dataset,
+        tag: str,
+        filenames: list[str] | None,
+        caption_extension: str,
+        mutate: Callable[[list[str], str], bool],
     ) -> int:
         normalized_tag = tag.strip()
         if not normalized_tag:
@@ -413,14 +417,9 @@ class DatasetsService:
             except (ValueError, FileNotFoundError):
                 continue
             tags = read_tags(image_dir, filename, caption_extension)
-            if normalized_tag not in tags:
+            if not mutate(tags, normalized_tag):
                 continue
-            write_tags(
-                image_dir,
-                filename,
-                [t for t in tags if t != normalized_tag],
-                caption_extension,
-            )
+            write_tags(image_dir, filename, tags, caption_extension)
             self._invalidate_te_cache(dataset, filename)
             updated += 1
         return updated
@@ -457,7 +456,7 @@ class DatasetsService:
     def _resolve_prepared_path(self, dataset: Dataset, filename: str) -> Path:
         if dataset.target_resolution is None:
             raise DatasetTargetResolutionNotSetError(dataset.id)  # type: ignore[arg-type]
-        prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), dataset.target_resolution)
+        prepared_dir = prepared_dir_path(dataset_image_dir(dataset), dataset.target_resolution)
         path = resolve_prepared_path(prepared_dir, filename)
         if path is None:
             raise DatasetImageNotFoundError(filename)
@@ -518,7 +517,7 @@ class DatasetsService:
     async def _invalidate_prepared_outputs(self, dataset: Dataset) -> None:
         if dataset.target_resolution is None:
             return
-        prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), dataset.target_resolution)
+        prepared_dir = prepared_dir_path(dataset_image_dir(dataset), dataset.target_resolution)
         if not prepared_dir.is_dir():
             return
         for path in prepared_dir.iterdir():
@@ -632,7 +631,7 @@ class DatasetsService:
         if crop is None:
             raise DatasetPreprocessError(f"No crop defined for {filename}")
         path = self._resolve_image_path(dataset, filename)
-        prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), bucket_config.resolution)
+        prepared_dir = prepared_dir_path(dataset_image_dir(dataset), bucket_config.resolution)
         stored = self._stored_crop_record(crop)
         prepared_path, assignment = bake_image_to_prepared(
             source_path=path,
@@ -822,7 +821,7 @@ class DatasetsService:
     def _remove_prepared_for_image(self, dataset: Dataset, filename: str) -> None:
         if dataset.target_resolution is None:
             return
-        prepared_dir = prepared_dir_path(dataset_image_dir_str(dataset), dataset.target_resolution)
+        prepared_dir = prepared_dir_path(dataset_image_dir(dataset), dataset.target_resolution)
         prepared_path = resolve_prepared_path(prepared_dir, filename)
         if prepared_path is None or not prepared_path.is_file():
             return

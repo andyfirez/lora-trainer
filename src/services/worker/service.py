@@ -146,7 +146,7 @@ class RunnableWorker:
     async def _mark_spawn_failed(self, kind: RunnableKind, entity_id: int, error_message: str) -> None:
         async with session_factory() as session:
             entity = await get_by_kind(session, kind, entity_id)
-            if entity is not None and entity.status != RunnableStatus.RUNNING:
+            if entity is not None and entity.status == RunnableStatus.QUEUED:
                 runtime.mark_finished(entity, RunnableStatus.FAILED, error_message=error_message)
                 session.add(entity)
             await session.commit()
