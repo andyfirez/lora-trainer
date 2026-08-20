@@ -24,6 +24,7 @@ from src.services.loras.exceptions import (
     LoraNotFoundError,
     LoraReproduceError,
 )
+from src.services.png_info.exceptions import InvalidImageError
 from src.services.runnable.exceptions import (
     RunnableAlreadyQueuedError,
     RunnableNotCancellableError,
@@ -35,6 +36,10 @@ from src.services.runnable.exceptions import (
 from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
+)
+from src.services.settings.exceptions import (
+    EmptySettingsPatchError,
+    InvalidGpuDefaultsError,
 )
 from src.services.tagging.exceptions import TaggingAlreadyRunningError
 
@@ -61,6 +66,9 @@ STATUS_CASES: list[tuple[AppError, int]] = [
     (DatasetTargetResolutionNotSetError(1), 422),
     (DatasetPreprocessError("failed"), 422),
     (TaggingAlreadyRunningError(1), 409),
+    (InvalidImageError(), 422),
+    (EmptySettingsPatchError(), 422),
+    (InvalidGpuDefaultsError("bad gpu"), 422),
 ]
 
 

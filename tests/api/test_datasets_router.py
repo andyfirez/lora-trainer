@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from src.api.dependencies import get_dataset_by_id
 from src.api.routers.datasets import (
+    autotag_dataset,
     create_dataset,
+    get_autotag_status,
     get_dataset,
     get_duplicates,
     import_dataset,
@@ -14,6 +16,7 @@ from src.api.routers.datasets import (
     update_dataset,
 )
 from src.api.schemas.datasets import (
+    AutotagRequest,
     DatasetCreate,
     DatasetImport,
     DatasetResponse,
@@ -21,6 +24,7 @@ from src.api.schemas.datasets import (
 )
 from src.db.tables.dataset import Dataset
 from src.services.datasets.duplicates import DuplicateScanResult
+from src.services.tagging.manager import TaggingStatus, TaggingTaskState
 
 
 def _dataset(*, name: str = "demo", relative_path: str = "images") -> Dataset:
@@ -73,6 +77,7 @@ async def test_create_get_import_update_map_orm_to_response(storage_roots) -> No
     )
     updated = await update_dataset(1, DatasetUpdate(description="x"), service)
 
+    service.update_dataset.assert_awaited_once_with(1, description="x")
     for response in (created, fetched, imported, updated):
         assert isinstance(response, DatasetResponse)
         assert response.name == "demo"
@@ -104,3 +109,21 @@ async def test_get_duplicates_uses_injected_dataset() -> None:
     service.get_dataset.assert_not_called()
     service.scan_duplicates.assert_called_once_with(dataset)
     assert result.duplicate_count == 2
+
+
+@pytest.mark.asyncio
+async def test_autotag_endpoints_delegate_to_service() -> None:
+    dataset = _dataset()
+    running = TaggingTaskState(status=TaggingStatus.RUNNING, current=1, total=2, message="go")
+    idle = TaggingTaskState(status=TaggingStatus.IDLE, current=0, total=0, message="")
+    service = MagicMock()
+    service.start_autotag.return_value = running
+    service.get_autotag_status.return_value = idle
+
+    started = await autotag_dataset(AutotagRequest(threshold=0.5), dataset, service)
+    status = await get_autotag_status(dataset, service)
+
+    service.start_autotag.assert_called_once()
+    assert started.status == "running"
+    assert started.current == 1
+    assert status.status == "idle"

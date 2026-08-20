@@ -41,6 +41,7 @@ async def test_lora_repo_round_trips_fields(session: AsyncSession, tmp_path) -> 
 @pytest.mark.asyncio
 async def test_session_factory_registers_all_tables_for_subprocess_metadata() -> None:
     register_all_tables()
+    register_all_tables()
     table_names = set(SQLModel.metadata.tables.keys())
     assert "loras" in table_names
     assert "samplings" in table_names

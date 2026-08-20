@@ -28,10 +28,8 @@ from src.api.schemas.datasets import (
     TagStatResponse,
     TagStatsResponse,
 )
-from src.services.datasets.paths import dataset_image_dir
-from src.services.tagging.manager import tagging_task_manager
+from src.services.tagging.manager import TaggingTaskState
 from src.storage.paths import StoragePaths
-from src.tagger.config import TaggingConfig
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
 
@@ -89,28 +87,7 @@ async def get_dataset(dataset: DatasetDep) -> DatasetResponse:
 
 @router.patch("/{dataset_id}", response_model=DatasetResponse)
 async def update_dataset(dataset_id: int, body: DatasetUpdate, service: DatasetsServiceDep) -> DatasetResponse:
-    fields_set = body.model_fields_set
-    bucket_fields = {
-        "enable_bucket",
-        "bucket_reso_steps",
-        "min_bucket_reso",
-        "max_bucket_reso",
-        "bucket_no_upscale",
-    }
-    dataset = await service.update_dataset(
-        dataset_id,
-        name=body.name,
-        relative_path=body.relative_path,
-        description=body.description,
-        target_resolution=body.target_resolution,
-        update_target_resolution="target_resolution" in fields_set,
-        enable_bucket=body.enable_bucket,
-        bucket_reso_steps=body.bucket_reso_steps,
-        min_bucket_reso=body.min_bucket_reso,
-        max_bucket_reso=body.max_bucket_reso,
-        bucket_no_upscale=body.bucket_no_upscale,
-        update_bucket_settings=bool(fields_set & bucket_fields),
-    )
+    dataset = await service.update_dataset(dataset_id, **body.model_dump(exclude_unset=True))
     return DatasetResponse.model_validate(dataset)
 
 
@@ -262,27 +239,7 @@ async def bulk_remove_tag(
     return BulkTagResponse(updated_count=updated)
 
 
-@router.post("/{dataset_id}/autotag", response_model=AutotagStatusResponse, status_code=202)
-async def autotag_dataset(
-    dataset_id: int,
-    body: AutotagRequest,
-    dataset: DatasetDep,
-) -> AutotagStatusResponse:
-    config = TaggingConfig(
-        dataset_id=dataset_id,
-        mode=body.mode,
-        threshold=body.threshold,
-        model=body.model,
-        caption_extension=body.caption_extension,
-        strip_rating=body.strip_rating,
-        filenames=body.filenames or [],
-    )
-    state = tagging_task_manager.start(
-        dataset_id,
-        image_dir=dataset_image_dir(dataset),
-        config=config,
-        target_resolution=dataset.target_resolution,
-    )
+def _autotag_status_response(state: TaggingTaskState) -> AutotagStatusResponse:
     return AutotagStatusResponse(
         status=state.status.value,
         current=state.current,
@@ -290,20 +247,21 @@ async def autotag_dataset(
         message=state.message,
         error=state.error,
     )
+
+
+@router.post("/{dataset_id}/autotag", response_model=AutotagStatusResponse, status_code=202)
+async def autotag_dataset(
+    body: AutotagRequest,
+    dataset: DatasetDep,
+    service: DatasetsServiceDep,
+) -> AutotagStatusResponse:
+    state = service.start_autotag(dataset, **body.model_dump())
+    return _autotag_status_response(state)
 
 
 @router.get("/{dataset_id}/autotag/status", response_model=AutotagStatusResponse)
-async def get_autotag_status(dataset: DatasetDep) -> AutotagStatusResponse:
-    state = tagging_task_manager.get_status(dataset.id)
-    if state is None:
-        return AutotagStatusResponse(status="idle", current=0, total=0, message="")
-    return AutotagStatusResponse(
-        status=state.status.value,
-        current=state.current,
-        total=state.total,
-        message=state.message,
-        error=state.error,
-    )
+async def get_autotag_status(dataset: DatasetDep, service: DatasetsServiceDep) -> AutotagStatusResponse:
+    return _autotag_status_response(service.get_autotag_status(dataset))
 
 
 @router.get("/{dataset_id}/preprocess/status", response_model=PreprocessStatusResponse)

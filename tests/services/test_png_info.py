@@ -6,7 +6,7 @@ import io
 
 import pytest
 from PIL import Image, PngImagePlugin
-
+from src.services.png_info.exceptions import InvalidImageError
 from src.services.png_info.parser import parse_generation_parameters
 from src.services.png_info.reader import read_info_from_image
 from src.services.png_info.service import inspect_image_bytes
@@ -85,3 +85,8 @@ def test_inspect_image_bytes_without_metadata() -> None:
 def test_inspect_image_bytes_roundtrip(geninfo: str) -> None:
     result = inspect_image_bytes(_png_with_parameters(geninfo))
     assert result.parameters["Sampler"] == "Euler a"
+
+
+def test_inspect_image_bytes_rejects_invalid_payload() -> None:
+    with pytest.raises(InvalidImageError):
+        inspect_image_bytes(b"not-an-image")

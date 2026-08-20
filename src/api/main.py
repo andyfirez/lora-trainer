@@ -1,14 +1,14 @@
 """FastAPI application entry point."""
 
 import logging
-from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src import __version__
 from src.api.exception_handlers import register_exception_handlers
+from src.api.lifespan import create_lifespan
 from src.api.routers import (
     datasets,
     files,
@@ -20,27 +20,11 @@ from src.api.routers import (
 from src.api.routers import (
     settings as settings_router,
 )
-from src.db.session import run_migrations
-from src.services.worker.service import RunnableWorker
 from src.settings.app_settings import settings
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    logger.info("Starting up — running database migrations")
-    await run_migrations()
-    worker = RunnableWorker(echo_subprocess_output=False)
-    await worker.start()
-    app.state.runnable_worker = worker
-    yield
-    await worker.stop()
-    logger.info("Shutting down")
-
-
-app = FastAPI(title="LoRA Trainer API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="LoRA Trainer API", version=__version__, lifespan=create_lifespan())
 
 app.add_middleware(
     CORSMiddleware,

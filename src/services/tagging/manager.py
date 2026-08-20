@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class TaggingStatus(StrEnum):
+    IDLE = "idle"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"

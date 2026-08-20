@@ -70,7 +70,20 @@ from src.services.datasets.reconcile import (
 from src.services.datasets.relocation import find_relocated_dataset
 from src.services.datasets.training_cache import invalidate_te_cache_for_image
 from src.services.storage.browse import StorageBrowseService
+from src.services.tagging.manager import TaggingStatus, TaggingTaskState
+from src.services.tagging.service import TaggingService
 from src.storage.paths import StorageKind, StoragePaths
+from src.tagger.config import TaggingConfig
+
+_BUCKET_FIELDS = frozenset(
+    {
+        "enable_bucket",
+        "bucket_reso_steps",
+        "min_bucket_reso",
+        "max_bucket_reso",
+        "bucket_no_upscale",
+    }
+)
 
 
 def _slug_from_relative_path(relative_path: str) -> str:
@@ -83,9 +96,11 @@ class DatasetsService:
         self,
         dataset_repo: DatasetRepository,
         crop_repo: DatasetImageCropRepository,
+        tagging_service: TaggingService | None = None,
     ) -> None:
         self._repo = dataset_repo
         self._crop_repo = crop_repo
+        self._tagging = tagging_service or TaggingService()
 
     async def list_datasets(self) -> Sequence[Dataset]:
         StoragePaths.ensure_root(StorageKind.DATASETS)
@@ -192,29 +207,16 @@ class DatasetsService:
         copy_dataset_import(Path(source_dir), validated)
         return await self.create_dataset(name=name, relative_path=validated, description=description)
 
-    async def update_dataset(
-        self,
-        dataset_id: int,
-        name: Optional[str],
-        relative_path: Optional[str],
-        description: Optional[str],
-        target_resolution: Optional[int] = None,
-        *,
-        update_target_resolution: bool = False,
-        enable_bucket: Optional[bool] = None,
-        bucket_reso_steps: Optional[int] = None,
-        min_bucket_reso: Optional[int] = None,
-        max_bucket_reso: Optional[int] = None,
-        bucket_no_upscale: Optional[bool] = None,
-        update_bucket_settings: bool = False,
-    ) -> Dataset:
+    async def update_dataset(self, dataset_id: int, **fields: object) -> Dataset:
         dataset = await self.get_dataset(dataset_id)
-        if name is not None and name != dataset.name:
+        name = fields.get("name")
+        if isinstance(name, str) and name != dataset.name:
             existing = await self._repo.get_by_name(name)
             if existing is not None:
                 raise DatasetNameConflictError(name)
             dataset.name = name
-        if relative_path is not None:
+        relative_path = fields.get("relative_path")
+        if isinstance(relative_path, str):
             normalized = StoragePaths.normalize_input_path(StorageKind.DATASETS, relative_path)
             validated = StoragePaths.validate_relative_path(StorageKind.DATASETS, normalized)
             if not StoragePaths.dataset_dir_exists(validated):
@@ -223,31 +225,39 @@ class DatasetsService:
                 dataset.relative_path = validated
                 dataset.preprocess_ready = False
                 await self._crop_repo.delete_by_dataset(dataset_id)
-        if description is not None:
-            dataset.description = description
-        if update_target_resolution:
+        if "description" in fields and fields["description"] is not None:
+            dataset.description = str(fields["description"])
+        if "target_resolution" in fields:
+            target_resolution = fields["target_resolution"]
             if target_resolution is not None:
-                validate_target_resolution(target_resolution)
+                validate_target_resolution(int(target_resolution))
             if target_resolution != dataset.target_resolution:
-                dataset.target_resolution = target_resolution
+                dataset.target_resolution = (
+                    int(target_resolution) if target_resolution is not None else None
+                )
                 dataset.preprocess_ready = False
                 await self._crop_repo.delete_by_dataset(dataset_id)
-        if update_bucket_settings:
+        if fields.keys() & _BUCKET_FIELDS:
             bucket_changed = False
+            enable_bucket = fields.get("enable_bucket")
             if enable_bucket is not None and enable_bucket != dataset.enable_bucket:
-                dataset.enable_bucket = enable_bucket
+                dataset.enable_bucket = bool(enable_bucket)
                 bucket_changed = True
+            bucket_reso_steps = fields.get("bucket_reso_steps")
             if bucket_reso_steps is not None and bucket_reso_steps != dataset.bucket_reso_steps:
-                dataset.bucket_reso_steps = bucket_reso_steps
+                dataset.bucket_reso_steps = int(bucket_reso_steps)
                 bucket_changed = True
+            min_bucket_reso = fields.get("min_bucket_reso")
             if min_bucket_reso is not None and min_bucket_reso != dataset.min_bucket_reso:
-                dataset.min_bucket_reso = min_bucket_reso
+                dataset.min_bucket_reso = int(min_bucket_reso)
                 bucket_changed = True
+            max_bucket_reso = fields.get("max_bucket_reso")
             if max_bucket_reso is not None and max_bucket_reso != dataset.max_bucket_reso:
-                dataset.max_bucket_reso = max_bucket_reso
+                dataset.max_bucket_reso = int(max_bucket_reso)
                 bucket_changed = True
+            bucket_no_upscale = fields.get("bucket_no_upscale")
             if bucket_no_upscale is not None and bucket_no_upscale != dataset.bucket_no_upscale:
-                dataset.bucket_no_upscale = bucket_no_upscale
+                dataset.bucket_no_upscale = bool(bucket_no_upscale)
                 bucket_changed = True
             if bucket_changed:
                 dataset.preprocess_ready = False
@@ -261,6 +271,41 @@ class DatasetsService:
     async def delete_dataset(self, dataset_id: int) -> None:
         dataset = await self.get_dataset(dataset_id)
         await self._repo.delete(dataset)
+
+    def start_autotag(
+        self,
+        dataset: Dataset,
+        *,
+        mode: str = "if_empty",
+        threshold: float = 0.35,
+        model: str = "wd-v1-4-convnextv2-tagger-v2",
+        caption_extension: str = ".txt",
+        strip_rating: bool = True,
+        filenames: list[str] | None = None,
+    ) -> TaggingTaskState:
+        if dataset.id is None:
+            raise DatasetNotFoundError(0)
+        config = TaggingConfig(
+            dataset_id=dataset.id,
+            mode=mode,
+            threshold=threshold,
+            model=model,
+            caption_extension=caption_extension,
+            strip_rating=strip_rating,
+            filenames=filenames or [],
+        )
+        return self._tagging.start(
+            dataset.id,
+            image_dir=dataset_image_dir(dataset),
+            config=config,
+            target_resolution=dataset.target_resolution,
+        )
+
+    def get_autotag_status(self, dataset: Dataset) -> TaggingTaskState:
+        idle = TaggingTaskState(status=TaggingStatus.IDLE, current=0, total=0, message="")
+        if dataset.id is None:
+            return idle
+        return self._tagging.get_status(dataset.id) or idle
 
     def list_images(self, dataset: Dataset) -> list[str]:
         return list_image_filenames(Path(dataset_image_dir(dataset)))

@@ -48,8 +48,8 @@ cancel_poll_interval_seconds = 1
     assert body["server"]["host"] == settings.server.host
     assert body["database"]["path"] == settings.database.path
     assert body["training"]["logs_dir"] == settings.training.logs_dir
-    assert body["gpu_defaults"]["tf32"] is True
-    assert body["gpu_defaults"]["attention_mechanism"] == "sdpa"
+    assert body["gpu_defaults"]["tf32"] is settings.gpu_defaults.tf32
+    assert body["gpu_defaults"]["attention_mechanism"] == settings.gpu_defaults.attention_mechanism
     assert body["config_file"] == str(config_file.resolve())
     assert body["app_version"] == "0.1.0"
     assert "cuda_available" in body["gpu"]

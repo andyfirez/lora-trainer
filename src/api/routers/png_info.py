@@ -14,10 +14,7 @@ async def inspect_png_info(file: UploadFile = File(...)) -> PngInfoResponse:
     if not data:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    try:
-        result = inspect_image_bytes(data)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail="Invalid or unsupported image file") from exc
+    result = inspect_image_bytes(data)
 
     return PngInfoResponse(
         info=result.info,

@@ -6,8 +6,9 @@ import base64
 import io
 from dataclasses import dataclass
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
+from src.services.png_info.exceptions import InvalidImageError
 from src.services.png_info.parser import parse_generation_parameters
 from src.services.png_info.reader import read_info_from_image
 
@@ -36,22 +37,25 @@ def _build_preview_base64(image: Image.Image) -> str:
 
 
 def inspect_image_bytes(data: bytes) -> PngInfoResult:
-    with Image.open(io.BytesIO(data)) as image:
-        image.load()
-        geninfo, items = read_info_from_image(image)
-        info = geninfo or ""
-        merged_items: dict[str, str] = {}
-        if info:
-            merged_items["parameters"] = info
-        merged_items.update(items)
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            image.load()
+            geninfo, items = read_info_from_image(image)
+            info = geninfo or ""
+            merged_items: dict[str, str] = {}
+            if info:
+                merged_items["parameters"] = info
+            merged_items.update(items)
 
-        parameters = parse_generation_parameters(info) if info else {}
+            parameters = parse_generation_parameters(info) if info else {}
 
-        return PngInfoResult(
-            info=info,
-            items=merged_items,
-            parameters=parameters,
-            width=image.width,
-            height=image.height,
-            preview_base64=_build_preview_base64(image),
-        )
+            return PngInfoResult(
+                info=info,
+                items=merged_items,
+                parameters=parameters,
+                width=image.width,
+                height=image.height,
+                preview_base64=_build_preview_base64(image),
+            )
+    except (UnidentifiedImageError, OSError) as exc:
+        raise InvalidImageError() from exc

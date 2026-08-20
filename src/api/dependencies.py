@@ -15,6 +15,8 @@ from src.services.datasets.service import DatasetsService
 from src.services.files.service import FilesService
 from src.services.loras.service import LoraService
 from src.services.sampling.service import SamplingService
+from src.services.settings.service import SettingsService
+from src.services.tagging.service import TaggingService
 
 
 async def _get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -59,21 +61,32 @@ def _get_crop_repo(session: SessionDep) -> DatasetImageCropRepository:
     return DatasetImageCropRepository(session)
 
 
+def _get_tagging_service() -> TaggingService:
+    return TaggingService()
+
+
 def _get_datasets_service(
     dataset_repo: DatasetRepoDep,
     crop_repo: Annotated[DatasetImageCropRepository, Depends(_get_crop_repo)],
+    tagging_service: Annotated[TaggingService, Depends(_get_tagging_service)],
 ) -> DatasetsService:
-    return DatasetsService(dataset_repo, crop_repo)
+    return DatasetsService(dataset_repo, crop_repo, tagging_service)
 
 
 def _get_files_service() -> FilesService:
     return FilesService()
 
 
+def _get_settings_service() -> SettingsService:
+    return SettingsService()
+
+
 LoraServiceDep = Annotated[LoraService, Depends(_get_lora_service)]
 SamplingServiceDep = Annotated[SamplingService, Depends(_get_sampling_service)]
 DatasetsServiceDep = Annotated[DatasetsService, Depends(_get_datasets_service)]
 FilesServiceDep = Annotated[FilesService, Depends(_get_files_service)]
+TaggingServiceDep = Annotated[TaggingService, Depends(_get_tagging_service)]
+SettingsServiceDep = Annotated[SettingsService, Depends(_get_settings_service)]
 
 
 async def get_dataset_by_id(dataset_id: int, service: DatasetsServiceDep) -> Dataset:

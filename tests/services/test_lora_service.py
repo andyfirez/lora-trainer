@@ -28,11 +28,7 @@ async def test_create_lora_rejects_unprepared_dataset(
     dataset = await datasets_service.create_dataset(name="raw", relative_path="images")
     await datasets_service.update_dataset(
         dataset.id,
-        name=None,
-        relative_path=None,
-        description=None,
         target_resolution=1024,
-        update_target_resolution=True,
     )
 
     yaml_text = f"""base_model_name: test-model

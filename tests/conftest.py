@@ -59,11 +59,7 @@ async def _prepare_dataset(
     dataset = await datasets_service.create_dataset(name=name, relative_path=rel)
     dataset = await datasets_service.update_dataset(
         dataset.id,
-        name=None,
-        relative_path=None,
-        description=None,
         target_resolution=1024,
-        update_target_resolution=True,
     )
     await datasets_service.save_crop(dataset, "test.png", 0.5, 0.5)
     await datasets_service.bake_image(dataset, "test.png")

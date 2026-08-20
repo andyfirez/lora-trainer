@@ -39,13 +39,8 @@ async def _dataset_with_image(
     dataset = await datasets_service.create_dataset(name="reconcile", relative_path=relative_path)
     dataset = await datasets_service.update_dataset(
         dataset.id,
-        name=None,
-        relative_path=None,
-        description=None,
         target_resolution=1024,
-        update_target_resolution=True,
         enable_bucket=enable_bucket,
-        update_bucket_settings=True,
     )
     return dataset, image_dir
 

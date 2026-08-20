@@ -1,5 +1,7 @@
 """SQLModel + aiosqlite engine and session factory."""
 
+from functools import cache
+
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -7,6 +9,7 @@ from src.db.alembic_runner import run_migrations as _run_alembic_migrations
 from src.settings.app_settings import settings
 
 
+@cache
 def register_all_tables() -> None:
     """Import every table model so SQLAlchemy metadata resolves foreign keys."""
     import src.db.tables.dataset  # noqa: F401

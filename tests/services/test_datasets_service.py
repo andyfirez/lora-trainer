@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -11,6 +12,8 @@ from src.services.datasets.exceptions import (
 )
 from src.services.datasets.preprocess import ImagePreprocessState, prepared_dir_path
 from src.services.datasets.service import DatasetsService
+from src.services.tagging.manager import TaggingStatus, TaggingTaskState
+from src.tagger.config import TaggingConfig
 
 
 def _write_test_image(path: Path, size: tuple[int, int] = (800, 600)) -> None:
@@ -30,11 +33,7 @@ async def _create_dataset_with_resolution(
     dataset = await datasets_service.create_dataset(name=name, relative_path=relative_path)
     return await datasets_service.update_dataset(
         dataset.id,
-        name=None,
-        relative_path=None,
-        description=None,
         target_resolution=resolution,
-        update_target_resolution=True,
     )
 
 
@@ -51,9 +50,7 @@ async def test_update_dataset_absolute_path_normalized(
     dataset = await datasets_service.create_dataset(name="original", relative_path="images")
     updated = await datasets_service.update_dataset(
         dataset.id,
-        name=None,
         relative_path=str(other_dir),
-        description=None,
     )
 
     assert updated.relative_path == "other"
@@ -74,7 +71,6 @@ async def test_update_dataset_name_and_image_dir(
         dataset.id,
         name="renamed",
         relative_path="other",
-        description=None,
     )
 
     assert updated.name == "renamed"
@@ -93,8 +89,6 @@ async def test_update_dataset_name_conflict(storage_roots, datasets_service: Dat
         await datasets_service.update_dataset(
             second.id,
             name="first",
-            relative_path=None,
-            description=None,
         )
 
 
@@ -108,9 +102,7 @@ async def test_update_dataset_missing_directory(storage_roots, datasets_service:
     with pytest.raises(DatasetDirectoryNotFoundError):
         await datasets_service.update_dataset(
             dataset.id,
-            name=None,
             relative_path="missing",
-            description=None,
         )
 
 
@@ -214,3 +206,45 @@ async def test_delete_image_removes_files_and_crop(storage_roots, datasets_servi
 
     with pytest.raises(DatasetImageNotFoundError):
         await datasets_service.delete_image(dataset, "remove.png")
+
+
+@pytest.mark.asyncio
+async def test_start_autotag_builds_config_and_delegates(
+    storage_roots,
+    datasets_service: DatasetsService,
+) -> None:
+    image_dir = storage_roots["datasets"] / "images"
+    image_dir.mkdir()
+    dataset = await datasets_service.create_dataset(name="tags", relative_path="images")
+    expected = TaggingTaskState(status=TaggingStatus.RUNNING, current=0, total=1, message="")
+    datasets_service._tagging = MagicMock()
+    datasets_service._tagging.start.return_value = expected
+
+    state = datasets_service.start_autotag(dataset, threshold=0.4, filenames=["cat.png"])
+
+    assert state is expected
+    datasets_service._tagging.start.assert_called_once()
+    kwargs = datasets_service._tagging.start.call_args
+    assert kwargs.args[0] == dataset.id
+    config = kwargs.kwargs["config"]
+    assert isinstance(config, TaggingConfig)
+    assert config.threshold == 0.4
+    assert config.filenames == ["cat.png"]
+
+
+@pytest.mark.asyncio
+async def test_get_autotag_status_returns_idle_when_missing(
+    storage_roots,
+    datasets_service: DatasetsService,
+) -> None:
+    image_dir = storage_roots["datasets"] / "images"
+    image_dir.mkdir()
+    dataset = await datasets_service.create_dataset(name="idle", relative_path="images")
+    datasets_service._tagging = MagicMock()
+    datasets_service._tagging.get_status.return_value = None
+
+    state = datasets_service.get_autotag_status(dataset)
+
+    assert state.status == TaggingStatus.IDLE
+    assert state.current == 0
+    assert state.total == 0
