@@ -1,62 +1,49 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.sampler.sdxl.service import SDXLLoRASampler
+from src.sampler.progress_utils import diffusion_progress_step, total_diffusion_steps
 from src.trainer.config import TrainConfig
 
 
 def test_sample_prompts_available_on_config() -> None:
     config = TrainConfig(sample_prompts=["ohwx, portrait"])
-    sampler = SDXLLoRASampler(
-        config,
-        lora_paths=[Path("one.safetensors")],
-        output_dir=Path("out"),
-    )
-
-    assert sampler._config.sample_prompts == ["ohwx, portrait"]
+    assert config.sample_prompts == ["ohwx, portrait"]
 
 
 def test_sample_prompts_same_for_base_model_sampling() -> None:
     config = TrainConfig(sample_prompts=["portrait"])
-    sampler = SDXLLoRASampler(
-        config,
-        lora_paths=[],
-        output_dir=Path("out"),
-    )
-
-    assert sampler._config.sample_prompts == ["portrait"]
+    assert config.sample_prompts == ["portrait"]
 
     config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
-    sampler = SDXLLoRASampler(
-        config,
-        lora_paths=[],
-        output_dir=Path("out"),
-    )
-
-    assert sampler._total_diffusion_steps() == 60
+    assert total_diffusion_steps(lora_count=1, prompt_count=2, sample_steps=30) == 60
 
 
 def test_total_diffusion_steps_counts_all_loras_prompts_and_steps() -> None:
     config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
-    sampler = SDXLLoRASampler(
-        config,
-        lora_paths=[Path("one.safetensors"), Path("two.safetensors")],
-        output_dir=Path("out"),
+    assert (
+        total_diffusion_steps(
+            lora_count=2,
+            prompt_count=len(config.sample_prompts),
+            sample_steps=config.sample_steps,
+        )
+        == 120
     )
-
-    assert sampler._total_diffusion_steps() == 120
 
 
 def test_report_diffusion_progress_updates_global_step() -> None:
     config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
     progress_callback = MagicMock()
-    sampler = SDXLLoRASampler(
-        config,
-        lora_paths=[Path("one.safetensors")],
-        output_dir=Path("out"),
-        progress_callback=progress_callback,
+    step = diffusion_progress_step(
+        completed_images=0,
+        prompt_index=1,
+        diffusion_step=15,
+        sample_steps=config.sample_steps,
     )
-
-    sampler._report_diffusion_progress(completed_images=0, prompt_index=1, diffusion_step=15)
+    total = total_diffusion_steps(
+        lora_count=1,
+        prompt_count=len(config.sample_prompts),
+        sample_steps=config.sample_steps,
+    )
+    progress_callback(step, total)
 
     progress_callback.assert_called_once_with(45, 60)

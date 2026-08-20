@@ -12,7 +12,7 @@ from src.db.tables.runnable_mixin import RunnableStatus
 from src.db.tables.sampling import Sampling
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
-from src.sampler.sdxl.service import SDXLLoRASampler
+from src.sampler.sdxl.service import run_sweep_sampling
 from src.services.runnable.logging import build_runnable_log_path, build_runnable_logger
 from src.services.sampling.lora_paths import prepare_sampling_config_lora_paths
 from src.services.worker.progress_loop import (
@@ -137,10 +137,9 @@ async def run_sampling(sampling_id: int) -> int:
         vary_keys = sampling_config.parameters.vary_keys_with_values()
         if vary_keys:
             run_logger.info("  Varying parameters: %s", ", ".join(vary_keys))
-        sampler = SDXLLoRASampler(
-            train_config,
+        run_sweep_sampling(
             sampling_config=sampling_config,
-            lora_paths=lora_paths,
+            base_train_config=train_config,
             output_dir=Path(output_path),
             progress_status_callback=_make_progress_status_callback(sampling_id),
             progress_callback=_make_progress_callback(sampling_id),
@@ -149,7 +148,6 @@ async def run_sampling(sampling_id: int) -> int:
             sampling_id=sampling_id,
             compose_grids=True,
         )
-        sampler.run()
         await _update_progress_status(sampling_id, None)
         run_logger.info("Sampling id=%d completed successfully", sampling_id)
         return 0

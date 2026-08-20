@@ -8,14 +8,13 @@ from pathlib import Path
 from typing import Any
 
 import torch
-
 from src.sampler.config import SamplingConfig
 from src.sampler.progress_callbacks import (
     ProgressCallback,
     ProgressCallbackMixin,
     ProgressStatusCallback,
 )
-from src.sampler.sdxl.service import SDXLLoRASampler
+from src.sampler.sdxl.cell_generator import generate_sampling_cell
 from src.sampler.sweep.combinations import build_combinations
 from src.sampler.sweep.grid_compositor import compose_grid
 from src.sampler.sweep.grid_planner import plan_grids
@@ -34,6 +33,8 @@ from src.sampler.sweep.models import parse_trigger_words
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.config import SampleScheduler, TrainConfig
 from src.trainer.sdxl.caption import apply_trigger_words_to_prompt
+from src.trainer.sdxl.pipeline_loader import SDXLPipelineLoader
+from src.trainer.sdxl.sampling import PromptEmbedCache
 
 
 def sort_pipeline_groups(
@@ -66,15 +67,8 @@ class SweepEngine(ProgressCallbackMixin):
         self._log = log or logging.getLogger(__name__)
         self._concept_metadata = concept_metadata or {}
         self._compose_grids = compose_grids
-        self._sampler = SDXLLoRASampler(
-            base_train_config,
-            lora_paths=[],
-            output_dir=output_dir,
-            progress_status_callback=progress_status_callback,
-            progress_callback=progress_callback,
-            log=self._log,
-            concept_metadata=concept_metadata,
-        )
+        self._pipeline_loader = SDXLPipelineLoader(base_train_config, log=self._log)
+        self._prompt_embed_cache = PromptEmbedCache()
 
     def run(self) -> SweepManifest:
         parameters = self._sampling_config.parameters
@@ -135,7 +129,7 @@ class SweepEngine(ProgressCallbackMixin):
                 len(group_combos),
             )
             self._set_status(status)
-            stack, lora_config, merge_unet = self._sampler.load_stack_for_combo(
+            stack, lora_config, merge_unet = self._pipeline_loader.load_stack_for_combo(
                 base_model=base_model,
                 lora_path=lora_path,
                 combo_params=first.params,
@@ -182,7 +176,7 @@ class SweepEngine(ProgressCallbackMixin):
         lora_weight = float(params.get("lora_weight") or 1.0)
         filename = cell_image_path(self._output_dir, combo.index).name
         self._set_status(f"Cell {combo.index + 1}: {prompt[:60]}")
-        self._sampler.generate_single_cell(
+        generate_sampling_cell(
             stack=stack,
             lora_config=lora_config,
             sampling_config=sampling_config,
@@ -193,6 +187,10 @@ class SweepEngine(ProgressCallbackMixin):
             output_filename=filename,
             completed_images=completed_images,
             total_steps=total_steps,
+            concept_metadata=self._concept_metadata,
+            prompt_embed_cache=self._prompt_embed_cache,
+            log=self._log,
+            on_progress=self._set_progress,
         )
 
     def _build_runtime_config(self, params: dict[str, Any]) -> TrainConfig:
