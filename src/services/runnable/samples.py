@@ -3,6 +3,15 @@
 from pathlib import Path
 
 
+def resolve_safe_sample_file(base: Path, relative_path: str) -> Path | None:
+    """Resolve a sample path under base, or None if missing / outside base."""
+    resolved_base = base.resolve()
+    target = (resolved_base / relative_path).resolve()
+    if not target.is_relative_to(resolved_base) or not target.is_file():
+        return None
+    return target
+
+
 def list_samples_for_output_dir(output_dir: Path) -> list[tuple[Path, str, dict]]:
     """Return (path, kind, metadata) tuples for sample files."""
     if not output_dir.exists():

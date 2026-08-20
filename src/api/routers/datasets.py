@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
-from src.api.dependencies import DatasetsServiceDep
+from src.api.dependencies import DatasetDep, DatasetsServiceDep
 from src.api.schemas.datasets import (
     AutotagRequest,
     AutotagStatusResponse,
@@ -83,8 +83,7 @@ async def import_dataset(body: DatasetImport, service: DatasetsServiceDep) -> Da
 
 
 @router.get("/{dataset_id}", response_model=DatasetResponse)
-async def get_dataset(dataset_id: int, service: DatasetsServiceDep) -> DatasetResponse:
-    dataset = await service.get_dataset(dataset_id)
+async def get_dataset(dataset: DatasetDep) -> DatasetResponse:
     return DatasetResponse.model_validate(dataset)
 
 
@@ -121,29 +120,26 @@ async def delete_dataset(dataset_id: int, service: DatasetsServiceDep) -> None:
 
 
 @router.get("/{dataset_id}/duplicates", response_model=DuplicatesResponse)
-async def get_duplicates(dataset_id: int, service: DatasetsServiceDep) -> DuplicatesResponse:
-    dataset = await service.get_dataset(dataset_id)
+async def get_duplicates(dataset: DatasetDep, service: DatasetsServiceDep) -> DuplicatesResponse:
     result = service.scan_duplicates(dataset)
     return DuplicatesResponse(duplicate_count=result.duplicate_count)
 
 
 @router.post("/{dataset_id}/duplicates/remove", response_model=RemoveDuplicatesResponse)
 async def remove_duplicates(
-    dataset_id: int,
+    dataset: DatasetDep,
     service: DatasetsServiceDep,
     caption_extension: str = Query(default=".txt"),
 ) -> RemoveDuplicatesResponse:
-    dataset = await service.get_dataset(dataset_id)
     removed_count = await service.remove_duplicates(dataset, caption_extension)
     return RemoveDuplicatesResponse(removed_count=removed_count)
 
 
 @router.get("/{dataset_id}/images", response_model=DatasetImagesResponse)
-async def list_images(dataset_id: int, service: DatasetsServiceDep) -> DatasetImagesResponse:
-    dataset = await service.get_dataset(dataset_id)
+async def list_images(dataset: DatasetDep, service: DatasetsServiceDep) -> DatasetImagesResponse:
     images = service.list_images(dataset)
     return DatasetImagesResponse(
-        dataset_id=dataset_id,
+        dataset_id=dataset.id,
         relative_path=dataset.relative_path,
         resolved_path=str(StoragePaths.resolve_dataset_path(dataset.relative_path)),
         images=images,
@@ -152,14 +148,13 @@ async def list_images(dataset_id: int, service: DatasetsServiceDep) -> DatasetIm
 
 @router.get("/{dataset_id}/items", response_model=DatasetItemsResponse)
 async def list_items(
-    dataset_id: int,
+    dataset: DatasetDep,
     service: DatasetsServiceDep,
     caption_extension: str = Query(default=".txt"),
 ) -> DatasetItemsResponse:
-    dataset = await service.get_dataset(dataset_id)
     rows = await service.list_items_with_states(dataset, caption_extension)
     return DatasetItemsResponse(
-        dataset_id=dataset_id,
+        dataset_id=dataset.id,
         items=[
             DatasetItemResponse(
                 filename=item.filename,
@@ -174,82 +169,75 @@ async def list_items(
 
 @router.delete("/{dataset_id}/images/{filename}", status_code=204)
 async def delete_image(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     service: DatasetsServiceDep,
     caption_extension: str = Query(default=".txt"),
 ) -> None:
-    dataset = await service.get_dataset(dataset_id)
     await service.delete_image(dataset, filename, caption_extension)
 
 
 @router.get("/{dataset_id}/images/{filename}")
 async def get_image(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     service: DatasetsServiceDep,
     w: int | None = Query(default=None, ge=32, le=2048),
 ) -> Response:
-    dataset = await service.get_dataset(dataset_id)
     data, media_type = service.get_image_bytes(dataset, filename, max_width=w)
     return Response(content=data, media_type=media_type)
 
 
 @router.get("/{dataset_id}/images/{filename}/prepared")
 async def get_prepared_image(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     service: DatasetsServiceDep,
     w: int | None = Query(default=None, ge=32, le=2048),
 ) -> Response:
-    dataset = await service.get_dataset(dataset_id)
     data, media_type = service.get_prepared_image_bytes(dataset, filename, max_width=w)
     return Response(content=data, media_type=media_type)
 
 
 @router.get("/{dataset_id}/captions/{filename}", response_model=CaptionResponse)
 async def get_caption(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     service: DatasetsServiceDep,
     caption_extension: str = Query(default=".txt"),
 ) -> CaptionResponse:
-    dataset = await service.get_dataset(dataset_id)
     tags = service.get_tags(dataset, filename, caption_extension)
     return CaptionResponse(filename=filename, tags=tags)
 
 
 @router.put("/{dataset_id}/captions/{filename}", response_model=CaptionResponse)
 async def update_caption(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     body: CaptionUpdateRequest,
     service: DatasetsServiceDep,
     caption_extension: str = Query(default=".txt"),
 ) -> CaptionResponse:
-    dataset = await service.get_dataset(dataset_id)
     tags = service.update_tags(dataset, filename, body.tags, caption_extension)
     return CaptionResponse(filename=filename, tags=tags)
 
 
 @router.get("/{dataset_id}/tags/stats", response_model=TagStatsResponse)
 async def get_tag_stats(
-    dataset_id: int,
+    dataset: DatasetDep,
     service: DatasetsServiceDep,
     caption_extension: str = Query(default=".txt"),
 ) -> TagStatsResponse:
-    dataset = await service.get_dataset(dataset_id)
     stats = service.get_tag_stats(dataset, caption_extension)
     return TagStatsResponse(tags=[TagStatResponse(tag=stat.tag, count=stat.count) for stat in stats])
 
 
 @router.post("/{dataset_id}/tags/bulk-add", response_model=BulkTagResponse)
 async def bulk_add_tag(
-    dataset_id: int,
+    dataset: DatasetDep,
     body: BulkTagRequest,
     service: DatasetsServiceDep,
 ) -> BulkTagResponse:
-    dataset = await service.get_dataset(dataset_id)
     updated = service.bulk_add_tag(
         dataset,
         body.tag,
@@ -261,11 +249,10 @@ async def bulk_add_tag(
 
 @router.post("/{dataset_id}/tags/bulk-remove", response_model=BulkTagResponse)
 async def bulk_remove_tag(
-    dataset_id: int,
+    dataset: DatasetDep,
     body: BulkTagRequest,
     service: DatasetsServiceDep,
 ) -> BulkTagResponse:
-    dataset = await service.get_dataset(dataset_id)
     updated = service.bulk_remove_tag(
         dataset,
         body.tag,
@@ -279,9 +266,8 @@ async def bulk_remove_tag(
 async def autotag_dataset(
     dataset_id: int,
     body: AutotagRequest,
-    datasets_service: DatasetsServiceDep,
+    dataset: DatasetDep,
 ) -> AutotagStatusResponse:
-    dataset = await datasets_service.get_dataset(dataset_id)
     config = TaggingConfig(
         dataset_id=dataset_id,
         mode=body.mode,
@@ -307,9 +293,8 @@ async def autotag_dataset(
 
 
 @router.get("/{dataset_id}/autotag/status", response_model=AutotagStatusResponse)
-async def get_autotag_status(dataset_id: int, datasets_service: DatasetsServiceDep) -> AutotagStatusResponse:
-    await datasets_service.get_dataset(dataset_id)
-    state = tagging_task_manager.get_status(dataset_id)
+async def get_autotag_status(dataset: DatasetDep) -> AutotagStatusResponse:
+    state = tagging_task_manager.get_status(dataset.id)
     if state is None:
         return AutotagStatusResponse(status="idle", current=0, total=0, message="")
     return AutotagStatusResponse(
@@ -322,8 +307,7 @@ async def get_autotag_status(dataset_id: int, datasets_service: DatasetsServiceD
 
 
 @router.get("/{dataset_id}/preprocess/status", response_model=PreprocessStatusResponse)
-async def get_preprocess_status(dataset_id: int, service: DatasetsServiceDep) -> PreprocessStatusResponse:
-    dataset = await service.get_dataset(dataset_id)
+async def get_preprocess_status(dataset: DatasetDep, service: DatasetsServiceDep) -> PreprocessStatusResponse:
     status = await service.get_preprocess_status(dataset)
     return PreprocessStatusResponse(
         target_resolution=status.target_resolution,
@@ -338,34 +322,31 @@ async def get_preprocess_status(dataset_id: int, service: DatasetsServiceDep) ->
 
 @router.get("/{dataset_id}/images/{filename}/crop-meta", response_model=CropMetaResponse)
 async def get_crop_meta(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     service: DatasetsServiceDep,
 ) -> CropMetaResponse:
-    dataset = await service.get_dataset(dataset_id)
     meta = await service.get_crop_meta(dataset, filename)
     return _crop_meta_response(meta)
 
 
 @router.get("/{dataset_id}/images/{filename}/crop-preview")
 async def get_crop_preview(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     service: DatasetsServiceDep,
 ) -> Response:
-    dataset = await service.get_dataset(dataset_id)
     data = service.get_crop_preview_bytes(dataset, filename)
     return Response(content=data, media_type="image/jpeg")
 
 
 @router.put("/{dataset_id}/images/{filename}/crop", response_model=CropMetaResponse)
 async def save_crop(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     body: CropUpdateRequest,
     service: DatasetsServiceDep,
 ) -> CropMetaResponse:
-    dataset = await service.get_dataset(dataset_id)
     meta = await service.save_crop(dataset, filename, body.crop_center_x, body.crop_center_y)
     return _crop_meta_response(meta)
 
@@ -373,10 +354,10 @@ async def save_crop(
 @router.post("/{dataset_id}/preprocess/bake", response_model=BakeResponse)
 async def bake_preprocess(
     dataset_id: int,
+    dataset: DatasetDep,
     body: BakeRequest,
     service: DatasetsServiceDep,
 ) -> BakeResponse:
-    dataset = await service.get_dataset(dataset_id)
     baked_count = await service.bake_all(dataset, body.filenames)
     dataset = await service.get_dataset(dataset_id)
     return BakeResponse(baked_count=baked_count, preprocess_ready=dataset.preprocess_ready)
@@ -384,11 +365,10 @@ async def bake_preprocess(
 
 @router.post("/{dataset_id}/images/{filename}/bake", response_model=CropMetaResponse)
 async def bake_single_image(
-    dataset_id: int,
+    dataset: DatasetDep,
     filename: str,
     service: DatasetsServiceDep,
 ) -> CropMetaResponse:
-    dataset = await service.get_dataset(dataset_id)
     await service.bake_image(dataset, filename)
     meta = await service.get_crop_meta(dataset, filename)
     return _crop_meta_response(meta)

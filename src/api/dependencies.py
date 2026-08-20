@@ -10,6 +10,7 @@ from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.lora_repo import LoraRepository
 from src.db.repositories.sampling_repo import SamplingRepository
 from src.db.session import session_factory
+from src.db.tables.dataset import Dataset
 from src.services.datasets.service import DatasetsService
 from src.services.files.service import FilesService
 from src.services.loras.service import LoraService
@@ -73,3 +74,10 @@ LoraServiceDep = Annotated[LoraService, Depends(_get_lora_service)]
 SamplingServiceDep = Annotated[SamplingService, Depends(_get_sampling_service)]
 DatasetsServiceDep = Annotated[DatasetsService, Depends(_get_datasets_service)]
 FilesServiceDep = Annotated[FilesService, Depends(_get_files_service)]
+
+
+async def get_dataset_by_id(dataset_id: int, service: DatasetsServiceDep) -> Dataset:
+    return await service.get_dataset(dataset_id)
+
+
+DatasetDep = Annotated[Dataset, Depends(get_dataset_by_id)]

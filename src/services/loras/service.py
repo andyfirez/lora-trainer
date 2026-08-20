@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Sequence
 
-from src.api.schemas.job_loss import JobLossResponse
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.lora_repo import LoraRepository
 from src.db.tables.lora import Lora
@@ -20,6 +19,7 @@ from src.services.loras.paths import (
     lora_artifacts_exist,
     lora_work_dir_exists,
     resolve_completed_lora_paths,
+    resolve_sample_base_dir,
     resolve_work_dir,
 )
 from src.services.loras.relocation import find_relocated_lora
@@ -32,7 +32,11 @@ from src.services.runnable.exceptions import (
     RunnableValidationError,
 )
 from src.services.runnable.loss_log_reader import read_loss_log
-from src.services.runnable.samples import list_samples_for_output_dir
+from src.services.runnable.samples import (
+    list_samples_for_output_dir,
+    resolve_safe_sample_file,
+)
+from src.services.runnable.schemas import JobLossResponse
 from src.settings.app_settings import settings
 from src.storage.config_paths import resolve_config_base_model
 from src.storage.paths import StorageKind, StoragePaths
@@ -282,6 +286,12 @@ class LoraService:
         if not lora.output_path:
             return []
         return list_samples_for_output_dir(Path(lora.output_path))
+
+    def sample_file_path(self, lora: Lora, relative_path: str) -> Path:
+        target = resolve_safe_sample_file(resolve_sample_base_dir(lora), relative_path)
+        if target is None:
+            raise RunnableOperationNotSupportedError("Lora", lora.id or 0, "sample file")
+        return target
 
     async def finalize_completed_training(self, lora: Lora) -> None:
         """Resolve the final weights/work-dir paths once training finishes successfully."""

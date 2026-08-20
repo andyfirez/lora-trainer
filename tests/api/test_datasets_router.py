@@ -1,12 +1,14 @@
 """Router mapping: Dataset ORM -> DatasetResponse."""
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from src.api.dependencies import get_dataset_by_id
 from src.api.routers.datasets import (
     create_dataset,
     get_dataset,
+    get_duplicates,
     import_dataset,
     list_datasets,
     update_dataset,
@@ -18,6 +20,7 @@ from src.api.schemas.datasets import (
     DatasetUpdate,
 )
 from src.db.tables.dataset import Dataset
+from src.services.datasets.duplicates import DuplicateScanResult
 
 
 def _dataset(*, name: str = "demo", relative_path: str = "images") -> Dataset:
@@ -63,7 +66,7 @@ async def test_create_get_import_update_map_orm_to_response(storage_roots) -> No
     service.update_dataset.return_value = dataset
 
     created = await create_dataset(DatasetCreate(name="demo", relative_path="images"), service)
-    fetched = await get_dataset(1, service)
+    fetched = await get_dataset(dataset)
     imported = await import_dataset(
         DatasetImport(name="demo", source_dir="src", relative_path="images"),
         service,
@@ -74,3 +77,30 @@ async def test_create_get_import_update_map_orm_to_response(storage_roots) -> No
         assert isinstance(response, DatasetResponse)
         assert response.name == "demo"
         assert response.resolved_path != ""
+
+
+@pytest.mark.asyncio
+async def test_get_dataset_by_id_loads_dataset() -> None:
+    service = AsyncMock()
+    dataset = _dataset()
+    service.get_dataset.return_value = dataset
+
+    result = await get_dataset_by_id(1, service)
+
+    assert result is dataset
+    service.get_dataset.assert_awaited_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_get_duplicates_uses_injected_dataset() -> None:
+    service = AsyncMock()
+    dataset = _dataset()
+    service.scan_duplicates = MagicMock(
+        return_value=DuplicateScanResult(duplicate_count=2, duplicate_filenames=("b.png",))
+    )
+
+    result = await get_duplicates(dataset, service)
+
+    service.get_dataset.assert_not_called()
+    service.scan_duplicates.assert_called_once_with(dataset)
+    assert result.duplicate_count == 2

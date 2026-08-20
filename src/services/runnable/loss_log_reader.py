@@ -3,7 +3,7 @@
 import sqlite3
 from pathlib import Path
 
-from src.api.schemas.job_loss import JobLossResponse, LossPoint
+from src.services.runnable.schemas import JobLossResponse, LossPoint
 
 
 def read_loss_log(

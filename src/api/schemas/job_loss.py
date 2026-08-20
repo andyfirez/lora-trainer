@@ -1,17 +1,5 @@
-"""Pydantic schemas for job loss metrics API."""
+"""HTTP re-export of job loss metrics schemas."""
 
-from typing import Optional
+from src.services.runnable.schemas import JobLossResponse, LossPoint
 
-from pydantic import BaseModel
-
-
-class LossPoint(BaseModel):
-    step: int
-    wall_time: Optional[float] = None
-    value: Optional[float] = None
-
-
-class JobLossResponse(BaseModel):
-    key: str
-    keys: list[str]
-    points: list[LossPoint]
+__all__ = ["JobLossResponse", "LossPoint"]

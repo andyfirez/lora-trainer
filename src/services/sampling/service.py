@@ -17,7 +17,10 @@ from src.services.runnable.exceptions import (
     RunnableValidationError,
 )
 from src.services.runnable.handlers.sampling import SamplingHandler
-from src.services.runnable.samples import list_samples_for_output_dir
+from src.services.runnable.samples import (
+    list_samples_for_output_dir,
+    resolve_safe_sample_file,
+)
 from src.services.sampling.lora_paths import (
     prepare_sampling_config_lora_paths,
     resolve_lora_paths_from_sampling_config,
@@ -130,8 +133,7 @@ class SamplingService:
     def sample_file_path(self, sampling: Sampling, relative_path: str) -> Path:
         if not sampling.output_path:
             raise RunnableOperationNotSupportedError("Sampling", sampling.id or 0, "sample file")
-        base = Path(sampling.output_path).resolve()
-        target = (base / relative_path).resolve()
-        if not str(target).startswith(str(base)) or not target.is_file():
+        target = resolve_safe_sample_file(Path(sampling.output_path), relative_path)
+        if target is None:
             raise RunnableOperationNotSupportedError("Sampling", sampling.id or 0, "sample file")
         return target

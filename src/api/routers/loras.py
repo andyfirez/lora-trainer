@@ -15,7 +15,6 @@ from src.api.schemas.loras import (
     ReproduceLoraRequest,
 )
 from src.services.loras.paths import resolve_sample_base_dir
-from src.services.runnable.exceptions import RunnableOperationNotSupportedError
 
 router = APIRouter(prefix="/loras", tags=["loras"])
 
@@ -104,10 +103,7 @@ async def get_lora_samples(lora_id: int, service: LoraServiceDep) -> LoraSamples
 @router.get("/{lora_id}/sample-file/{file_path:path}")
 async def get_lora_sample_file(lora_id: int, file_path: str, service: LoraServiceDep) -> FileResponse:
     lora = await service.get_lora(lora_id)
-    base = resolve_sample_base_dir(lora).resolve()
-    target = (base / file_path).resolve()
-    if not str(target).startswith(str(base)) or not target.is_file():
-        raise RunnableOperationNotSupportedError("Lora", lora_id, "sample file")
+    target = service.sample_file_path(lora, file_path)
     return FileResponse(target)
 
 

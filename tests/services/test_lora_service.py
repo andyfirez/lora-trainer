@@ -1,13 +1,17 @@
 """Tests for LoraService: create/enqueue/cancel/resume lifecycle."""
 
+from unittest.mock import MagicMock
+
 import pytest
 from PIL import Image
+from src.db.tables.lora import Lora
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.services.loras.exceptions import LoraNameConflictError, LoraNotFoundError
 from src.services.loras.service import LoraService
 from src.services.runnable.exceptions import (
     RunnableAlreadyQueuedError,
     RunnableNotCancellableError,
+    RunnableOperationNotSupportedError,
     RunnableValidationError,
 )
 
@@ -112,8 +116,6 @@ async def test_list_loras_shows_completed_when_weights_relpath_stale(
     lora_service: LoraService,
     storage_roots,
 ) -> None:
-    from src.db.tables.lora import Lora
-
     work_dir = storage_roots["lora"] / "stale-weights"
     work_dir.mkdir()
     (work_dir / "stale-weights.safetensors").write_bytes(b"weights")
@@ -130,3 +132,16 @@ async def test_list_loras_shows_completed_when_weights_relpath_stale(
 
     loras = await lora_service.list_loras()
     assert "stale-weights" in {lora.name for lora in loras}
+
+
+def test_sample_file_path_returns_file_under_output(tmp_path) -> None:
+    sample = tmp_path / "a.png"
+    sample.write_bytes(b"ok")
+    lora = Lora(id=1, name="demo", output_path=str(tmp_path))
+    service = LoraService(MagicMock(), MagicMock())
+
+    assert service.sample_file_path(lora, "a.png") == sample.resolve()
+    with pytest.raises(RunnableOperationNotSupportedError):
+        service.sample_file_path(lora, "../secret.png")
+    with pytest.raises(RunnableOperationNotSupportedError):
+        service.sample_file_path(lora, "missing.png")
