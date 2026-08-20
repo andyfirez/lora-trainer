@@ -144,3 +144,8 @@ Single product: **LoRA Trainer** — FastAPI backend (with an embedded queue wor
 ### Lint / test
 - Backend lint: `uv run ruff check src` (the repo currently has pre-existing import-ordering findings — not an env issue). Tests: `uv run pytest` (CPU-only is fine).
 - Frontend: `npm run test:unit` validates parameter metadata. `npm run lint` (`next lint`) is interactive because no ESLint config is committed — avoid it in automation.
+
+### Alembic
+- Schema changes and one-shot data transforms live only in `alembic/versions/*.py`. Each revision is a self-contained historical script.
+- Do not add a permanently imported helpers package (such as `src/db/migrations/`) for Alembic data transforms. Inline the transform in the version file that uses it.
+- Do not unit-test already-applied historical data migrations as current production code.

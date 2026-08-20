@@ -5,16 +5,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from src.api.dependencies import get_dataset_by_id
-from src.api.routers.datasets import (
-    autotag_dataset,
+from src.api.routers.datasets_crud import (
     create_dataset,
-    get_autotag_status,
     get_dataset,
-    get_duplicates,
     import_dataset,
     list_datasets,
     update_dataset,
 )
+from src.api.routers.datasets_images import get_duplicates
+from src.api.routers.datasets_tags import autotag_dataset, get_autotag_status
 from src.api.schemas.datasets import (
     AutotagRequest,
     DatasetCreate,

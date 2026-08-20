@@ -1,5 +1,7 @@
 """LoRA relative paths, discovery backfill, and schema cleanup."""
 
+import os
+import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence, Union
@@ -7,8 +9,6 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 import yaml
 from alembic import op
-
-from src.db.migrations.lora_paths import lora_root_from_config, normalize_lora_relative_path, to_lora_relative
 from src.services.loras.discovery import LoraDiscoveryService
 from src.services.loras.weights import pick_weights_file
 
@@ -16,6 +16,47 @@ revision: str = "013"
 down_revision: Union[str, None] = "012"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+
+def _lora_root_from_config(config_path: Path | None = None) -> Path:
+    path = config_path or Path(os.environ.get("APP_CONFIG_FILE", "config.toml"))
+    if path.is_file():
+        with path.open("rb") as handle:
+            data = tomllib.load(handle)
+        storage = data.get("storage")
+        if isinstance(storage, dict) and storage.get("lora_root"):
+            return Path(str(storage["lora_root"])).expanduser().resolve()
+    return Path("~/lora-trainer/lora").expanduser().resolve()
+
+
+def _normalize_lora_relative_path(relative_path: str, root: Path) -> str:
+    path = Path(relative_path)
+    if not path.is_absolute():
+        return relative_path.strip().strip("/\\").replace("\\", "/")
+
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError:
+        return relative_path
+
+    try:
+        rel = resolved.relative_to(root.resolve())
+    except ValueError:
+        return relative_path
+
+    return "" if rel == Path(".") else rel.as_posix()
+
+
+def _to_lora_relative(root: Path, absolute_path: str | Path) -> str | None:
+    try:
+        resolved = Path(absolute_path).expanduser().resolve()
+    except OSError:
+        return None
+    try:
+        rel = resolved.relative_to(root.resolve())
+    except ValueError:
+        return None
+    return "" if rel == Path(".") else rel.as_posix()
 
 
 def _base_model_from_yaml(config_yaml: str | None) -> str:
@@ -52,14 +93,14 @@ def _load_existing_rows(connection: sa.Connection, root: Path) -> list[dict[str,
         elif "work_dir" in columns:
             work_dir = str(row["work_dir"])
             weights_path = str(row.get("weights_path") or work_dir)
-            relative_path = normalize_lora_relative_path(work_dir, root)
-            weights_relpath = to_lora_relative(root, weights_path) or normalize_lora_relative_path(
+            relative_path = _normalize_lora_relative_path(work_dir, root)
+            weights_relpath = _to_lora_relative(root, weights_path) or _normalize_lora_relative_path(
                 weights_path, root
             )
             if not weights_relpath and relative_path:
                 picked = pick_weights_file((root / relative_path).resolve())
                 if picked is not None:
-                    weights_relpath = to_lora_relative(root, picked)
+                    weights_relpath = _to_lora_relative(root, picked)
         else:
             continue
         loaded.append(
@@ -163,7 +204,7 @@ def upgrade() -> None:
     connection.execute(sa.text("DROP TABLE IF EXISTS _alembic_tmp_trained_loras"))
     connection.execute(sa.text("DROP TABLE IF EXISTS trained_loras_new"))
 
-    root = lora_root_from_config()
+    root = _lora_root_from_config()
     now = datetime.now(timezone.utc).isoformat()
 
     jobs = connection.execute(
@@ -230,7 +271,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     connection = op.get_bind()
-    root = lora_root_from_config()
+    root = _lora_root_from_config()
     now = datetime.now(timezone.utc).isoformat()
 
     rows = connection.execute(

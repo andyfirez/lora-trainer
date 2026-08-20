@@ -74,4 +74,7 @@ _Add a brief overview of your project architecture_
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+### Alembic
+- Schema changes and one-shot data transforms live only in `alembic/versions/*.py`. Each revision is a self-contained historical script.
+- Do not add a permanently imported helpers package (such as `src/db/migrations/`) for Alembic data transforms. Inline the transform in the version file that uses it.
+- Do not unit-test already-applied historical data migrations as current production code.

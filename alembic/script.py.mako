@@ -11,6 +11,9 @@ from alembic import op
 import sqlalchemy as sa
 ${imports if imports else ""}
 
+# Self-contained historical script: inline data transforms in this file.
+# Do not add a src/db/migrations helpers package.
+
 # revision identifiers, used by Alembic.
 revision: str = ${repr(up_revision)}
 down_revision: Union[str, None] = ${repr(down_revision)}

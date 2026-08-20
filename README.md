@@ -180,7 +180,7 @@ lora-trainer/
 │   ├── tagger/       # WD14 auto-tagging
 │   └── settings/     # config.toml loading
 ├── frontend/         # Next.js 15 UI
-├── alembic/          # Database migrations
+├── alembic/          # Self-contained Alembic revisions (no src/db/migrations helpers)
 ├── tests/            # pytest test suite
 ├── config.example.toml
 ├── pyproject.toml
