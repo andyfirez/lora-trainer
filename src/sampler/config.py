@@ -13,18 +13,18 @@ from src.sampler.sweep.models import (
     SweepMode,
     SweepParameters,
 )
-from src.trainer.gpu_config_mixin import YamlGpuConfigMixin
-from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
-from src.trainer.gpu_resolution import (
+from src.gpu import (
     FORBIDDEN_GLOBAL_GPU_KEYS,
+    ResolvedGpuConfig,
+    YamlGpuConfigMixin,
     resolve_gpu_config,
     strip_gpu_overrides_matching_defaults,
 )
+from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
 
 if TYPE_CHECKING:
     from src.settings.models import GpuDefaultsSettings
     from src.trainer.config import TrainConfig
-    from src.trainer.gpu_resolution import ResolvedGpuConfig
 
 DEFAULT_BASE_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 
@@ -82,7 +82,7 @@ class SamplingConfig(YamlGpuConfigMixin, BaseModel):
         return [str(p) for p in prompts if p is not None and str(p).strip()]
 
     def resolve_gpu(self, defaults: "GpuDefaultsSettings") -> "ResolvedGpuConfig":
-        from src.trainer.gpu_resolution import ResolvedGpuConfig
+        from src.gpu import ResolvedGpuConfig
 
         if self.tf32 is not None and self.attention_mechanism is not None:
             return ResolvedGpuConfig(

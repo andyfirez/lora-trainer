@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.settings.gpu_info import GpuInfo
+from src.gpu import GpuInfo
 from src.settings.models import DatabaseSettings, GpuDefaultsSettings, ServerSettings, StorageSettings
 from src.trainer.config import VaeDtype, WeightDtype
 

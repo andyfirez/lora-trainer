@@ -7,12 +7,12 @@ from typing import Any
 
 import yaml
 from src.db.repositories.sampling_repo import SamplingRepository
-from src.db.session import session_factory
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.db.tables.sampling import Sampling
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import run_sweep_sampling
+from src.services.runnable.db_updates import get_runnable_entity, update_runnable_entity
 from src.services.runnable.logging import build_runnable_log_path, build_runnable_logger
 from src.services.sampling.lora_paths import prepare_sampling_config_lora_paths
 from src.services.worker.progress_loop import (
@@ -25,42 +25,26 @@ logger = logging.getLogger(__name__)
 _progress_loop = start_progress_loop("sampling-progress-db-loop")
 
 
-async def _get_active_sampling(repo: SamplingRepository, sampling_id: int) -> Sampling | None:
-    sampling = await repo.get_by_id(sampling_id)
-    if sampling is None or sampling.status == RunnableStatus.CANCELLED:
-        return None
-    return sampling
-
-
 async def _update_progress_status(sampling_id: int, status: str | None) -> None:
-    async with session_factory() as session:
-        repo = SamplingRepository(session)
-        sampling = await _get_active_sampling(repo, sampling_id)
-        if sampling is not None:
-            sampling.progress_status = status
-            session.add(sampling)
-            await session.commit()
+    def mutator(sampling: Sampling) -> None:
+        sampling.progress_status = status
+
+    await update_runnable_entity(SamplingRepository, sampling_id, mutator, skip_if_cancelled=True)
 
 
 async def _update_progress(sampling_id: int, step: int, total: int) -> None:
-    async with session_factory() as session:
-        repo = SamplingRepository(session)
-        sampling = await _get_active_sampling(repo, sampling_id)
-        if sampling is not None:
-            sampling.progress_step = step
-            sampling.progress_total = total
-            session.add(sampling)
-            await session.commit()
+    def mutator(sampling: Sampling) -> None:
+        sampling.progress_step = step
+        sampling.progress_total = total
+
+    await update_runnable_entity(SamplingRepository, sampling_id, mutator, skip_if_cancelled=True)
 
 
 async def _set_output_path(sampling_id: int, output_path: str) -> None:
-    async with session_factory() as session:
-        repo = SamplingRepository(session)
-        sampling = await repo.get_by_id(sampling_id)
-        if sampling is not None:
-            sampling.output_path = output_path
-            session.add(sampling)
-            await session.commit()
+    def mutator(sampling: Sampling) -> None:
+        sampling.output_path = output_path
+
+    await update_runnable_entity(SamplingRepository, sampling_id, mutator)
 
 
 def _submit_to_progress_loop(coro: Coroutine[Any, Any, None]) -> None:
@@ -88,21 +72,22 @@ async def run_sampling(sampling_id: int) -> int:
     run_logger = build_runnable_logger(sampling_id, log_path, name_prefix="sampling")
 
     try:
-        async with session_factory() as session:
-            repo = SamplingRepository(session)
-            sampling = await repo.get_by_id(sampling_id)
-            if sampling is None:
-                run_logger.error("Sampling id=%d not found in DB", sampling_id)
-                return 1
-            if sampling.status == RunnableStatus.CANCELLED:
-                run_logger.info("Sampling id=%d already cancelled", sampling_id)
-                return 1
-            sampling.log_path = str(log_path)
-            session.add(sampling)
-            await session.commit()
-            config_yaml = sampling.config_yaml
-            lora_paths_yaml = sampling.lora_paths_yaml
-            output_path = sampling.output_path
+        sampling = await get_runnable_entity(SamplingRepository, sampling_id)
+        if sampling is None:
+            run_logger.error("Sampling id=%d not found in DB", sampling_id)
+            return 1
+        if sampling.status == RunnableStatus.CANCELLED:
+            run_logger.info("Sampling id=%d already cancelled", sampling_id)
+            return 1
+
+        await update_runnable_entity(
+            SamplingRepository,
+            sampling_id,
+            lambda entity: setattr(entity, "log_path", str(log_path)),
+        )
+        config_yaml = sampling.config_yaml
+        lora_paths_yaml = sampling.lora_paths_yaml
+        output_path = sampling.output_path
 
         sampling_config = SamplingConfig.from_snapshot_yaml(config_yaml)
         stored_lora_paths = [str(p) for p in (yaml.safe_load(lora_paths_yaml or "[]") or [])]

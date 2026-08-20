@@ -15,19 +15,19 @@ from typing import TYPE_CHECKING, Literal, Optional, Self, TypeAlias
 import yaml
 from pydantic import BaseModel, Field, model_validator
 
-from src.trainer.gpu_config_mixin import YamlGpuConfigMixin
-from src.trainer.optimizer_config import OptimizerConfig
-from src.trainer.gpu_resolution import (
+from src.gpu import (
     FORBIDDEN_GLOBAL_GPU_KEYS,
+    YamlGpuConfigMixin,
     resolve_gpu_config,
     strip_gpu_overrides_matching_defaults,
 )
+from src.trainer.optimizer_config import OptimizerConfig
 
 if TYPE_CHECKING:
     from src.sampler.config import SamplingConfig
     from src.settings.models import GpuDefaultsSettings
     from src.trainer.concept_resolution import ResolvedConceptPaths
-    from src.trainer.gpu_resolution import ResolvedGpuConfig
+    from src.gpu import ResolvedGpuConfig
 
 
 class OutputFormat(StrEnum):
@@ -212,7 +212,7 @@ class TrainConfig(YamlGpuConfigMixin, BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     def resolve_gpu(self, defaults: "GpuDefaultsSettings") -> "ResolvedGpuConfig":
-        from src.trainer.gpu_resolution import ResolvedGpuConfig
+        from src.gpu import ResolvedGpuConfig
 
         if self.tf32 is not None and self.attention_mechanism is not None:
             return ResolvedGpuConfig(

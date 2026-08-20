@@ -12,16 +12,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from src.services.datasets.captions import (
-    list_image_filenames,
-    merge_tags,
-    read_tags,
-    write_tags,
-)
-from src.services.datasets.training_cache import invalidate_te_cache_for_image
+from src.services.datasets.captions import list_image_filenames
 from src.services.tagging.exceptions import TaggingAlreadyRunningError
 from src.tagger.config import TaggingConfig
-from src.tagger.wd14 import WD14Tagger
+from src.tagger.runner import TaggingProgress, tag_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -55,23 +49,19 @@ def _run_tagging_sync(
     target_resolution: int | None,
     state: TaggingTaskState,
 ) -> None:
-    model_repo = config.resolve_model_repo()
-    logger.info("Loading WD14 model %s for dataset autotag", model_repo)
-    tagger = WD14Tagger(model_repo)
-    total = len(targets)
-    for index, filename in enumerate(targets, start=1):
-        image_path = image_dir / filename
-        if not image_path.is_file():
-            state.current = index
-            state.message = f"Skipped {filename} (missing)"
-            continue
-        predicted = tagger.predict(image_path, threshold=config.threshold, strip_rating=config.strip_rating)
-        existing = read_tags(image_dir, filename, config.caption_extension)
-        merged = merge_tags(existing, predicted, config.mode.value)
-        write_tags(image_dir, filename, merged, config.caption_extension)
-        invalidate_te_cache_for_image(image_dir, filename, target_resolution)
-        state.current = index
-        state.message = f"Tagged {filename} ({index}/{total})"
+    logger.info("Loading WD14 model %s for dataset autotag", config.resolve_model_repo())
+
+    def on_progress(progress: TaggingProgress) -> None:
+        state.current = progress.current
+        state.message = progress.message
+
+    tag_dataset(
+        image_dir,
+        targets,
+        config,
+        target_resolution=target_resolution,
+        progress_callback=on_progress,
+    )
 
 
 class TaggingTaskManager:

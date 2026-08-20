@@ -15,7 +15,7 @@ from src.storage.config_paths import resolve_config_base_model
 from src.trainer.attention import configure_unet_attention
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.config import TrainConfig
-from src.trainer.gpu_runtime import CudaRuntime, setup_cuda_runtime
+from src.gpu.runtime import CudaRuntime, setup_cuda_runtime
 from src.trainer.optimizer_config import build_optimizer
 from src.trainer.progress import TrainProgress
 from src.trainer.sdxl.bucket_batch_sampler import build_bucket_batch_sampler

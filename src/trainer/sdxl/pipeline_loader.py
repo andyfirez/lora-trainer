@@ -13,7 +13,7 @@ import torch
 from src.storage.config_paths import resolve_config_base_model
 from src.trainer.attention import configure_unet_attention
 from src.trainer.config import TrainConfig
-from src.trainer.gpu_runtime import setup_cuda_runtime
+from src.gpu.runtime import setup_cuda_runtime
 from src.trainer.sdxl.dtypes import weight_dtype_to_torch
 from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file

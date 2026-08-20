@@ -42,7 +42,7 @@ async def test_run_invalid_config_writes_log_and_returns_failure_exit_code(
     await session.refresh(sampling)
 
     with (
-        patch("src.sampler.job_runner.session_factory", test_session_factory),
+        patch("src.services.runnable.db_updates.session_factory", test_session_factory),
         patch.object(settings.training, "logs_dir", logs_dir),
     ):
         exit_code = await run_sampling(sampling.id)

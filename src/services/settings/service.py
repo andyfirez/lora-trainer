@@ -20,8 +20,7 @@ from src.settings.config_persist import (
     persist_storage_settings,
     persist_training_settings,
 )
-from src.settings.gpu_info import get_gpu_info
-from src.trainer.gpu_config_validation import validate_gpu_config
+from src.gpu import get_gpu_info, validate_gpu_config
 
 _TRAINING_FIELDS = ("max_concurrent_jobs", "worker_poll_interval_seconds")
 _STORAGE_FIELDS = ("datasets_root", "base_models_root", "lora_root")
