@@ -141,7 +141,7 @@ async def reconcile_dataset_records(
         if crop.content_hash != content_hash:
             crop.content_hash = content_hash
             crop.updated_at = now
-            crop_repo._session.add(crop)
+            crop_repo.save(crop)
             metadata_updated = True
 
     orphan_crops = [crop for crop in crops if crop.filename not in disk_set]
@@ -174,7 +174,7 @@ async def reconcile_dataset_records(
             crop.content_hash = hash_by_disk_filename[new_filename]
             crop.baked_at = None
             crop.updated_at = now
-            crop_repo._session.add(crop)
+            crop_repo.save(crop)
             _remove_prepared_artifacts_for_stem(
                 image_dir=dataset_image_dir(dataset),
                 target_resolution=dataset.target_resolution,
@@ -203,6 +203,6 @@ async def reconcile_dataset_records(
         )
 
     if metadata_updated or result.changed:
-        await crop_repo._session.flush()
+        await crop_repo.flush()
 
     return result

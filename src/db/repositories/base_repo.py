@@ -40,6 +40,29 @@ class BaseRepository(Generic[ModelT]):
         await self._session.refresh(record)
         return record
 
+    def save(self, record: ModelT) -> ModelT:
+        """Stage a record for flush without committing the transaction."""
+        self._session.add(record)
+        return record
+
+    async def flush(self) -> None:
+        await self._session.flush()
+
+    async def refresh(self, record: ModelT) -> ModelT:
+        await self._session.refresh(record)
+        return record
+
+    async def save_and_flush(self, record: ModelT) -> ModelT:
+        self._session.add(record)
+        await self._session.flush()
+        return record
+
+    async def save_flush_refresh(self, record: ModelT) -> ModelT:
+        self._session.add(record)
+        await self._session.flush()
+        await self._session.refresh(record)
+        return record
+
     async def delete(self, record: ModelT) -> None:
         await self._session.delete(record)
         await self._session.flush()

@@ -1,15 +1,13 @@
 """Exceptions shared by LoraService and SamplingService for lifecycle operations."""
 
-from src.services.common.exceptions import AppError
+from src.services.common.exceptions import AppError, NotFoundError
 
 
-class RunnableNotFoundError(AppError):
-    status_code = 404
-
+class RunnableNotFoundError(NotFoundError):
     def __init__(self, kind: str, entity_id: int) -> None:
-        super().__init__(f"{kind} with id={entity_id} not found")
         self.kind = kind
         self.entity_id = entity_id
+        super().__init__(kind, entity_id, message=f"{kind} with id={entity_id} not found")
 
 
 class RunnableAlreadyQueuedError(AppError):

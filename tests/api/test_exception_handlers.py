@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from src.api.exception_handlers import register_exception_handlers
-from src.services.common.exceptions import AppError
+from src.services.common.exceptions import AppError, NameConflictError, NotFoundError
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetImageNotFoundError,
@@ -87,6 +87,20 @@ def _app_for(exc: AppError) -> FastAPI:
 def test_domain_errors_declare_http_status(exc: AppError, status_code: int) -> None:
     assert isinstance(exc, AppError)
     assert exc.status_code == status_code
+
+
+@pytest.mark.parametrize(
+    ("exc", "base"),
+    [
+        (LoraNotFoundError(1), NotFoundError),
+        (DatasetNotFoundError(1), NotFoundError),
+        (RunnableNotFoundError("Sampling", 1), NotFoundError),
+        (LoraNameConflictError("demo"), NameConflictError),
+        (DatasetNameConflictError("demo"), NameConflictError),
+    ],
+)
+def test_resource_errors_inherit_shared_bases(exc: AppError, base: type[AppError]) -> None:
+    assert isinstance(exc, base)
 
 
 @pytest.mark.asyncio

@@ -163,8 +163,8 @@ async def test_bake_all_rebakes_ready_image_with_missing_bucket_metadata(
     crop.bucket_height = None
     crop.scale_to_width = None
     crop.scale_to_height = None
-    datasets_service._crop_repo._session.add(crop)
-    await datasets_service._crop_repo._session.flush()
+    datasets_service._crop_repo.save(crop)
+    await datasets_service._crop_repo.flush()
 
     baked = await datasets_service.bake_all(dataset)
 

@@ -71,6 +71,7 @@ from src.services.datasets.reconcile import (
 from src.services.datasets.relocation import find_relocated_dataset
 from src.services.datasets.training_cache import invalidate_te_cache_for_image
 from src.services.storage.browse import StorageBrowseService
+from src.services.storage.catalog_sync import sync_discovered_items
 from src.services.tagging.manager import TaggingStatus, TaggingTaskState
 from src.services.tagging.service import TaggingService
 from src.storage.paths import StorageKind, StoragePaths
@@ -139,37 +140,43 @@ class DatasetsService:
                     crop.filename for crop in crops
                 )
 
-        changed = False
-        for relative_path in discovered:
-            if relative_path in existing_paths:
-                continue
-
+        def find_relocated(stale_items: list[Dataset], relative_path: str) -> Dataset | None:
             disk_path = StoragePaths.resolve(StorageKind.DATASETS, relative_path)
             disk_image_filenames = frozenset(list_image_filenames(disk_path))
-            relocated = find_relocated_dataset(
-                stale_datasets,
+            return find_relocated_dataset(
+                stale_items,
                 relative_path,
                 disk_image_filenames=disk_image_filenames,
                 crop_filenames_by_dataset_id=crop_filenames_by_dataset_id,
             )
-            if relocated is not None:
-                relocated.relative_path = relative_path
-                self._repo._session.add(relocated)
-                stale_datasets.remove(relocated)
-                existing_paths.add(relative_path)
-                changed = True
-                continue
 
+        async def make_unique_name(relative_path: str) -> str:
             name = _slug_from_relative_path(relative_path)
             candidate = name
             suffix = 1
             while await self._repo.get_by_name(candidate) is not None:
                 suffix += 1
                 candidate = f"{name}-{suffix}"
-            await self._repo.add(Dataset(name=candidate, relative_path=relative_path))
+            return candidate
 
-        if changed:
-            await self._repo._session.flush()
+        async def create_entity(relative_path: str, unique_name: str) -> None:
+            await self._repo.add(Dataset(name=unique_name, relative_path=relative_path))
+
+        def apply_relocation(relocated: Dataset, relative_path: str) -> None:
+            relocated.relative_path = relative_path
+
+        await sync_discovered_items(
+            discovered=discovered,
+            stale_items=stale_datasets,
+            existing_paths=existing_paths,
+            get_discovered_path=lambda relative_path: relative_path,
+            find_relocated=find_relocated,
+            apply_relocation=apply_relocation,
+            stage=self._repo.save,
+            flush=self._repo.flush,
+            make_unique_name=make_unique_name,
+            create_entity=create_entity,
+        )
 
     async def get_dataset(self, dataset_id: int) -> Dataset:
         dataset = await self._repo.get_by_id(dataset_id)
@@ -264,10 +271,7 @@ class DatasetsService:
                 dataset.preprocess_ready = False
                 await self._invalidate_prepared_outputs(dataset)
         dataset.updated_at = datetime.now(timezone.utc)
-        self._repo._session.add(dataset)
-        await self._repo._session.flush()
-        await self._repo._session.refresh(dataset)
-        return dataset
+        return await self._repo.save_flush_refresh(dataset)
 
     async def delete_dataset(self, dataset_id: int) -> None:
         dataset = await self.get_dataset(dataset_id)
@@ -539,8 +543,8 @@ class DatasetsService:
             crop.crop_x = 0
             crop.crop_y = 0
             crop.updated_at = now
-            self._crop_repo._session.add(crop)
-        await self._crop_repo._session.flush()
+            self._crop_repo.save(crop)
+        await self._crop_repo.flush()
 
     async def get_preprocess_status(self, dataset: Dataset) -> PreprocessStatus:
         await self.reconcile_dataset(dataset)
@@ -610,13 +614,11 @@ class DatasetsService:
             existing.crop_x = 0
             existing.crop_y = 0
             existing.updated_at = now
-            self._crop_repo._session.add(existing)
-            await self._crop_repo._session.flush()
+            await self._crop_repo.save_and_flush(existing)
             crop = existing
         dataset.preprocess_ready = False
         dataset.updated_at = now
-        self._repo._session.add(dataset)
-        await self._repo._session.flush()
+        await self._repo.save_and_flush(dataset)
         return build_crop_meta(
             image_path=path,
             bucket_config=bucket_config,
@@ -659,9 +661,8 @@ class DatasetsService:
             crop.scale_to_height = None
             crop.crop_x = 0
             crop.crop_y = 0
-        self._crop_repo._session.add(crop)
+        await self._crop_repo.save_and_flush(crop)
         invalidate_latent_cache_for_prepared(prepared_path)
-        await self._crop_repo._session.flush()
         await self._update_preprocess_ready_flag(dataset)
 
     async def _ensure_crop(self, dataset: Dataset, filename: str) -> DatasetImageCrop:
@@ -685,8 +686,7 @@ class DatasetsService:
             existing.source_mtime = mtime
             existing.baked_at = None
             existing.updated_at = now
-            self._crop_repo._session.add(existing)
-            await self._crop_repo._session.flush()
+            await self._crop_repo.save_and_flush(existing)
         return existing
 
     async def bake_all(self, dataset: Dataset, filenames: list[str] | None = None) -> int:
@@ -727,9 +727,7 @@ class DatasetsService:
         crop_map = await self._crop_map(dataset.id)  # type: ignore[arg-type]
         dataset.preprocess_ready = recompute_preprocess_ready(dataset, crop_map)
         dataset.updated_at = datetime.now(timezone.utc)
-        self._repo._session.add(dataset)
-        await self._repo._session.flush()
-        await self._repo._session.refresh(dataset)
+        await self._repo.save_flush_refresh(dataset)
 
     def _resolve_image_path(self, dataset: Dataset, filename: str) -> Path:
         try:

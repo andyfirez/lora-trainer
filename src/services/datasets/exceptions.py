@@ -1,22 +1,17 @@
 """Exceptions for the datasets service."""
 
-from src.services.common.exceptions import AppError
+from src.services.common.exceptions import AppError, NameConflictError, NotFoundError
 
 
-class DatasetNotFoundError(AppError):
-    status_code = 404
-
+class DatasetNotFoundError(NotFoundError):
     def __init__(self, dataset_id: int) -> None:
-        super().__init__(f"Dataset with id={dataset_id} not found")
         self.dataset_id = dataset_id
+        super().__init__("Dataset", dataset_id, message=f"Dataset with id={dataset_id} not found")
 
 
-class DatasetNameConflictError(AppError):
-    status_code = 409
-
+class DatasetNameConflictError(NameConflictError):
     def __init__(self, name: str) -> None:
-        super().__init__(f"A dataset named '{name}' already exists")
-        self.name = name
+        super().__init__("dataset", name, message=f"A dataset named '{name}' already exists")
 
 
 class DatasetDirectoryNotFoundError(AppError):
@@ -27,12 +22,10 @@ class DatasetDirectoryNotFoundError(AppError):
         self.path = path
 
 
-class DatasetImageNotFoundError(AppError):
-    status_code = 404
-
+class DatasetImageNotFoundError(NotFoundError):
     def __init__(self, filename: str) -> None:
-        super().__init__(f"Image not found: {filename}")
         self.filename = filename
+        super().__init__("Image", filename, message=f"Image not found: {filename}")
 
 
 class InvalidDatasetFilenameError(AppError):

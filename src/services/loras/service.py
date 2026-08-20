@@ -28,10 +28,10 @@ from src.services.runnable.exceptions import (
     RunnableNotResumableError,
     RunnableOperationNotSupportedError,
 )
-from src.services.runnable.lifecycle import cancel_runnable, enqueue_runnable
 from src.services.runnable.loss_log_reader import read_loss_log
 from src.services.runnable.samples import resolve_safe_sample_file
 from src.services.runnable.schemas import JobLossResponse
+from src.services.storage.catalog_sync import sync_discovered_items
 from src.settings.app_settings import settings
 from src.storage.paths import StorageKind, StoragePaths
 from src.trainer.config import TrainConfig
@@ -81,38 +81,29 @@ class LoraService:
         all_loras = list(await self._repo.list_ordered())
         existing_paths: set[str] = {lora.relative_path for lora in all_loras if lora.relative_path}
         stale_loras = [lora for lora in all_loras if lora.relative_path and not lora_artifacts_exist(lora)]
-        changed = False
+        loras_by_path = {lora.relative_path: lora for lora in all_loras if lora.relative_path}
 
-        for item in discovered:
-            if item.relative_path in existing_paths:
-                for lora in all_loras:
-                    if lora.relative_path == item.relative_path:
-                        if lora.weights_relpath != item.weights_relpath:
-                            lora.weights_relpath = item.weights_relpath
-                            self._repo._session.add(lora)
-                            changed = True
-                        break
-                continue
+        def on_known_path(item) -> bool:
+            lora = loras_by_path.get(item.relative_path)
+            if lora is None or lora.weights_relpath == item.weights_relpath:
+                return False
+            lora.weights_relpath = item.weights_relpath
+            self._repo.save(lora)
+            return True
 
-            relocated = find_relocated_lora(stale_loras, item)
-            if relocated is not None:
-                relocated.relative_path = item.relative_path
-                relocated.weights_relpath = item.weights_relpath
-                self._repo._session.add(relocated)
-                stale_loras.remove(relocated)
-                existing_paths.add(item.relative_path)
-                changed = True
-                continue
-
+        async def make_unique_name(item) -> str:
             name = item.name
             candidate = name
             suffix = 2
             while await self._repo.get_by_name(candidate) is not None:
                 candidate = f"{name}-{suffix}"
                 suffix += 1
+            return candidate
+
+        async def create_entity(item, unique_name: str) -> None:
             await self._repo.add(
                 Lora(
-                    name=candidate,
+                    name=unique_name,
                     relative_path=item.relative_path,
                     weights_relpath=item.weights_relpath,
                     base_model_name="unknown",
@@ -121,10 +112,24 @@ class LoraService:
                     output_path=str(StoragePaths.resolve(StorageKind.LORA, item.relative_path)),
                 )
             )
-            existing_paths.add(item.relative_path)
 
-        if changed:
-            await self._repo._session.flush()
+        def apply_relocation(relocated: Lora, item) -> None:
+            relocated.relative_path = item.relative_path
+            relocated.weights_relpath = item.weights_relpath
+
+        await sync_discovered_items(
+            discovered=discovered,
+            stale_items=stale_loras,
+            existing_paths=existing_paths,
+            get_discovered_path=lambda item: item.relative_path,
+            find_relocated=find_relocated_lora,
+            apply_relocation=apply_relocation,
+            stage=self._repo.save,
+            flush=self._repo.flush,
+            on_known_path=on_known_path,
+            make_unique_name=make_unique_name,
+            create_entity=create_entity,
+        )
 
     async def _create_from_config(self, name: str, config: TrainConfig, *, resolve_gpu: bool) -> Lora:
         existing = await self._repo.get_by_name(name)
@@ -180,8 +185,7 @@ class LoraService:
             if config.logging.use_ui_logger:
                 reset_loss_log(build_loss_log_path(config))
 
-        await enqueue_runnable(
-            self._repo._session,
+        await self._repo.enqueue_runnable(
             lora,
             kind="Lora",
             entity_id=lora_id,
@@ -206,8 +210,7 @@ class LoraService:
         lora.resume_from_epoch = resume_state.epoch
         lora.resume_from_step = resume_state.global_step
         lora.save_checkpoint_requested = False
-        await enqueue_runnable(
-            self._repo._session,
+        await self._repo.enqueue_runnable(
             lora,
             kind="Lora",
             entity_id=lora_id,
@@ -228,8 +231,7 @@ class LoraService:
             lora.save_checkpoint_requested = False
             return False
 
-        return await cancel_runnable(
-            self._repo._session,
+        return await self._repo.cancel_runnable(
             lora,
             kind="Lora",
             entity_id=lora_id,
@@ -275,5 +277,4 @@ class LoraService:
         lora.relative_path = paths.relative_path
         lora.weights_relpath = paths.weights_relpath
         lora.base_model_name = paths.base_model_name
-        self._repo._session.add(lora)
-        await self._repo._session.flush()
+        await self._repo.save_and_flush(lora)

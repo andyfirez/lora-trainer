@@ -15,7 +15,6 @@ from src.services.runnable.exceptions import (
     RunnableValidationError,
 )
 from src.services.runnable.handlers import get_runnable_handler
-from src.services.runnable.lifecycle import cancel_runnable, enqueue_runnable
 from src.services.runnable.samples import resolve_safe_sample_file
 from src.services.sampling.lora_paths import (
     prepare_sampling_config_lora_paths,
@@ -75,8 +74,7 @@ class SamplingService:
         sampling = await self._repo.add(sampling)
         output_dir = resolve_sampling_output_dir(snapshot, sampling.id)  # type: ignore[arg-type]
         sampling.output_path = str(output_dir)
-        self._repo._session.add(sampling)
-        await self._repo._session.flush()
+        await self._repo.save_and_flush(sampling)
         return sampling
 
     async def enqueue_sampling(self, sampling_id: int) -> Sampling:
@@ -88,8 +86,7 @@ class SamplingService:
             sampling.progress_total = None
             sampling.progress_status = None
 
-        await enqueue_runnable(
-            self._repo._session,
+        await self._repo.enqueue_runnable(
             sampling,
             kind="Sampling",
             entity_id=sampling_id,
@@ -99,8 +96,7 @@ class SamplingService:
 
     async def cancel_sampling(self, sampling_id: int) -> Sampling:
         sampling = await self.get_sampling(sampling_id)
-        return await cancel_runnable(
-            self._repo._session,
+        return await self._repo.cancel_runnable(
             sampling,
             kind="Sampling",
             entity_id=sampling_id,
