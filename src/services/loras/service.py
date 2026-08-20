@@ -7,7 +7,6 @@ from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.lora_repo import LoraRepository
 from src.db.tables.lora import Lora
 from src.db.tables.runnable_mixin import RunnableStatus
-from src.services.datasets.training_validation import validate_dataset_for_training
 from src.services.loras.discovery import LoraDiscoveryService
 from src.services.loras.exceptions import (
     LoraCheckpointNotFoundError,
@@ -23,22 +22,20 @@ from src.services.loras.paths import (
     resolve_work_dir,
 )
 from src.services.loras.relocation import find_relocated_lora
-from src.services.runnable import queue, runtime
+from src.services.runnable import runtime
 from src.services.runnable.artifacts import list_runnable_samples, read_runnable_logs
 from src.services.runnable.exceptions import (
-    RunnableAlreadyQueuedError,
-    RunnableNotCancellableError,
     RunnableNotResumableError,
     RunnableOperationNotSupportedError,
-    RunnableValidationError,
 )
+from src.services.runnable.lifecycle import cancel_runnable, enqueue_runnable
 from src.services.runnable.loss_log_reader import read_loss_log
 from src.services.runnable.samples import resolve_safe_sample_file
 from src.services.runnable.schemas import JobLossResponse
 from src.settings.app_settings import settings
-from src.storage.config_paths import resolve_config_base_model
 from src.storage.paths import StorageKind, StoragePaths
 from src.trainer.config import TrainConfig
+from src.trainer.config_validation import TrainConfigValidator
 from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
 from src.trainer.sdxl.checkpoint_state import find_latest_checkpoint, load_resume_state
 
@@ -129,29 +126,6 @@ class LoraService:
         if changed:
             await self._repo._session.flush()
 
-    async def _validate_config(self, config: TrainConfig) -> None:
-        try:
-            if not config.base_model_name:
-                raise RunnableValidationError("base_model_name is required")
-            resolve_config_base_model(config.base_model_name)
-            StoragePaths.resolve_lora_path(config.output_dir or "")
-            if not config.concepts:
-                raise RunnableValidationError("At least one training concept is required")
-            for concept in config.concepts:
-                dataset = await self._dataset_repo.get_by_id(concept.dataset_id)
-                if dataset is None:
-                    raise RunnableValidationError(f"Dataset with id={concept.dataset_id} not found")
-                validate_dataset_for_training(
-                    dataset,
-                    config.resolution,
-                    enable_bucket=config.enable_bucket,
-                )
-            config.validate_gpu()
-        except RunnableValidationError:
-            raise
-        except Exception as exc:
-            raise RunnableValidationError(str(exc)) from exc
-
     async def _create_from_config(self, name: str, config: TrainConfig, *, resolve_gpu: bool) -> Lora:
         existing = await self._repo.get_by_name(name)
         if existing is not None:
@@ -160,7 +134,7 @@ class LoraService:
         # lora_name drives the on-disk work directory — tie it to the (unique) entity name
         # so two Lora rows never collide on the filesystem.
         snapshot = snapshot.model_copy(update={"lora_name": name})
-        await self._validate_config(snapshot)
+        await TrainConfigValidator.validate_for_enqueue(snapshot, self._dataset_repo)
         lora = Lora(
             name=name,
             base_model_name=snapshot.base_model_name or "unknown",
@@ -193,20 +167,26 @@ class LoraService:
 
     async def enqueue_lora(self, lora_id: int) -> Lora:
         lora = await self.get_lora(lora_id)
-        if lora.status in (RunnableStatus.QUEUED, RunnableStatus.RUNNING):
-            raise RunnableAlreadyQueuedError("Lora", lora_id)
         if not lora.config_yaml:
             raise RunnableOperationNotSupportedError("Lora", lora_id, "start")
         config = TrainConfig.from_snapshot_yaml(lora.config_yaml)
-        await self._validate_config(config)
-        runtime.clear_runtime(lora)
-        self._reset_training_progress(lora)
-        lora.resume_checkpoint_path = None
-        lora.resume_from_epoch = None
-        lora.resume_from_step = None
-        if config.logging.use_ui_logger:
-            reset_loss_log(build_loss_log_path(config))
-        await queue.enqueue(self._repo._session, lora)
+
+        async def before_enqueue() -> None:
+            await TrainConfigValidator.validate_for_enqueue(config, self._dataset_repo)
+            self._reset_training_progress(lora)
+            lora.resume_checkpoint_path = None
+            lora.resume_from_epoch = None
+            lora.resume_from_step = None
+            if config.logging.use_ui_logger:
+                reset_loss_log(build_loss_log_path(config))
+
+        await enqueue_runnable(
+            self._repo._session,
+            lora,
+            kind="Lora",
+            entity_id=lora_id,
+            before_enqueue=before_enqueue,
+        )
         return lora
 
     async def resume_lora(self, lora_id: int) -> Lora:
@@ -226,7 +206,12 @@ class LoraService:
         lora.resume_from_epoch = resume_state.epoch
         lora.resume_from_step = resume_state.global_step
         lora.save_checkpoint_requested = False
-        await queue.enqueue(self._repo._session, lora)
+        await enqueue_runnable(
+            self._repo._session,
+            lora,
+            kind="Lora",
+            entity_id=lora_id,
+        )
         return lora
 
     @staticmethod
@@ -235,24 +220,21 @@ class LoraService:
 
     async def cancel_lora(self, lora_id: int, *, save_checkpoint: bool = False) -> Lora:
         lora = await self.get_lora(lora_id)
-        if lora.status in (RunnableStatus.COMPLETED, RunnableStatus.FAILED, RunnableStatus.CANCELLED):
-            raise RunnableNotCancellableError("Lora", lora_id, lora.status)
-        if lora.status == RunnableStatus.RUNNING:
+
+        async def on_running() -> bool:
             if save_checkpoint and self._can_save_checkpoint_on_cancel(lora):
                 lora.save_checkpoint_requested = True
-                self._repo._session.add(lora)
-                await self._repo._session.flush()
-                return lora
-            runtime.cancel(lora)
+                return True
             lora.save_checkpoint_requested = False
-            self._repo._session.add(lora)
-            await self._repo._session.flush()
-            return lora
-        runtime.cancel(lora)
-        runtime.clear_runtime(lora)
-        self._repo._session.add(lora)
-        await self._repo._session.flush()
-        return lora
+            return False
+
+        return await cancel_runnable(
+            self._repo._session,
+            lora,
+            kind="Lora",
+            entity_id=lora_id,
+            on_running=on_running,
+        )
 
     async def get_logs(self, lora_id: int, tail: int = 500) -> list[str]:
         lora = await self.get_lora(lora_id)

@@ -15,7 +15,6 @@ import logging
 import sys
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from pathlib import Path
-from typing import Any
 
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
@@ -160,14 +159,6 @@ async def _is_stop_requested(lora_id: int) -> bool:
         return lora.save_checkpoint_requested
 
 
-def _submit_to_progress_loop(coro: Any) -> None:
-    submit_to_progress_loop(_progress_loop, coro)
-
-
-def _run_in_progress_loop(coro: Any, timeout_s: float = 1.0) -> Any:
-    return run_in_progress_loop(_progress_loop, coro, timeout_s=timeout_s)
-
-
 def _make_progress_callback(lora_id: int):
     def callback(
         step: int,
@@ -178,7 +169,8 @@ def _make_progress_callback(lora_id: int):
         epoch_total: int,
         _lr: float,
     ) -> None:
-        _submit_to_progress_loop(
+        submit_to_progress_loop(
+            _progress_loop,
             _update_progress(lora_id, step, total, loss, avr_loss, epoch, epoch_total),
         )
 
@@ -272,11 +264,13 @@ async def _run(lora_id: int) -> None:
 
     try:
         def _checkpoint_callback(path: str, epoch: int, step: int) -> None:
-            _submit_to_progress_loop(_update_checkpoint_info(lora_id, path, epoch, step))
+            submit_to_progress_loop(_progress_loop, _update_checkpoint_info(lora_id, path, epoch, step))
 
         def _save_checkpoint_requested() -> bool:
             try:
-                return bool(_run_in_progress_loop(_consume_save_checkpoint_request(lora_id)))
+                return bool(
+                    run_in_progress_loop(_progress_loop, _consume_save_checkpoint_request(lora_id)),
+                )
             except FutureTimeoutError:
                 return False
             except Exception:
@@ -285,7 +279,7 @@ async def _run(lora_id: int) -> None:
 
         def _stop_requested() -> bool:
             try:
-                return bool(_run_in_progress_loop(_is_stop_requested(lora_id)))
+                return bool(run_in_progress_loop(_progress_loop, _is_stop_requested(lora_id)))
             except FutureTimeoutError:
                 return False
             except Exception:

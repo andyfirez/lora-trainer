@@ -8,16 +8,14 @@ from src.db.repositories.sampling_repo import SamplingRepository
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.db.tables.sampling import Sampling
 from src.sampler.config import SamplingConfig
-from src.services.runnable import queue, runtime
 from src.services.runnable.artifacts import list_runnable_samples, read_runnable_logs
 from src.services.runnable.exceptions import (
-    RunnableAlreadyQueuedError,
-    RunnableNotCancellableError,
     RunnableNotFoundError,
     RunnableOperationNotSupportedError,
     RunnableValidationError,
 )
-from src.services.runnable.handlers.sampling import SamplingHandler
+from src.services.runnable.handlers import get_runnable_handler
+from src.services.runnable.lifecycle import cancel_runnable, enqueue_runnable
 from src.services.runnable.samples import resolve_safe_sample_file
 from src.services.sampling.lora_paths import (
     prepare_sampling_config_lora_paths,
@@ -83,26 +81,30 @@ class SamplingService:
 
     async def enqueue_sampling(self, sampling_id: int) -> Sampling:
         sampling = await self.get_sampling(sampling_id)
-        if sampling.status in (RunnableStatus.QUEUED, RunnableStatus.RUNNING):
-            raise RunnableAlreadyQueuedError("Sampling", sampling_id)
-        SamplingHandler().validate_config_yaml(sampling.config_yaml)
-        runtime.clear_runtime(sampling)
-        sampling.progress_step = None
-        sampling.progress_total = None
-        sampling.progress_status = None
-        await queue.enqueue(self._repo._session, sampling)
+
+        async def before_enqueue() -> None:
+            get_runnable_handler("sampling").validate_config_yaml(sampling.config_yaml or "")
+            sampling.progress_step = None
+            sampling.progress_total = None
+            sampling.progress_status = None
+
+        await enqueue_runnable(
+            self._repo._session,
+            sampling,
+            kind="Sampling",
+            entity_id=sampling_id,
+            before_enqueue=before_enqueue,
+        )
         return sampling
 
     async def cancel_sampling(self, sampling_id: int) -> Sampling:
         sampling = await self.get_sampling(sampling_id)
-        if sampling.status in (RunnableStatus.COMPLETED, RunnableStatus.FAILED, RunnableStatus.CANCELLED):
-            raise RunnableNotCancellableError("Sampling", sampling_id, sampling.status)
-        runtime.cancel(sampling)
-        if sampling.status != RunnableStatus.RUNNING:
-            runtime.clear_runtime(sampling)
-        self._repo._session.add(sampling)
-        await self._repo._session.flush()
-        return sampling
+        return await cancel_runnable(
+            self._repo._session,
+            sampling,
+            kind="Sampling",
+            entity_id=sampling_id,
+        )
 
     async def get_logs(self, sampling_id: int, tail: int = 500) -> list[str]:
         sampling = await self.get_sampling(sampling_id)

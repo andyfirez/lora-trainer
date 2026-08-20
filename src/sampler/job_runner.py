@@ -1,8 +1,6 @@
 """Shared sampling execution for the runner subprocess."""
 
-import asyncio
 import logging
-import threading
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
@@ -17,22 +15,14 @@ from src.sampler.output_paths import resolve_sampling_output_path
 from src.sampler.sdxl.service import SDXLLoRASampler
 from src.services.runnable.logging import build_runnable_log_path, build_runnable_logger
 from src.services.sampling.lora_paths import prepare_sampling_config_lora_paths
+from src.services.worker.progress_loop import (
+    start_progress_loop,
+    submit_to_progress_loop,
+)
 
 logger = logging.getLogger(__name__)
 
-_progress_loop: asyncio.AbstractEventLoop | None = None
-
-
-def _ensure_progress_loop() -> asyncio.AbstractEventLoop:
-    global _progress_loop
-    if _progress_loop is None:
-        _progress_loop = asyncio.new_event_loop()
-        threading.Thread(
-            target=_progress_loop.run_forever,
-            daemon=True,
-            name="sampling-progress-db-loop",
-        ).start()
-    return _progress_loop
+_progress_loop = start_progress_loop("sampling-progress-db-loop")
 
 
 async def _get_active_sampling(repo: SamplingRepository, sampling_id: int) -> Sampling | None:
@@ -74,16 +64,7 @@ async def _set_output_path(sampling_id: int, output_path: str) -> None:
 
 
 def _submit_to_progress_loop(coro: Coroutine[Any, Any, None]) -> None:
-    loop = _ensure_progress_loop()
-    future = asyncio.run_coroutine_threadsafe(coro, loop)
-
-    def _log_exception(fut: asyncio.Future[object]) -> None:
-        try:
-            fut.result()
-        except Exception:
-            logger.exception("Sampling progress DB update failed")
-
-    future.add_done_callback(_log_exception)
+    submit_to_progress_loop(_progress_loop, coro)
 
 
 def _make_progress_status_callback(sampling_id: int):
