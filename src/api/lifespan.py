@@ -8,19 +8,19 @@ from typing import AsyncContextManager
 from fastapi import FastAPI
 
 from src.db.session import run_migrations
-from src.services.worker.service import RunnableWorker
+from src.services.worker.service import SubprocessRunnableWorker
 
 logger = logging.getLogger(__name__)
 
 
 def create_lifespan(
     *,
-    worker_factory: Callable[[], RunnableWorker] | None = None,
+    worker_factory: Callable[[], SubprocessRunnableWorker] | None = None,
     migrate: Callable[[], Awaitable[None]] | None = None,
 ) -> Callable[[FastAPI], AsyncContextManager[None]]:
     """Build a FastAPI lifespan that runs migrations and the runnable worker."""
 
-    create_worker = worker_factory or (lambda: RunnableWorker(echo_subprocess_output=False))
+    create_worker = worker_factory or (lambda: SubprocessRunnableWorker(echo_subprocess_output=False))
     run_migrate = migrate or run_migrations
 
     @asynccontextmanager

@@ -217,14 +217,14 @@ async def test_start_autotag_builds_config_and_delegates(
     image_dir.mkdir()
     dataset = await datasets_service.create_dataset(name="tags", relative_path="images")
     expected = TaggingTaskState(status=TaggingStatus.RUNNING, current=0, total=1, message="")
-    datasets_service._tagging = MagicMock()
-    datasets_service._tagging.start.return_value = expected
+    datasets_service._tags._tagging = MagicMock()
+    datasets_service._tags._tagging.start.return_value = expected
 
     state = datasets_service.start_autotag(dataset, threshold=0.4, filenames=["cat.png"])
 
     assert state is expected
-    datasets_service._tagging.start.assert_called_once()
-    kwargs = datasets_service._tagging.start.call_args
+    datasets_service._tags._tagging.start.assert_called_once()
+    kwargs = datasets_service._tags._tagging.start.call_args
     assert kwargs.args[0] == dataset.id
     config = kwargs.kwargs["config"]
     assert isinstance(config, TaggingConfig)
@@ -240,8 +240,8 @@ async def test_get_autotag_status_returns_idle_when_missing(
     image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
     dataset = await datasets_service.create_dataset(name="idle", relative_path="images")
-    datasets_service._tagging = MagicMock()
-    datasets_service._tagging.get_status.return_value = None
+    datasets_service._tags._tagging = MagicMock()
+    datasets_service._tags._tagging.get_status.return_value = None
 
     state = datasets_service.get_autotag_status(dataset)
 

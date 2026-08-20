@@ -1,4 +1,4 @@
-"""Tests for RunnableWorker spawn-failure status handling."""
+"""Tests for SubprocessRunnableWorker spawn-failure status handling."""
 
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from src.db.tables.lora import Lora
 from src.db.tables.runnable_mixin import RunnableStatus
-from src.services.worker.service import RunnableWorker
+from src.services.worker.service import SubprocessRunnableWorker
 
 
 class _FakeSession:
@@ -27,7 +27,7 @@ async def _fake_session_factory(session: _FakeSession):
 
 async def _mark_spawn_failed(entity: Lora, error_message: str = "spawn failed") -> _FakeSession:
     session = _FakeSession()
-    worker = RunnableWorker()
+    worker = SubprocessRunnableWorker()
     with (
         patch("src.services.worker.service.session_factory", lambda: _fake_session_factory(session)),
         patch("src.services.worker.service.get_by_kind", AsyncMock(return_value=entity)),

@@ -1,4 +1,4 @@
-"""Runnable worker — polls the loras/samplings tables and spawns subprocesses."""
+"""Subprocess runnable worker — polls loras/samplings and spawns child processes."""
 
 import asyncio
 import logging
@@ -77,7 +77,7 @@ def _summarize_subprocess_failure(lines: list[str], return_code: int, *, max_lin
     return f"Process exited with code {return_code}"
 
 
-class RunnableWorker:
+class SubprocessRunnableWorker:
     def __init__(self, *, echo_subprocess_output: bool = False) -> None:
         self._echo_subprocess_output = echo_subprocess_output
         self._active: dict[tuple[RunnableKind, int], _ActiveEntry] = {}

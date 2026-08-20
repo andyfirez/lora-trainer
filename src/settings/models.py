@@ -19,7 +19,11 @@ class DatabaseSettings(BaseModel):
 
 class TrainingSettings(BaseModel):
     worker_poll_interval_seconds: int = Field(default=5, ge=1)
-    max_concurrent_jobs: int = Field(default=1, ge=1)
+    max_concurrent_jobs: int = Field(
+        default=1,
+        ge=1,
+        description="Max parallel subprocess runnables (loras + samplings). Does not limit tagging.",
+    )
     logs_dir: str = "logs"
     cancel_poll_interval_seconds: int = Field(default=1, ge=1)
 

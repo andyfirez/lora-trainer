@@ -21,16 +21,18 @@ Train SDXL LoRAs on your own GPU with a web UI for dataset management, configura
 flowchart LR
     UI[Next.js UI] --> API[FastAPI]
     API --> DB[(SQLite)]
-    API --> Worker[QueueWorker]
+    API --> TagMgr[TaggingTaskManager]
+    API --> Worker[SubprocessRunnableWorker]
     Worker --> Train[trainer.runner]
     Worker --> Sample[sampler.runner]
-    Worker --> Tag[tagger.runner]
     Train --> GPU[CUDA PyTorch]
     Sample --> GPU
-    Tag --> ONNX[ONNX Runtime GPU]
+    TagMgr --> ONNX[ONNX Runtime GPU]
 ```
 
-The API starts an embedded queue worker on launch. The worker polls the database and spawns subprocesses for training, sampling, and tagging jobs.
+The API starts an embedded **SubprocessRunnableWorker** on launch. It polls `loras` / `samplings` rows and spawns subprocesses for training and sampling. Dataset autotagging runs **in-process** via `TaggingTaskManager` (asyncio + thread pool), not through the runnable queue.
+
+See `src/services/EXECUTION_MODELS.md` for the three execution paths (subprocess runnable, in-process tagging, synchronous API).
 
 ## Requirements
 
