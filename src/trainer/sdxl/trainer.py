@@ -1,6 +1,5 @@
 """SDXL LoRA trainer using diffusers + peft."""
 
-import contextlib
 import logging
 import math
 import random
@@ -14,7 +13,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from src.trainer.attention import configure_unet_attention
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
-from src.trainer.config import TrainConfig, WeightDtype
+from src.trainer.config import TrainConfig
 from src.trainer.optimizer_config import build_optimizer
 from src.trainer.training_log import resolve_part_learning_rates
 from src.trainer.progress import TrainProgress
@@ -50,18 +49,13 @@ from src.trainer.sdxl.mixed_precision import (
 )
 from src.settings.app_settings import settings
 from src.storage.config_paths import resolve_config_base_model
+from src.trainer.sdxl.dtypes import weight_dtype_to_torch
 from src.trainer.sdxl.model_loader import load_sdxl_components
-from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
+from src.trainer.sdxl.prompt_encoding import encode_sdxl_prompt
 from src.trainer.sdxl.te_cache import build_te_cache
 from src.trainer.training_log import JobTrainingLogger
 
 logger = logging.getLogger(__name__)
-
-_DTYPE_MAP = {
-    WeightDtype.FLOAT_32: torch.float32,
-    WeightDtype.FLOAT_16: torch.float16,
-    WeightDtype.BFLOAT_16: torch.bfloat16,
-}
 
 
 class TrainingCancelledAfterSave(Exception):
@@ -97,7 +91,7 @@ class SDXLLoRATrainer:
 
     def train(self) -> None:
         config = self._config
-        self._validate_config(config)
+        config.validate_gpu()
 
         if config.seed is not None:
             torch.manual_seed(config.seed)
@@ -111,7 +105,7 @@ class SDXLLoRATrainer:
             )
         device = torch.device("cuda")
         gpu = config.resolve_gpu(settings.gpu_defaults)
-        weight_dtype = _DTYPE_MAP[gpu.mixed_precision]
+        weight_dtype = weight_dtype_to_torch(gpu.mixed_precision)
         grad_scaler = create_grad_scaler(gpu.mixed_precision)
 
         if gpu.tf32:
@@ -163,7 +157,7 @@ class SDXLLoRATrainer:
         )
         unet = get_peft_model(unet, unet_lora_config)
         param_groups: list[dict] = [
-            {"params": list(unet.parameters()), "lr": config.resolve_learning_rate("unet")}
+            {"params": list(unet.parameters()), "lr": config.unet.learning_rate}
         ]
 
         if config.text_encoder_1.train:
@@ -177,7 +171,7 @@ class SDXLLoRATrainer:
             param_groups.append(
                 {
                     "params": list(text_encoder_1.parameters()),
-                    "lr": config.resolve_learning_rate("text_encoder_1"),
+                    "lr": config.text_encoder_1.learning_rate,
                 }
             )
 
@@ -192,7 +186,7 @@ class SDXLLoRATrainer:
             param_groups.append(
                 {
                     "params": list(text_encoder_2.parameters()),
-                    "lr": config.resolve_learning_rate("text_encoder_2"),
+                    "lr": config.text_encoder_2.learning_rate,
                 }
             )
         trainable_params: list = [param for group in param_groups for param in group["params"]]
@@ -436,7 +430,7 @@ class SDXLLoRATrainer:
                             [te_cache[c][1].to(device, dtype=weight_dtype) for c in captions], dim=0
                         )
                     else:
-                        prompt_embeds, pooled_prompt_embeds = self._encode_prompt(
+                        prompt_embeds, pooled_prompt_embeds = encode_sdxl_prompt(
                             captions,
                             tokenizer_1,
                             tokenizer_2,
@@ -566,54 +560,6 @@ class SDXLLoRATrainer:
         finally:
             if self._training_logger is not None:
                 self._training_logger.close_progress_bar()
-
-    @staticmethod
-    def _validate_config(config: TrainConfig) -> None:
-        config.validate_gpu()
-
-    def _encode_prompt(
-        self,
-        captions: list[str],
-        tokenizer_1,
-        tokenizer_2,
-        text_encoder_1: torch.nn.Module,
-        text_encoder_2: torch.nn.Module,
-        device: torch.device,
-        dtype: torch.dtype,
-        clip_skip: int,
-        train_te1: bool,
-        train_te2: bool,
-    ) -> tuple[Tensor, Tensor]:
-        tokens_1 = tokenizer_1(
-            captions,
-            padding="max_length",
-            max_length=tokenizer_1.model_max_length,
-            truncation=True,
-            return_tensors="pt",
-        )
-        tokens_2 = tokenizer_2(
-            captions,
-            padding="max_length",
-            max_length=tokenizer_2.model_max_length,
-            truncation=True,
-            return_tensors="pt",
-        )
-
-        # Use no_grad for frozen encoders; enable_grad for trained ones so LoRA receives gradients.
-        te1_ctx = contextlib.nullcontext() if train_te1 else torch.no_grad()
-        te2_ctx = contextlib.nullcontext() if train_te2 else torch.no_grad()
-
-        with te1_ctx:
-            enc1_out = text_encoder_1(tokens_1.input_ids.to(device), output_hidden_states=True)
-            prompt_embeds_1 = select_clip_hidden_state(enc1_out.hidden_states, clip_skip).to(dtype=dtype)
-
-        with te2_ctx:
-            enc2_out = text_encoder_2(tokens_2.input_ids.to(device), output_hidden_states=True)
-            prompt_embeds_2 = select_clip_hidden_state(enc2_out.hidden_states, clip_skip).to(dtype=dtype)
-            pooled_prompt_embeds = enc2_out[0].to(dtype=dtype)
-
-        prompt_embeds = torch.cat([prompt_embeds_1, prompt_embeds_2], dim=-1)
-        return prompt_embeds, pooled_prompt_embeds
 
     def _build_dataset(self, config: TrainConfig, cache_mode: bool = False) -> Dataset:
         return build_training_dataset(

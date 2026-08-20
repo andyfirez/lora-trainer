@@ -38,11 +38,11 @@ class LossRecorder:
 def format_trainable_learning_rates(config: TrainConfig) -> str:
     parts: list[str] = []
     if config.unet.train:
-        parts.append(f"unet_lr={config.resolve_learning_rate('unet'):.2e}")
+        parts.append(f"unet_lr={config.unet.learning_rate:.2e}")
     if config.text_encoder_1.train:
-        parts.append(f"te1_lr={config.resolve_learning_rate('text_encoder_1'):.2e}")
+        parts.append(f"te1_lr={config.text_encoder_1.learning_rate:.2e}")
     if config.text_encoder_2.train:
-        parts.append(f"te2_lr={config.resolve_learning_rate('text_encoder_2'):.2e}")
+        parts.append(f"te2_lr={config.text_encoder_2.learning_rate:.2e}")
     return ", ".join(parts)
 
 

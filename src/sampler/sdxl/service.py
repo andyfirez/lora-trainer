@@ -5,17 +5,23 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import torch
 from peft import get_peft_model
+from src.sampler.progress_callbacks import (
+    ProgressCallback,
+    ProgressCallbackMixin,
+    ProgressStatusCallback,
+)
 from src.sampler.config import SamplingConfig
 from src.trainer.attention import configure_unet_attention
 from src.trainer.concept_training_metadata import (
     ConceptTrainingMetadata,
     resolve_reference_add_time_ids,
 )
-from src.trainer.config import TrainConfig, WeightDtype
+from src.trainer.config import TrainConfig
+from src.trainer.sdxl.dtypes import weight_dtype_to_torch
 from src.trainer.sdxl.inference_context import run_merged_adapter_sampling
 from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
@@ -31,15 +37,6 @@ from src.trainer.sdxl.sampling import PromptEmbedCache
 
 logger = logging.getLogger(__name__)
 
-ProgressStatusCallback = Callable[[str | None], None]
-ProgressCallback = Callable[[int, int], None]
-
-_DTYPE_MAP = {
-    WeightDtype.FLOAT_32: torch.float32,
-    WeightDtype.FLOAT_16: torch.float16,
-    WeightDtype.BFLOAT_16: torch.bfloat16,
-}
-
 
 @dataclass
 class _SamplingStack:
@@ -53,7 +50,7 @@ class _SamplingStack:
     unet: torch.nn.Module
 
 
-class SDXLLoRASampler:
+class SDXLLoRASampler(ProgressCallbackMixin):
     def __init__(
         self,
         config: TrainConfig,
@@ -104,7 +101,7 @@ class SDXLLoRASampler:
             return
 
         config = self._config
-        if not self._effective_sample_prompts():
+        if not self._config.sample_prompts:
             raise ValueError("No sample prompts configured")
         if not torch.cuda.is_available():
             raise RuntimeError(f"CUDA is not available (torch {torch.__version__})")
@@ -144,7 +141,7 @@ class SDXLLoRASampler:
                 finally:
                     del stack
                     torch.cuda.empty_cache()
-                completed_images += len(self._effective_sample_prompts())
+                completed_images += len(self._config.sample_prompts)
         else:
             stack, lora_config, merge_unet = self.load_stack_for_combo(
                 base_model=config.base_model_name,
@@ -270,9 +267,9 @@ class SDXLLoRASampler:
 
         self._log.info("Moving SDXL models to GPU...")
         gpu_started = time.perf_counter()
-        unet = unet.to(device=device, dtype=_DTYPE_MAP[config.unet.weight_dtype])
-        text_encoder_1 = text_encoder_1.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_1.weight_dtype])
-        text_encoder_2 = text_encoder_2.to(device=device, dtype=_DTYPE_MAP[config.text_encoder_2.weight_dtype])
+        unet = unet.to(device=device, dtype=weight_dtype_to_torch(config.unet.weight_dtype))
+        text_encoder_1 = text_encoder_1.to(device=device, dtype=weight_dtype_to_torch(config.text_encoder_1.weight_dtype))
+        text_encoder_2 = text_encoder_2.to(device=device, dtype=weight_dtype_to_torch(config.text_encoder_2.weight_dtype))
         vae = vae.to(device=device, dtype=vae_dtype)
         self._log.info("GPU transfer finished in %.1fs", time.perf_counter() - gpu_started)
         configure_unet_attention(unet, gpu.attention_mechanism, self._log)
@@ -360,7 +357,7 @@ class SDXLLoRASampler:
         merge_unet_adapter: bool,
     ) -> None:
         config = self._config
-        sample_prompts = self._effective_sample_prompts()
+        sample_prompts = self._config.sample_prompts
         device = stack.device
         started_at = time.perf_counter()
 
@@ -419,9 +416,6 @@ class SDXLLoRASampler:
         self._report_diffusion_progress(completed_images, prompt_index, completed)
         self._log_sample_step(prompt_index, completed, total)
 
-    def _effective_sample_prompts(self) -> list[str]:
-        return self._config.sample_prompts
-
     def _reference_dataset_ids(self, config: TrainConfig) -> list[int]:
         if config.concepts:
             return [c.dataset_id for c in config.concepts]
@@ -429,7 +423,7 @@ class SDXLLoRASampler:
 
     def _total_diffusion_steps(self) -> int:
         lora_count = len(self._lora_paths) if self._lora_paths else 1
-        return lora_count * len(self._effective_sample_prompts()) * self._config.sample_steps
+        return lora_count * len(self._config.sample_prompts) * self._config.sample_steps
 
     def _report_diffusion_progress(
         self,
@@ -446,18 +440,10 @@ class SDXLLoRASampler:
             self._log.info(
                 "[sample %d/%d] step %d/%d",
                 prompt_index + 1,
-                len(self._effective_sample_prompts()),
+                len(self._config.sample_prompts),
                 completed,
                 total,
             )
-
-    def _set_status(self, status: str | None) -> None:
-        if self._progress_status_callback is not None:
-            self._progress_status_callback(status)
-
-    def _set_progress(self, step: int, total: int) -> None:
-        if self._progress_callback is not None:
-            self._progress_callback(step, total)
 
     def _safe_stem(self, lora_path: Path) -> str:
         return re.sub(r"[^A-Za-z0-9_.-]+", "_", lora_path.stem)

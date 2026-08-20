@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from src.trainer.attention import AttentionMechanism
 
@@ -12,9 +12,6 @@ if TYPE_CHECKING:
     from src.trainer.config import VaeDtype, WeightDtype
 
 FORBIDDEN_GLOBAL_GPU_KEYS: frozenset[str] = frozenset({"tf32", "attention_mechanism"})
-
-GPU_OVERRIDE_KEYS: tuple[str, ...] = ("mixed_precision", "vae_dtype", "sample_vae_tiling")
-
 
 @dataclass(frozen=True)
 class ResolvedGpuConfig:
@@ -69,22 +66,3 @@ def strip_gpu_overrides_matching_defaults(
         cleaned.pop("sample_vae_tiling", None)
     return cleaned
 
-
-def merge_proposed_gpu_overrides(
-    config: dict[str, object],
-    *,
-    defaults: GpuDefaultsSettings,
-) -> dict[str, object]:
-    """Drop override keys from config when they match global defaults (sparse YAML)."""
-    merged = dict(config)
-    for key in GPU_OVERRIDE_KEYS:
-        if key not in merged:
-            continue
-        value = merged[key]
-        if key == "mixed_precision" and value == defaults.mixed_precision.value:
-            merged.pop(key)
-        elif key == "vae_dtype" and value == defaults.vae_dtype.value:
-            merged.pop(key)
-        elif key == "sample_vae_tiling" and value is defaults.sample_vae_tiling:
-            merged.pop(key)
-    return strip_global_gpu_keys(merged)

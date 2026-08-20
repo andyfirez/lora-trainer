@@ -13,11 +13,11 @@ from src.sampler.sweep.models import (
     SweepMode,
     SweepParameters,
 )
+from src.trainer.gpu_config_mixin import YamlGpuConfigMixin
 from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
 from src.trainer.gpu_resolution import (
     FORBIDDEN_GLOBAL_GPU_KEYS,
     resolve_gpu_config,
-    strip_global_gpu_keys,
     strip_gpu_overrides_matching_defaults,
 )
 
@@ -57,7 +57,7 @@ FORBIDDEN_LEGACY_SAMPLING_KEYS: frozenset[str] = LEGACY_FLAT_SAMPLING_KEYS | FOR
 FORBIDDEN_ENTITY_GPU_KEYS: frozenset[str] = FORBIDDEN_GLOBAL_GPU_KEYS
 
 
-class SamplingConfig(BaseModel):
+class SamplingConfig(YamlGpuConfigMixin, BaseModel):
     """SDXL LoRA sampling configuration with unified parameter sweep support."""
 
     output_dir: str = ""
@@ -81,19 +81,6 @@ class SamplingConfig(BaseModel):
         prompts = params.prompt.effective_values()
         return [str(p) for p in prompts if p is not None and str(p).strip()]
 
-    @classmethod
-    def from_yaml(cls, yaml_str: str, *, snapshot: bool = False) -> "SamplingConfig":
-        data = yaml.safe_load(yaml_str) or {}
-        if not isinstance(data, dict):
-            data = {}
-        if not snapshot:
-            data = strip_global_gpu_keys(data)
-        return cls.model_validate(data)
-
-    @classmethod
-    def from_snapshot_yaml(cls, yaml_str: str) -> "SamplingConfig":
-        return cls.from_yaml(yaml_str, snapshot=True)
-
     def resolve_gpu(self, defaults: "GpuDefaultsSettings") -> "ResolvedGpuConfig":
         from src.trainer.gpu_resolution import ResolvedGpuConfig
 
@@ -116,10 +103,6 @@ class SamplingConfig(BaseModel):
             sample_vae_tiling=self.sample_vae_tiling,
         )
 
-    def with_resolved_gpu(self, defaults: "GpuDefaultsSettings") -> "SamplingConfig":
-        resolved = self.resolve_gpu(defaults)
-        return self.model_copy(update=resolved.as_train_fields())
-
     def _entity_yaml_data(self) -> dict[str, object]:
         from src.settings.app_settings import settings
 
@@ -128,27 +111,9 @@ class SamplingConfig(BaseModel):
             data.pop(field, None)
         return strip_gpu_overrides_matching_defaults(data, settings.gpu_defaults)
 
-    def to_yaml(self) -> str:
-        return yaml.dump(self._entity_yaml_data(), allow_unicode=True, sort_keys=False)
-
     def to_snapshot_yaml(self) -> str:
         data = self.model_dump(mode="json", exclude_none=True)
         return yaml.dump(data, allow_unicode=True, sort_keys=False)
-
-    @classmethod
-    def default_yaml(cls) -> str:
-        return cls().to_yaml()
-
-    def validate_gpu(self) -> None:
-        from src.settings.app_settings import settings
-        from src.trainer.gpu_config_validation import validate_gpu_config
-
-        resolved = self.resolve_gpu(settings.gpu_defaults)
-        validate_gpu_config(
-            attention_mechanism=resolved.attention_mechanism,
-            mixed_precision=resolved.mixed_precision,
-            vae_dtype=resolved.vae_dtype,
-        )
 
     def effective_prompts(self) -> list[str]:
         return self._prompts_from_parameters(self.parameters)
@@ -205,9 +170,6 @@ class SamplingConfig(BaseModel):
             "sample_vae_fp32": self.sample_vae_fp32,
             "sample_offload_unet_before_decode": self.sample_offload_unet_before_decode,
         }
-
-    def build_sampling_field_updates(self) -> dict[str, object]:
-        return self.train_config_field_updates()
 
     def to_train_config(self) -> "TrainConfig":
         from src.settings.app_settings import settings

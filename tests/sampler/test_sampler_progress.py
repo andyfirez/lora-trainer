@@ -5,7 +5,7 @@ from src.sampler.sdxl.service import SDXLLoRASampler
 from src.trainer.config import TrainConfig
 
 
-def test_effective_sample_prompts_returns_config_prompts() -> None:
+def test_sample_prompts_available_on_config() -> None:
     config = TrainConfig(sample_prompts=["ohwx, portrait"])
     sampler = SDXLLoRASampler(
         config,
@@ -13,10 +13,10 @@ def test_effective_sample_prompts_returns_config_prompts() -> None:
         output_dir=Path("out"),
     )
 
-    assert sampler._effective_sample_prompts() == ["ohwx, portrait"]
+    assert sampler._config.sample_prompts == ["ohwx, portrait"]
 
 
-def test_effective_sample_prompts_same_for_base_model_sampling() -> None:
+def test_sample_prompts_same_for_base_model_sampling() -> None:
     config = TrainConfig(sample_prompts=["portrait"])
     sampler = SDXLLoRASampler(
         config,
@@ -24,7 +24,7 @@ def test_effective_sample_prompts_same_for_base_model_sampling() -> None:
         output_dir=Path("out"),
     )
 
-    assert sampler._effective_sample_prompts() == ["portrait"]
+    assert sampler._config.sample_prompts == ["portrait"]
 
     config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
     sampler = SDXLLoRASampler(

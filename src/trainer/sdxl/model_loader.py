@@ -13,18 +13,10 @@ from diffusers import (
 from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
 
 from src.trainer.config import VaeDtype, WeightDtype
+from src.trainer.sdxl.dtypes import weight_dtype_to_torch
 
 _CHECKPOINT_EXTENSIONS = {".safetensors", ".ckpt"}
 _SDXL_ORIGINAL_CONFIG = Path(__file__).resolve().parent / "resources" / "sd_xl_base.yaml"
-
-_DTYPE_MAP = {
-    WeightDtype.FLOAT_32: torch.float32,
-    WeightDtype.FLOAT_16: torch.float16,
-    WeightDtype.BFLOAT_16: torch.bfloat16,
-    VaeDtype.FLOAT_32: torch.float32,
-    VaeDtype.FLOAT_16: torch.float16,
-    VaeDtype.BFLOAT_16: torch.bfloat16,
-}
 
 
 @dataclass(frozen=True)
@@ -49,7 +41,7 @@ def _build_training_noise_scheduler(source: object) -> DDPMScheduler:
 
 def resolve_vae_dtype(vae_dtype: VaeDtype) -> torch.dtype:
     if vae_dtype != VaeDtype.AUTO:
-        return _DTYPE_MAP[vae_dtype]
+        return weight_dtype_to_torch(vae_dtype)
     if torch.cuda.is_available():
         major, _minor = torch.cuda.get_device_capability()
         if major >= 8 and torch.cuda.is_bf16_supported():
@@ -101,18 +93,18 @@ def _load_from_pretrained(
         text_encoder_1=CLIPTextModel.from_pretrained(
             base_model_name,
             subfolder="text_encoder",
-            torch_dtype=_DTYPE_MAP[text_encoder_1_dtype],
+            torch_dtype=weight_dtype_to_torch(text_encoder_1_dtype),
         ),
         text_encoder_2=CLIPTextModelWithProjection.from_pretrained(
             base_model_name,
             subfolder="text_encoder_2",
-            torch_dtype=_DTYPE_MAP[text_encoder_2_dtype],
+            torch_dtype=weight_dtype_to_torch(text_encoder_2_dtype),
         ),
         vae=AutoencoderKL.from_pretrained(base_model_name, subfolder="vae", torch_dtype=vae_dtype),
         unet=UNet2DConditionModel.from_pretrained(
             base_model_name,
             subfolder="unet",
-            torch_dtype=_DTYPE_MAP[unet_dtype],
+            torch_dtype=weight_dtype_to_torch(unet_dtype),
         ),
     )
 
@@ -134,8 +126,8 @@ def _load_from_checkpoint(
         tokenizer_1=pipeline.tokenizer,
         tokenizer_2=pipeline.tokenizer_2,
         noise_scheduler=_build_training_noise_scheduler(pipeline.scheduler),
-        text_encoder_1=pipeline.text_encoder.to(dtype=_DTYPE_MAP[text_encoder_1_dtype]),
-        text_encoder_2=pipeline.text_encoder_2.to(dtype=_DTYPE_MAP[text_encoder_2_dtype]),
+        text_encoder_1=pipeline.text_encoder.to(dtype=weight_dtype_to_torch(text_encoder_1_dtype)),
+        text_encoder_2=pipeline.text_encoder_2.to(dtype=weight_dtype_to_torch(text_encoder_2_dtype)),
         vae=pipeline.vae.to(dtype=vae_dtype),
-        unet=pipeline.unet.to(dtype=_DTYPE_MAP[unet_dtype]),
+        unet=pipeline.unet.to(dtype=weight_dtype_to_torch(unet_dtype)),
     )

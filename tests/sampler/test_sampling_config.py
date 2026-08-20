@@ -40,10 +40,10 @@ def test_sampling_config_to_train_config_propagates_resolved_gpu(monkeypatch) ->
     assert train_config.sample_offload_unet_before_decode is False
 
 
-def test_sampling_config_build_sampling_field_updates_uses_resolved_vae_tiling() -> None:
+def test_sampling_config_train_config_field_updates_uses_resolved_vae_tiling() -> None:
     config = SamplingConfig(sample_vae_tiling=False)
 
-    updates = config.build_sampling_field_updates()
+    updates = config.train_config_field_updates()
 
     assert updates["sample_vae_tiling"] is False
 
@@ -53,7 +53,7 @@ def test_sampling_config_default_yaml_roundtrip() -> None:
     assert config.parameters.lora_weight.first_value() == 1.0
 
 
-def test_sampling_config_build_sampling_field_updates_preserves_prompts() -> None:
+def test_sampling_config_train_config_field_updates_preserves_prompts() -> None:
     config = SamplingConfig.from_yaml(
         """
 output_dir: /tmp
@@ -65,7 +65,7 @@ parameters:
       - b
 """
     )
-    updates = config.build_sampling_field_updates()
+    updates = config.train_config_field_updates()
     assert updates["sample_prompts"] == ["a", "b"]
 
 

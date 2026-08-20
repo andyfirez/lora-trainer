@@ -11,19 +11,14 @@ import torch
 from diffusers import DDPMScheduler
 
 from src.settings.app_settings import settings
-from src.trainer.config import TrainConfig, WeightDtype
+from src.trainer.config import TrainConfig
+from src.trainer.sdxl.dtypes import weight_dtype_to_torch
 from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
 from src.trainer.sdxl.sampling import (
     PromptEmbedCache,
     build_inference_scheduler,
     precompute_all_sample_embeds,
 )
-
-_DTYPE_MAP = {
-    WeightDtype.FLOAT_32: torch.float32,
-    WeightDtype.FLOAT_16: torch.float16,
-    WeightDtype.BFLOAT_16: torch.bfloat16,
-}
 
 
 @dataclass(frozen=True)
@@ -154,7 +149,7 @@ def run_sampling_pass_with_embeds(
 
     width = sampling_config.sample_width or sampling_config.resolution
     height = sampling_config.sample_height or sampling_config.resolution
-    autocast_dtype = _DTYPE_MAP[sampling_config.resolve_gpu(settings.gpu_defaults).mixed_precision]
+    autocast_dtype = weight_dtype_to_torch(sampling_config.resolve_gpu(settings.gpu_defaults).mixed_precision)
 
     cache = embed_cache if embed_cache is not None else PromptEmbedCache()
     if clear_embed_cache_on_te_train:
@@ -163,11 +158,11 @@ def run_sampling_pass_with_embeds(
     negative_prompt = sampling_config.sample_negative_prompt or ""
     inference_te1 = inference_te1.to(
         device=device,
-        dtype=_DTYPE_MAP[sampling_config.text_encoder_1.weight_dtype],
+        dtype=weight_dtype_to_torch(sampling_config.text_encoder_1.weight_dtype),
     )
     inference_te2 = inference_te2.to(
         device=device,
-        dtype=_DTYPE_MAP[sampling_config.text_encoder_2.weight_dtype],
+        dtype=weight_dtype_to_torch(sampling_config.text_encoder_2.weight_dtype),
     )
     log.info(
         "Precomputing prompt embeddings (%d prompt(s), %dx%d)...",

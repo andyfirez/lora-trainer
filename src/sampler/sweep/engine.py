@@ -5,11 +5,16 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import torch
 
 from src.sampler.config import SamplingConfig
+from src.sampler.progress_callbacks import (
+    ProgressCallback,
+    ProgressCallbackMixin,
+    ProgressStatusCallback,
+)
 from src.sampler.sdxl.service import SDXLLoRASampler
 from src.sampler.sweep.combinations import build_combinations
 from src.sampler.sweep.grid_compositor import compose_grid
@@ -30,9 +35,6 @@ from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.config import SampleScheduler, TrainConfig
 from src.trainer.sdxl.caption import apply_trigger_words_to_prompt
 
-ProgressStatusCallback = Callable[[str | None], None]
-ProgressCallback = Callable[[int, int], None]
-
 
 def sort_pipeline_groups(
     groups: dict[tuple[str, str | None], list],
@@ -41,7 +43,7 @@ def sort_pipeline_groups(
     return sorted(groups.items(), key=lambda item: (item[0][0], item[0][1] or ""))
 
 
-class SweepEngine:
+class SweepEngine(ProgressCallbackMixin):
     def __init__(
         self,
         sampling_config: SamplingConfig,
@@ -261,11 +263,3 @@ class SweepEngine:
             images=image_entries,
             grids=grid_entries,
         )
-
-    def _set_status(self, status: str | None) -> None:
-        if self._progress_status_callback is not None:
-            self._progress_status_callback(status)
-
-    def _set_progress(self, step: int, total: int) -> None:
-        if self._progress_callback is not None:
-            self._progress_callback(step, total)

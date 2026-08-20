@@ -14,7 +14,7 @@ from diffusers import (
 from torch import Tensor
 
 from src.trainer.config import SampleScheduler
-from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
+from src.trainer.sdxl.prompt_encoding import encode_sdxl_prompt
 
 _SCHEDULER_MAP = {
     SampleScheduler.EULER: EulerDiscreteScheduler,
@@ -29,39 +29,6 @@ def build_inference_scheduler(
     noise_scheduler: DDPMScheduler,
 ) -> object:
     return _SCHEDULER_MAP[sample_scheduler].from_config(noise_scheduler.config)
-
-
-def encode_sdxl_prompt(
-    captions: list[str],
-    tokenizer_1: Any,
-    tokenizer_2: Any,
-    text_encoder_1: torch.nn.Module,
-    text_encoder_2: torch.nn.Module,
-    device: torch.device,
-    dtype: torch.dtype,
-    clip_skip: int,
-) -> tuple[Tensor, Tensor]:
-    tokens_1 = tokenizer_1(
-        captions,
-        padding="max_length",
-        max_length=tokenizer_1.model_max_length,
-        truncation=True,
-        return_tensors="pt",
-    )
-    tokens_2 = tokenizer_2(
-        captions,
-        padding="max_length",
-        max_length=tokenizer_2.model_max_length,
-        truncation=True,
-        return_tensors="pt",
-    )
-    with torch.no_grad():
-        enc1_out = text_encoder_1(tokens_1.input_ids.to(device), output_hidden_states=True)
-        prompt_embeds_1 = select_clip_hidden_state(enc1_out.hidden_states, clip_skip).to(dtype=dtype)
-        enc2_out = text_encoder_2(tokens_2.input_ids.to(device), output_hidden_states=True)
-        prompt_embeds_2 = select_clip_hidden_state(enc2_out.hidden_states, clip_skip).to(dtype=dtype)
-        pooled_prompt_embeds = enc2_out[0].to(dtype=dtype)
-    return torch.cat([prompt_embeds_1, prompt_embeds_2], dim=-1), pooled_prompt_embeds
 
 
 @dataclass

@@ -30,22 +30,22 @@ def _param_groups(params: list[nn.Parameter], lr: float) -> list[dict]:
     return [{"params": params, "lr": lr}]
 
 
-def test_resolve_learning_rate_per_part_defaults() -> None:
+def test_per_part_learning_rate_defaults() -> None:
     config = TrainConfig()
-    assert config.resolve_learning_rate("unet") == pytest.approx(5e-5)
-    assert config.resolve_learning_rate("text_encoder_1") == pytest.approx(5e-5)
-    assert config.resolve_learning_rate("text_encoder_2") == pytest.approx(5e-5)
+    assert config.unet.learning_rate == pytest.approx(5e-5)
+    assert config.text_encoder_1.learning_rate == pytest.approx(5e-5)
+    assert config.text_encoder_2.learning_rate == pytest.approx(5e-5)
 
 
-def test_resolve_learning_rate_per_part_override() -> None:
+def test_per_part_learning_rate_override() -> None:
     config = TrainConfig(
         unet={"train": True, "learning_rate": 5e-4},
         text_encoder_1={"train": True, "learning_rate": 3e-5},
         text_encoder_2={"train": True, "learning_rate": 4e-5},
     )
-    assert config.resolve_learning_rate("unet") == pytest.approx(5e-4)
-    assert config.resolve_learning_rate("text_encoder_1") == pytest.approx(3e-5)
-    assert config.resolve_learning_rate("text_encoder_2") == pytest.approx(4e-5)
+    assert config.unet.learning_rate == pytest.approx(5e-4)
+    assert config.text_encoder_1.learning_rate == pytest.approx(3e-5)
+    assert config.text_encoder_2.learning_rate == pytest.approx(4e-5)
 
 
 def test_train_config_yaml_roundtrip_per_part_learning_rate() -> None:
@@ -68,9 +68,9 @@ def test_build_optimizer_param_groups(trainable_params: list[nn.Parameter]) -> N
         text_encoder_2={"train": True, "learning_rate": 3e-5},
     )
     param_groups = [
-        {"params": trainable_params, "lr": config.resolve_learning_rate("unet")},
-        {"params": te1_params, "lr": config.resolve_learning_rate("text_encoder_1")},
-        {"params": te2_params, "lr": config.resolve_learning_rate("text_encoder_2")},
+        {"params": trainable_params, "lr": config.unet.learning_rate},
+        {"params": te1_params, "lr": config.text_encoder_1.learning_rate},
+        {"params": te2_params, "lr": config.text_encoder_2.learning_rate},
     ]
     optimizer = build_optimizer(param_groups, config)
     assert len(optimizer.param_groups) == 3
