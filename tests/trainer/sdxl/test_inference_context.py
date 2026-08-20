@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import torch
-from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.inference_context import (
     merge_adapters_for_inference,
     run_merged_adapter_sampling,
@@ -24,7 +24,7 @@ def test_merge_and_unmerge_adapters_for_inference() -> None:
     unet = _make_peft_module()
     te1 = _make_peft_module()
     te2 = _make_peft_module()
-    config = TrainConfig(text_encoder_1={"train": True}, text_encoder_2={"train": False})
+    config = SDXLInferenceConfig(text_encoder_1={"train": True}, text_encoder_2={"train": False})
 
     state = merge_adapters_for_inference(
         unet=unet,
@@ -53,7 +53,7 @@ def test_run_merged_adapter_sampling_delegates_to_pass_helper(mock_pass: MagicMo
     te1 = _make_peft_module()
     te2 = _make_peft_module()
     vae = MagicMock()
-    config = TrainConfig()
+    config = SDXLInferenceConfig()
 
     run_merged_adapter_sampling(
         unet=unet,
@@ -92,7 +92,7 @@ def test_run_sampling_pass_moves_text_encoders_to_device_before_embeds(
     te2 = MagicMock(name="te2")
     te1.to.side_effect = lambda *args, **kwargs: te1
     te2.to.side_effect = lambda *args, **kwargs: te2
-    config = TrainConfig()
+    config = SDXLInferenceConfig()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     run_sampling_pass_with_embeds(

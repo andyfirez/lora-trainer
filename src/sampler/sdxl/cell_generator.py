@@ -10,7 +10,7 @@ from src.trainer.concept_training_metadata import (
     ConceptTrainingMetadata,
     resolve_reference_add_time_ids,
 )
-from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.inference_context import run_merged_adapter_sampling
 from src.trainer.sdxl.pipeline_loader import SamplingStack
 from src.trainer.sdxl.sampling import PromptEmbedCache
@@ -21,8 +21,8 @@ ProgressStepCallback = Callable[[int, int], None]
 def generate_sampling_cell(
     *,
     stack: SamplingStack,
-    lora_config: TrainConfig,
-    sampling_config: TrainConfig,
+    lora_config: SDXLInferenceConfig,
+    sampling_config: SDXLInferenceConfig,
     merge_unet: bool,
     prompt: str,
     lora_weight: float,
@@ -47,7 +47,7 @@ def generate_sampling_cell(
     )
     reference_add_time_ids = resolve_reference_add_time_ids(
         concept_metadata,
-        dataset_ids=_reference_dataset_ids(config, concept_metadata),
+        dataset_ids=_reference_dataset_ids(concept_metadata),
         width=config.sample_width or config.resolution,
         height=config.sample_height or config.resolution,
     )
@@ -83,9 +83,6 @@ def generate_sampling_cell(
 
 
 def _reference_dataset_ids(
-    config: TrainConfig,
     concept_metadata: dict[int, ConceptTrainingMetadata],
 ) -> list[int]:
-    if config.concepts:
-        return [concept.dataset_id for concept in config.concepts]
     return list(concept_metadata.keys())

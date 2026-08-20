@@ -12,7 +12,7 @@ import torch
 
 from src.storage.config_paths import resolve_config_base_model
 from src.trainer.attention import configure_unet_attention
-from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
 from src.gpu.runtime import setup_cuda_runtime
 from src.trainer.sdxl.dtypes import weight_dtype_to_torch
 from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
@@ -40,7 +40,7 @@ class SDXLPipelineLoader:
 
     def __init__(
         self,
-        base_config: TrainConfig,
+        base_config: SDXLInferenceConfig,
         *,
         log: logging.Logger | None = None,
     ) -> None:
@@ -53,7 +53,7 @@ class SDXLPipelineLoader:
         base_model: str,
         lora_path: Path | None,
         combo_params: dict[str, Any],
-    ) -> tuple[SamplingStack, TrainConfig, bool]:
+    ) -> tuple[SamplingStack, SDXLInferenceConfig, bool]:
         config = self._base_config.model_copy(update={"base_model_name": base_model})
         if lora_path is not None:
             self._log.info("Reading LoRA file: %s", lora_path)
@@ -85,7 +85,7 @@ class SDXLPipelineLoader:
         stack = self.load_stack(config, enable_lora=False)
         return stack, config, False
 
-    def load_stack(self, config: TrainConfig, *, enable_lora: bool) -> SamplingStack:
+    def load_stack(self, config: SDXLInferenceConfig, *, enable_lora: bool) -> SamplingStack:
         runtime = setup_cuda_runtime(config)
         device = runtime.device
         gpu = runtime.gpu

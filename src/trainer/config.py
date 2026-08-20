@@ -3,8 +3,8 @@
 Persisted YAML omits runtime-only fields:
 - Concept ``image_dir`` / ``prepared_dir`` are populated by ``resolve_concepts`` and
   stripped by ``to_yaml`` (see ``ResolvedConceptPaths``).
-- Sampling prompt/size fields on ``TrainConfig`` are a runtime overlay applied via
-  ``resolve_sampling`` from a persisted ``SamplingConfig`` entity during sampling jobs.
+- Sampling uses ``SDXLInferenceConfig`` (``src.trainer.inference_config``), built from
+  ``SamplingConfig.to_inference_config()``.
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ from src.gpu import (
 from src.trainer.optimizer_config import OptimizerConfig
 
 if TYPE_CHECKING:
-    from src.sampler.config import SamplingConfig
     from src.settings.models import GpuDefaultsSettings
     from src.trainer.concept_resolution import ResolvedConceptPaths
     from src.gpu import ResolvedGpuConfig
@@ -64,6 +63,14 @@ class SampleScheduler(StrEnum):
     DPM_PP = "dpm++"
 
 
+FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({
+    "sample_after_training",
+    "learning_rate",
+    "sampling_enabled",
+    "sampling_config_id",
+})
+
+# Historical Alembic migrations strip these keys from persisted training YAML.
 RUNTIME_SAMPLING_FIELDS: tuple[str, ...] = (
     "sample_prompts",
     "sample_negative_prompt",
@@ -76,20 +83,6 @@ RUNTIME_SAMPLING_FIELDS: tuple[str, ...] = (
     "sample_vae_fp32",
     "sample_offload_unet_before_decode",
 )
-
-FORBIDDEN_INLINE_SAMPLING_KEYS: frozenset[str] = frozenset(
-    {
-        *RUNTIME_SAMPLING_FIELDS,
-        "post_training_sampling_config_id",
-    }
-)
-
-FORBIDDEN_DEPRECATED_TRAIN_KEYS: frozenset[str] = frozenset({
-    "sample_after_training",
-    "learning_rate",
-    "sampling_enabled",
-    "sampling_config_id",
-})
 
 FORBIDDEN_DEPRECATED_CONCEPT_KEYS: frozenset[str] = frozenset({"image_dir", "prepared_dir"})
 
@@ -197,18 +190,6 @@ class TrainConfig(YamlGpuConfigMixin, BaseModel):
     save_every_n_epochs: int = Field(default=1, ge=1)
     resume_from_checkpoint: Optional[str] = None
 
-    # Runtime sampling overlay (populated from SamplingConfig during sampling jobs)
-    sample_prompts: list[str] = Field(default_factory=list)
-    sample_negative_prompt: str = ""
-    sample_steps: int = Field(default=30, ge=1)
-    sample_cfg_scale: float = Field(default=7.5, gt=0.0)
-    sample_width: Optional[int] = Field(default=None, ge=64, le=2048)
-    sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
-    sample_scheduler: SampleScheduler = SampleScheduler.EULER
-    sample_vae_tiling: bool = True
-    sample_vae_fp32: bool = False
-    sample_offload_unet_before_decode: bool = True
-
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     def resolve_gpu(self, defaults: "GpuDefaultsSettings") -> "ResolvedGpuConfig":
@@ -235,8 +216,6 @@ class TrainConfig(YamlGpuConfigMixin, BaseModel):
         for concept in data.get("concepts", []):
             concept.pop("image_dir", None)
             concept.pop("prepared_dir", None)
-        for field in RUNTIME_SAMPLING_FIELDS:
-            data.pop(field, None)
         for field in FORBIDDEN_ENTITY_GPU_KEYS:
             data.pop(field, None)
         return strip_gpu_overrides_matching_defaults(data, settings.gpu_defaults)
@@ -261,32 +240,11 @@ class TrainConfig(YamlGpuConfigMixin, BaseModel):
             )
         return self.model_copy(update={"concepts": resolved})
 
-    def resolve_sampling(self, sampling: SamplingConfig) -> TrainConfig:
-        from src.sampler.config import SamplingConfig
-        from src.trainer.sdxl.caption import (
-            apply_trigger_words_to_sample_prompts,
-            collect_trigger_words,
-        )
-
-        if not isinstance(sampling, SamplingConfig):
-            raise TypeError("sampling must be a SamplingConfig instance")
-        merged = self.model_copy(update=sampling.train_config_field_updates())
-        return merged.model_copy(
-            update={
-                "sample_prompts": apply_trigger_words_to_sample_prompts(
-                    merged.sample_prompts,
-                    collect_trigger_words(self.concepts),
-                )
-            }
-        )
-
     def to_snapshot_yaml(self) -> str:
         data = self.model_dump(mode="json", exclude_none=True)
         for concept in data.get("concepts", []):
             concept.pop("image_dir", None)
             concept.pop("prepared_dir", None)
-        for field in RUNTIME_SAMPLING_FIELDS:
-            data.pop(field, None)
         return yaml.dump(data, allow_unicode=True, sort_keys=False)
 
     @model_validator(mode="after")

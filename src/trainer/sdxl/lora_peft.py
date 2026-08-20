@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 import torch
 from peft import LoraConfig, get_peft_model
 
-from src.trainer.config import TrainConfig
 from src.trainer.sdxl.lora_targets import (
     SDXL_TE_LORA_TARGET_MODULES,
     SDXL_UNET_LORA_TARGET_MODULES,
@@ -39,11 +39,20 @@ def build_sdxl_lora_config(
     )
 
 
+class _SdxlLoraAttachConfig(Protocol):
+    lora_rank: int
+    lora_alpha: float
+    lora_dropout: float
+    unet: object
+    text_encoder_1: object
+    text_encoder_2: object
+
+
 def attach_sdxl_lora_adapters(
     unet: torch.nn.Module,
     text_encoder_1: torch.nn.Module,
     text_encoder_2: torch.nn.Module,
-    config: TrainConfig,
+    config: _SdxlLoraAttachConfig,
     *,
     enable_lora: bool,
     for_training: bool = False,

@@ -7,6 +7,8 @@ import torch
 from torch import Tensor
 
 from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
+from src.trainer.sdxl.lora_peft import _SdxlLoraAttachConfig
 
 _PEFT_PREFIX = "base_model.model."
 _LORA_A_SUFFIX = ".lora_A.default.weight"
@@ -54,7 +56,10 @@ def infer_kohya_lora_metadata(state_dict: dict[str, Any]) -> KohyaLoRAMetadata:
     return KohyaLoRAMetadata(rank=rank, alpha=alpha, train_te1=train_te1, train_te2=train_te2)
 
 
-def apply_lora_metadata_to_config(config: TrainConfig, state_dict: dict[str, Any]) -> TrainConfig:
+def apply_lora_metadata_to_config(
+    config: SDXLInferenceConfig,
+    state_dict: dict[str, Any],
+) -> SDXLInferenceConfig:
     metadata = infer_kohya_lora_metadata(state_dict)
     return config.model_copy(
         update={
@@ -168,7 +173,7 @@ def apply_kohya_state_dict(
     unet: torch.nn.Module,
     text_encoder_1: torch.nn.Module,
     text_encoder_2: torch.nn.Module,
-    config: TrainConfig,
+    config: _SdxlLoraAttachConfig,
 ) -> None:
     _apply_kohya_state_to_module(unet, state_dict, prefix="lora_unet_")
     if config.text_encoder_1.train:

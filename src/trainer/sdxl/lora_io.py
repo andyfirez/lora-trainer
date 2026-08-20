@@ -6,7 +6,7 @@ from typing import Any
 import torch
 from safetensors.torch import load_file
 
-from src.trainer.config import TrainConfig
+from src.trainer.sdxl.lora_peft import _SdxlLoraAttachConfig
 from src.trainer.sdxl.lora_export import apply_kohya_state_dict, detect_lora_format
 
 
@@ -47,7 +47,7 @@ def apply_lora_state_dict(
     unet: torch.nn.Module,
     text_encoder_1: torch.nn.Module,
     text_encoder_2: torch.nn.Module,
-    config: TrainConfig,
+    config: _SdxlLoraAttachConfig,
 ) -> None:
     if detect_lora_format(state_dict) == "kohya":
         apply_kohya_state_dict(

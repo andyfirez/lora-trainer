@@ -11,7 +11,7 @@ import torch
 from diffusers import DDPMScheduler
 
 from src.settings.app_settings import settings
-from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.dtypes import weight_dtype_to_torch
 from src.trainer.sdxl.latent_sampling import SDXLSamplingSession, run_sdxl_sampling_pass
 from src.trainer.sdxl.sampling import (
@@ -57,7 +57,7 @@ def merge_adapters_for_inference(
     unet: Any,
     text_encoder_1: Any,
     text_encoder_2: Any,
-    lora_config: TrainConfig,
+    lora_config: SDXLInferenceConfig,
     merge_unet: bool = True,
     lora_weight: float = 1.0,
 ) -> AdapterMergeState:
@@ -128,7 +128,7 @@ def run_sampling_pass_with_embeds(
     tokenizer_1: Any,
     tokenizer_2: Any,
     noise_scheduler: DDPMScheduler,
-    sampling_config: TrainConfig,
+    sampling_config: SDXLInferenceConfig,
     device: torch.device,
     sample_prompts: list[str],
     output_dir: Path,
@@ -224,8 +224,8 @@ def run_merged_adapter_sampling(
     tokenizer_1: Any,
     tokenizer_2: Any,
     noise_scheduler: DDPMScheduler,
-    lora_config: TrainConfig,
-    sampling_config: TrainConfig,
+    lora_config: SDXLInferenceConfig,
+    sampling_config: SDXLInferenceConfig,
     device: torch.device,
     sample_prompts: list[str],
     output_dir: Path,

@@ -1,12 +1,12 @@
 from unittest.mock import MagicMock
 
 import torch
-from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 
 
-def _train_config(**kwargs: object) -> TrainConfig:
-    return TrainConfig(**kwargs)
+def _inference_config(**kwargs: object) -> SDXLInferenceConfig:
+    return SDXLInferenceConfig(**kwargs)
 
 
 def test_sampling_session_sets_timesteps_once() -> None:
@@ -26,7 +26,7 @@ def test_sampling_session_sets_timesteps_once() -> None:
         height=1024,
         sample_steps=30,
         autocast_dtype=torch.float16,
-        config=_train_config(),
+        config=_inference_config(),
     )
 
     scheduler.set_timesteps.assert_called_once_with(30, device=torch.device("cpu"))
@@ -56,7 +56,7 @@ def test_sampling_session_uses_reference_add_time_ids_when_provided() -> None:
         height=1024,
         sample_steps=30,
         autocast_dtype=torch.float16,
-        config=_train_config(),
+        config=_inference_config(),
         reference_add_time_ids=reference,
     )
 
@@ -78,7 +78,7 @@ def test_sampling_session_uses_reference_add_time_ids_when_provided() -> None:
         height=512,
         sample_steps=10,
         autocast_dtype=torch.float16,
-        config=_train_config(
+        config=_inference_config(
             sample_vae_fp32=True,
             sample_vae_tiling=False,
         ),
@@ -105,7 +105,7 @@ def test_sampling_session_enables_vae_tiling_for_large_decode() -> None:
         height=1216,
         sample_steps=10,
         autocast_dtype=torch.float16,
-        config=_train_config(
+        config=_inference_config(
             sample_vae_fp32=False,
             sample_vae_tiling=True,
         ),

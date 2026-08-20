@@ -8,7 +8,7 @@ from typing import Any
 import torch
 from torch import Tensor
 
-from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.sampling import prepare_vae_for_decode
 
 _VAE_TILING_MIN_SIDE = 768
@@ -64,7 +64,7 @@ class SDXLSamplingSession:
         height: int,
         sample_steps: int,
         autocast_dtype: torch.dtype,
-        config: TrainConfig,
+        config: SDXLInferenceConfig,
         vae_scale_factor: int = 8,
         reference_add_time_ids: tuple[float, ...] | None = None,
     ) -> SDXLSamplingSession:

@@ -101,8 +101,8 @@ async def run_sampling(sampling_id: int) -> int:
                 len(effective_lora_paths),
             )
         lora_paths = [Path(p) for p in effective_lora_paths]
-        train_config = sampling_config.to_train_config()
-        train_config.validate_gpu()
+        inference_config = sampling_config.to_inference_config()
+        inference_config.validate_gpu()
         if output_path is None:
             output_path = str(resolve_sampling_output_path(sampling_config, sampling_id))
             await _set_output_path(sampling_id, output_path)
@@ -124,7 +124,7 @@ async def run_sampling(sampling_id: int) -> int:
             run_logger.info("  Varying parameters: %s", ", ".join(vary_keys))
         run_sweep_sampling(
             sampling_config=sampling_config,
-            base_train_config=train_config,
+            base_inference_config=inference_config,
             output_dir=Path(output_path),
             progress_status_callback=_make_progress_status_callback(sampling_id),
             progress_callback=_make_progress_callback(sampling_id),

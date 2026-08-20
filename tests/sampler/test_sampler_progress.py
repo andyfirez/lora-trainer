@@ -1,25 +1,24 @@
-from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.sampler.progress_utils import diffusion_progress_step, total_diffusion_steps
-from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
 
 
 def test_sample_prompts_available_on_config() -> None:
-    config = TrainConfig(sample_prompts=["ohwx, portrait"])
+    config = SDXLInferenceConfig(sample_prompts=["ohwx, portrait"])
     assert config.sample_prompts == ["ohwx, portrait"]
 
 
 def test_sample_prompts_same_for_base_model_sampling() -> None:
-    config = TrainConfig(sample_prompts=["portrait"])
+    config = SDXLInferenceConfig(sample_prompts=["portrait"])
     assert config.sample_prompts == ["portrait"]
 
-    config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
+    config = SDXLInferenceConfig(sample_prompts=["a", "b"], sample_steps=30)
     assert total_diffusion_steps(lora_count=1, prompt_count=2, sample_steps=30) == 60
 
 
 def test_total_diffusion_steps_counts_all_loras_prompts_and_steps() -> None:
-    config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
+    config = SDXLInferenceConfig(sample_prompts=["a", "b"], sample_steps=30)
     assert (
         total_diffusion_steps(
             lora_count=2,
@@ -31,7 +30,7 @@ def test_total_diffusion_steps_counts_all_loras_prompts_and_steps() -> None:
 
 
 def test_report_diffusion_progress_updates_global_step() -> None:
-    config = TrainConfig(sample_prompts=["a", "b"], sample_steps=30)
+    config = SDXLInferenceConfig(sample_prompts=["a", "b"], sample_steps=30)
     progress_callback = MagicMock()
     step = diffusion_progress_step(
         completed_images=0,

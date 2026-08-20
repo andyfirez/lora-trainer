@@ -1,6 +1,6 @@
 from src.settings.models import GpuDefaultsSettings
 from src.trainer.config import VaeDtype, WeightDtype
-from src.trainer.gpu_resolution import (
+from src.gpu.resolution import (
     resolve_gpu_config,
     strip_global_gpu_keys,
     strip_gpu_overrides_matching_defaults,

@@ -24,7 +24,7 @@ from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
 
 if TYPE_CHECKING:
     from src.settings.models import GpuDefaultsSettings
-    from src.trainer.config import TrainConfig
+    from src.trainer.inference_config import SDXLInferenceConfig
 
 DEFAULT_BASE_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 
@@ -153,7 +153,7 @@ class SamplingConfig(YamlGpuConfigMixin, BaseModel):
                 return True
         return False
 
-    def train_config_field_updates(self) -> dict[str, object]:
+    def inference_config_field_updates(self) -> dict[str, object]:
         from src.settings.app_settings import settings
 
         params = self.parameters
@@ -171,12 +171,13 @@ class SamplingConfig(YamlGpuConfigMixin, BaseModel):
             "sample_offload_unet_before_decode": self.sample_offload_unet_before_decode,
         }
 
-    def to_train_config(self) -> "TrainConfig":
+    def to_inference_config(self) -> "SDXLInferenceConfig":
         from src.settings.app_settings import settings
-        from src.trainer.config import ModelPartConfig, TrainConfig
+        from src.trainer.config import ModelPartConfig, WeightDtype
+        from src.trainer.inference_config import SDXLInferenceConfig
 
         resolved = self.resolve_gpu(settings.gpu_defaults)
-        base = TrainConfig(
+        return SDXLInferenceConfig(
             base_model_name=self.effective_base_model_name(),
             output_dir=self.output_dir,
             mixed_precision=resolved.mixed_precision,
@@ -186,8 +187,8 @@ class SamplingConfig(YamlGpuConfigMixin, BaseModel):
             unet=ModelPartConfig(train=True, weight_dtype=WeightDtype.FLOAT_16),
             text_encoder_1=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),
             text_encoder_2=ModelPartConfig(train=False, weight_dtype=WeightDtype.FLOAT_16),
+            **self.inference_config_field_updates(),
         )
-        return base.resolve_sampling(self)
 
     def with_resolved_lora_sweep(
         self,

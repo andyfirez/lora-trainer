@@ -31,7 +31,8 @@ from src.sampler.sweep.manifest import (
 )
 from src.sampler.sweep.models import parse_trigger_words
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
-from src.trainer.config import SampleScheduler, TrainConfig
+from src.trainer.config import SampleScheduler
+from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.caption import apply_trigger_words_to_prompt
 from src.trainer.sdxl.pipeline_loader import SDXLPipelineLoader
 from src.trainer.sdxl.sampling import PromptEmbedCache
@@ -49,7 +50,7 @@ class SweepEngine(ProgressCallbackMixin):
         self,
         sampling_config: SamplingConfig,
         *,
-        base_train_config: TrainConfig,
+        base_inference_config: SDXLInferenceConfig,
         output_dir: Path,
         sampling_id: int | None = None,
         progress_status_callback: ProgressStatusCallback | None = None,
@@ -59,7 +60,7 @@ class SweepEngine(ProgressCallbackMixin):
         compose_grids: bool = True,
     ) -> None:
         self._sampling_config = sampling_config
-        self._base_train_config = base_train_config
+        self._base_inference_config = base_inference_config
         self._output_dir = output_dir
         self._sampling_id = sampling_id
         self._progress_status_callback = progress_status_callback
@@ -67,7 +68,7 @@ class SweepEngine(ProgressCallbackMixin):
         self._log = log or logging.getLogger(__name__)
         self._concept_metadata = concept_metadata or {}
         self._compose_grids = compose_grids
-        self._pipeline_loader = SDXLPipelineLoader(base_train_config, log=self._log)
+        self._pipeline_loader = SDXLPipelineLoader(base_inference_config, log=self._log)
         self._prompt_embed_cache = PromptEmbedCache()
 
     def run(self) -> SweepManifest:
@@ -94,7 +95,7 @@ class SweepEngine(ProgressCallbackMixin):
 
         groups: dict[tuple[str, str | None], list] = defaultdict(list)
         for combo in combinations:
-            base_model = str(combo.params.get("base_model_name") or self._base_train_config.base_model_name)
+            base_model = str(combo.params.get("base_model_name") or self._base_inference_config.base_model_name)
             lora_path = combo.params.get("lora_path")
             lora_key = str(lora_path) if lora_path else None
             groups[(base_model, lora_key)].append(combo)
@@ -162,7 +163,7 @@ class SweepEngine(ProgressCallbackMixin):
         *,
         combo: Any,
         stack: Any,
-        lora_config: TrainConfig,
+        lora_config: SDXLInferenceConfig,
         merge_unet: bool,
         images_dir: Path,
         completed_images: int,
@@ -193,7 +194,7 @@ class SweepEngine(ProgressCallbackMixin):
             on_progress=self._set_progress,
         )
 
-    def _build_runtime_config(self, params: dict[str, Any]) -> TrainConfig:
+    def _build_runtime_config(self, params: dict[str, Any]) -> SDXLInferenceConfig:
         updates: dict[str, Any] = {
             "sample_prompts": [str(params.get("prompt") or "")],
             "sample_negative_prompt": str(params.get("negative_prompt") or ""),
@@ -211,7 +212,7 @@ class SweepEngine(ProgressCallbackMixin):
         base_model = params.get("base_model_name")
         if base_model is not None:
             updates["base_model_name"] = str(base_model)
-        return self._base_train_config.model_copy(update=updates)
+        return self._base_inference_config.model_copy(update=updates)
 
     def _build_manifest(self, combinations: list, images_dir: Path, grids_dir: Path) -> SweepManifest:
         image_entries = [

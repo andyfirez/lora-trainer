@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 
-from src.trainer.config import TrainConfig
+from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.latent_sampling.ksample import ksample_sdxl_latent
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 from src.trainer.sdxl.latent_sampling.vae_decode import decode_sdxl_latent
@@ -109,7 +109,7 @@ def run_sdxl_sampling_pass(
     *,
     session: SDXLSamplingSession,
     embeds_list: list[SamplePromptEmbeds],
-    config: TrainConfig,
+    config: SDXLInferenceConfig,
     output_dir: Path,
     output_stem: str,
     log: logging.Logger,

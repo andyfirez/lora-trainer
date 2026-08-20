@@ -16,7 +16,7 @@ def test_sampling_config_entity_defaults_are_sparse() -> None:
     assert "sample_vae_tiling" not in yaml_data
 
 
-def test_sampling_config_to_train_config_propagates_resolved_gpu(monkeypatch) -> None:
+def test_sampling_config_to_inference_config_propagates_resolved_gpu(monkeypatch) -> None:
     from src.settings.app_settings import settings
     from src.settings.models import GpuDefaultsSettings
 
@@ -29,21 +29,21 @@ def test_sampling_config_to_train_config_propagates_resolved_gpu(monkeypatch) ->
         sample_offload_unet_before_decode=False,
     )
 
-    train_config = config.to_train_config()
+    inference_config = config.to_inference_config()
 
-    assert train_config.mixed_precision == WeightDtype.FLOAT_16
-    assert train_config.vae_dtype == VaeDtype.FLOAT_16
-    assert train_config.tf32 is True
-    assert train_config.attention_mechanism == "sdpa"
-    assert train_config.sample_vae_tiling is False
-    assert train_config.sample_vae_fp32 is True
-    assert train_config.sample_offload_unet_before_decode is False
+    assert inference_config.mixed_precision == WeightDtype.FLOAT_16
+    assert inference_config.vae_dtype == VaeDtype.FLOAT_16
+    assert inference_config.tf32 is True
+    assert inference_config.attention_mechanism == "sdpa"
+    assert inference_config.sample_vae_tiling is False
+    assert inference_config.sample_vae_fp32 is True
+    assert inference_config.sample_offload_unet_before_decode is False
 
 
-def test_sampling_config_train_config_field_updates_uses_resolved_vae_tiling() -> None:
+def test_sampling_config_inference_config_field_updates_uses_resolved_vae_tiling() -> None:
     config = SamplingConfig(sample_vae_tiling=False)
 
-    updates = config.train_config_field_updates()
+    updates = config.inference_config_field_updates()
 
     assert updates["sample_vae_tiling"] is False
 
@@ -53,7 +53,7 @@ def test_sampling_config_default_yaml_roundtrip() -> None:
     assert config.parameters.lora_weight.first_value() == 1.0
 
 
-def test_sampling_config_train_config_field_updates_preserves_prompts() -> None:
+def test_sampling_config_inference_config_field_updates_preserves_prompts() -> None:
     config = SamplingConfig.from_yaml(
         """
 output_dir: /tmp
@@ -65,7 +65,7 @@ parameters:
       - b
 """
     )
-    updates = config.train_config_field_updates()
+    updates = config.inference_config_field_updates()
     assert updates["sample_prompts"] == ["a", "b"]
 
 
