@@ -1,7 +1,5 @@
 """Datasets router: CRUD + image listing + caption/tag editing."""
 
-from typing import Sequence
-
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
@@ -58,8 +56,9 @@ def _crop_meta_response(meta) -> CropMetaResponse:
 
 
 @router.get("/", response_model=list[DatasetResponse])
-async def list_datasets(service: DatasetsServiceDep) -> Sequence[DatasetResponse]:
-    return await service.list_datasets()  # type: ignore[return-value]
+async def list_datasets(service: DatasetsServiceDep) -> list[DatasetResponse]:
+    datasets = await service.list_datasets()
+    return [DatasetResponse.model_validate(dataset) for dataset in datasets]
 
 
 @router.post("/", response_model=DatasetResponse, status_code=201)
@@ -69,7 +68,7 @@ async def create_dataset(body: DatasetCreate, service: DatasetsServiceDep) -> Da
         relative_path=body.relative_path,
         description=body.description,
     )
-    return dataset  # type: ignore[return-value]
+    return DatasetResponse.model_validate(dataset)
 
 
 @router.post("/import", response_model=DatasetResponse, status_code=201)
@@ -80,12 +79,13 @@ async def import_dataset(body: DatasetImport, service: DatasetsServiceDep) -> Da
         relative_path=body.relative_path,
         description=body.description,
     )
-    return dataset  # type: ignore[return-value]
+    return DatasetResponse.model_validate(dataset)
 
 
 @router.get("/{dataset_id}", response_model=DatasetResponse)
 async def get_dataset(dataset_id: int, service: DatasetsServiceDep) -> DatasetResponse:
-    return await service.get_dataset(dataset_id)  # type: ignore[return-value]
+    dataset = await service.get_dataset(dataset_id)
+    return DatasetResponse.model_validate(dataset)
 
 
 @router.patch("/{dataset_id}", response_model=DatasetResponse)
@@ -98,7 +98,7 @@ async def update_dataset(dataset_id: int, body: DatasetUpdate, service: Datasets
         "max_bucket_reso",
         "bucket_no_upscale",
     }
-    return await service.update_dataset(  # type: ignore[return-value]
+    dataset = await service.update_dataset(
         dataset_id,
         name=body.name,
         relative_path=body.relative_path,
@@ -112,6 +112,7 @@ async def update_dataset(dataset_id: int, body: DatasetUpdate, service: Datasets
         bucket_no_upscale=body.bucket_no_upscale,
         update_bucket_settings=bool(fields_set & bucket_fields),
     )
+    return DatasetResponse.model_validate(dataset)
 
 
 @router.delete("/{dataset_id}", status_code=204)
