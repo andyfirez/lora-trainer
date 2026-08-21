@@ -1,41 +1,18 @@
 import { api } from "@/lib/api/client";
-import type { LoraResponse, RunnableSamplesResponse } from "@/types";
+import { createRunnableApi } from "@/lib/api/runnableApi";
+import type {
+  CreateLoraRequest,
+  LossResponse,
+  LoraResponse,
+  ReproduceLoraRequest,
+} from "@/types";
 
-export interface LogsResponse {
-  lines: string[];
-}
-
-export interface LossPoint {
-  step: number;
-  wall_time?: number | null;
-  value: number | null;
-}
-
-export interface LossResponse {
-  key: string;
-  keys: string[];
-  points: LossPoint[];
-}
-
-export interface CreateLoraRequest {
-  name: string;
-  config_yaml: string;
-}
-
-export interface ReproduceLoraRequest {
-  name?: string;
-  enqueue?: boolean;
-}
+const runnableApi = createRunnableApi<LoraResponse>("/loras", { cancelWithCheckpoint: true });
 
 export const lorasApi = {
-  list: () => api.get<LoraResponse[]>("/loras/"),
+  ...runnableApi,
   create: (body: CreateLoraRequest) => api.post<LoraResponse>("/loras/", body),
-  get: (id: number) => api.get<LoraResponse>(`/loras/${id}`),
-  enqueue: (id: number) => api.post<LoraResponse>(`/loras/${id}/enqueue`),
   resume: (id: number) => api.post<LoraResponse>(`/loras/${id}/resume`),
-  cancel: (id: number, saveCheckpoint = false) =>
-    api.post<LoraResponse>(`/loras/${id}/cancel`, { save_checkpoint: saveCheckpoint }),
-  getLogs: (id: number, tail = 500) => api.get<LogsResponse>(`/loras/${id}/logs?tail=${tail}`),
   getLoss: (id: number, params: { key?: string; limit?: number; since_step?: number; stride?: number } = {}) => {
     const search = new URLSearchParams();
     if (params.key) search.set("key", params.key);
@@ -45,7 +22,6 @@ export const lorasApi = {
     const qs = search.toString();
     return api.get<LossResponse>(`/loras/${id}/loss${qs ? `?${qs}` : ""}`);
   },
-  getSamples: (id: number) => api.get<RunnableSamplesResponse>(`/loras/${id}/samples`),
   reproduce: (id: number, body: ReproduceLoraRequest = {}) =>
     api.post<LoraResponse>(`/loras/${id}/reproduce`, body),
 };

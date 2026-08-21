@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { lorasApi, type LossPoint, type LossResponse } from "@/lib/api/loras";
+import { lorasApi } from "@/lib/api/loras";
+import type { LossPoint, LossResponse } from "@/types";
 
 type SeriesMap = Record<string, LossPoint[]>;
 

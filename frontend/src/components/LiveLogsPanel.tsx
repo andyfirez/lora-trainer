@@ -2,10 +2,7 @@
 
 import useSWR from "swr";
 import { useEffect, useRef } from "react";
-
-interface LogsResponse {
-  lines: string[];
-}
+import type { LogsResponse } from "@/types";
 
 interface Props {
   swrKey: string | null;

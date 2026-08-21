@@ -1,3 +1,43 @@
+export interface LogsResponse {
+  lines: string[];
+}
+
+export interface LossPoint {
+  step: number;
+  wall_time?: number | null;
+  value: number | null;
+}
+
+export interface LossResponse {
+  key: string;
+  keys: string[];
+  points: LossPoint[];
+}
+
+export interface CreateLoraRequest {
+  name: string;
+  config_yaml: string;
+}
+
+export interface ReproduceLoraRequest {
+  name?: string;
+  enqueue?: boolean;
+}
+
+export interface CreateSamplingRequest {
+  name: string;
+  config_yaml: string;
+  lora_paths?: string[];
+}
+
+export type PickKind = "file" | "directory" | "model";
+
+export interface PickPathRequest {
+  kind?: PickKind;
+  title?: string;
+  initial_path?: string;
+}
+
 export type RunnableStatus =
   | "draft"
   | "queued"

@@ -1,12 +1,7 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { BASE_URL } from "@/lib/api/client";
+import type { PickPathRequest } from "@/types";
 
-export type PickKind = "file" | "directory" | "model";
-
-export interface PickPathRequest {
-  kind?: PickKind;
-  title?: string;
-  initial_path?: string;
-}
+export type { PickKind, PickPathRequest } from "@/types";
 
 export const filesApi = {
   pick: async (body: PickPathRequest): Promise<string | null> => {
