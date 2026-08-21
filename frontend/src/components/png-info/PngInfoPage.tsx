@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Copy, ImageUp, Loader2 } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { pngInfoApi } from "@/lib/api/pngInfo";
+import Alert from "@/components/ui/Alert";
+import { usePngInspect } from "@/hooks/usePngInspect";
 import { cn } from "@/lib/cn";
-import type { PngInfoResponse } from "@/types";
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
@@ -65,68 +65,18 @@ function orderedMetadataEntries(items: Record<string, string>) {
 
 export default function PngInfoPage() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [dragActive, setDragActive] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
-  const [result, setResult] = useState<PngInfoResponse | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    return () => {
-      if (localPreviewUrl) {
-        URL.revokeObjectURL(localPreviewUrl);
-      }
-    };
-  }, [localPreviewUrl]);
-
-  const inspectFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      setError("Please choose an image file.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setCopied(false);
-    setFileName(file.name);
-    setResult(null);
-
-    const objectUrl = URL.createObjectURL(file);
-    setLocalPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return objectUrl;
-    });
-
-    try {
-      const response = await pngInfoApi.inspect(file);
-      setResult(response);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to inspect image");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleFiles = useCallback(
-    (files: FileList | null) => {
-      const file = files?.[0];
-      if (file) void inspectFile(file);
-    },
-    [inspectFile],
-  );
-
-  const handleCopy = async () => {
-    if (!result?.info) return;
-    try {
-      await navigator.clipboard.writeText(result.info);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setError("Failed to copy to clipboard");
-    }
-  };
+  const {
+    dragActive,
+    loading,
+    error,
+    fileName,
+    localPreviewUrl,
+    result,
+    copied,
+    handleFiles,
+    setDragActive,
+    copyRawInfo,
+  } = usePngInspect();
 
   const previewSrc = result?.preview_base64 ?? localPreviewUrl;
   const metadataEntries = result ? orderedMetadataEntries(result.items) : [];
@@ -139,7 +89,7 @@ export default function PngInfoPage() {
         description="Inspect generation metadata embedded in images"
         actions={
           result?.info ? (
-            <Button variant="secondary" size="sm" onClick={() => void handleCopy()}>
+            <Button variant="secondary" size="sm" onClick={() => void copyRawInfo()}>
               <Copy size={14} />
               {copied ? "Copied" : "Copy raw info"}
             </Button>
@@ -220,11 +170,7 @@ export default function PngInfoPage() {
         </Card>
 
         <div className="space-y-4">
-          {error && (
-            <div className="rounded-lg border border-error/30 bg-error-muted px-4 py-3 text-sm text-error">
-              {error}
-            </div>
-          )}
+          {error && <Alert variant="error">{error}</Alert>}
 
           {!loading && result && metadataEntries.length === 0 && (
             <Card>
