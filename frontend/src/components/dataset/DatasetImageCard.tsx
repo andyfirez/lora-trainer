@@ -101,7 +101,7 @@ export default function DatasetImageCard({
   const usePrepared = preprocessState === "ready" && !preparedFailed;
   const thumbnailSrc = usePrepared
     ? datasetPreparedImageUrl(datasetId, filename, 256, cacheKey)
-    : datasetImageUrl(datasetId, filename, 256, cacheKey);
+    : datasetImageUrl(datasetId, filename, { width: 256, cacheKey });
 
   return (
     <div className="bg-surface rounded-xl border border-border overflow-hidden flex flex-col">

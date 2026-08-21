@@ -43,5 +43,4 @@ export const loggingParameterMetadata: ParameterMeta[] = [
     yamlOnly: true,
     recommendedValue: "null (uses output_dir)",
   },
-]
 ];
