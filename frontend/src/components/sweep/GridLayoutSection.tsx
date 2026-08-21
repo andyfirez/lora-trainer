@@ -1,6 +1,7 @@
 "use client";
 
 import { selectClassName } from "@/components/ui/Select";
+import FormSection from "@/components/ui/FormSection";
 import {
   SWEEP_PARAM_LABELS,
   type SweepParamKey,
@@ -17,9 +18,6 @@ interface GridLayoutSectionProps {
   onChange: (config: Config) => void;
 }
 
-const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
-const sectionTitleClass = "text-sm font-semibold text-text mb-3 font-display";
-
 export default function GridLayoutSection({ config, onChange }: GridLayoutSectionProps) {
   const parameters = getParameters(config);
   const varyKeys = varyKeysWithValues(parameters);
@@ -35,8 +33,7 @@ export default function GridLayoutSection({ config, onChange }: GridLayoutSectio
   }
 
   return (
-    <section className={sectionClass}>
-      <div className={sectionTitleClass}>Grid Layout</div>
+    <FormSection title="Grid Layout">
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-xs font-medium text-muted mb-1">X axis</label>
@@ -78,6 +75,6 @@ export default function GridLayoutSection({ config, onChange }: GridLayoutSectio
           1 grid ({preview.cols}×{preview.rows})
         </p>
       )}
-    </section>
+    </FormSection>
   );
 }

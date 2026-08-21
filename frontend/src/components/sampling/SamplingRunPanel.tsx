@@ -5,9 +5,8 @@ import JobProgressBar from "@/components/JobProgressBar";
 import LiveLogsPanel from "@/components/LiveLogsPanel";
 import SweepGridViewer from "@/components/sweep/SweepGridViewer";
 import { samplingsApi } from "@/lib/api/samplings";
+import { mediaUrl } from "@/lib/media";
 import type { SamplingResponse } from "@/types";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 interface SamplingRunPanelProps {
   sampling: SamplingResponse;
@@ -34,9 +33,9 @@ function LegacySamples({ samplingId, status }: { samplingId: number; status: str
       <h2 className="text-sm font-medium text-muted">Samples</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {legacy.map((sample) => (
-          <a key={sample.path} href={`${API_BASE_URL}${sample.url}`} target="_blank" rel="noreferrer">
+          <a key={sample.path} href={mediaUrl(sample.url)} target="_blank" rel="noreferrer">
             <img
-              src={`${API_BASE_URL}${sample.url}`}
+              src={mediaUrl(sample.url)}
               alt={sample.filename}
               className="rounded-lg border border-border object-cover aspect-square"
             />

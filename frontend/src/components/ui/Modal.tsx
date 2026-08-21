@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import Button from "./Button";
+import ErrorAlert from "./ErrorAlert";
 
 export interface ModalProps {
   open: boolean;
@@ -86,9 +87,5 @@ export function ModalFooter({ className, children }: { className?: string; child
 }
 
 export function ModalError({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-lg bg-error-muted border border-error/30 text-error px-3 py-2 text-sm">
-      {children}
-    </div>
-  );
+  return <ErrorAlert compact>{children}</ErrorAlert>;
 }

@@ -108,11 +108,6 @@ export default function LoraRunPanel({ lora, lossGraphRunKey }: LoraRunPanelProp
         />
       )}
 
-      {lora.status === "failed" && lora.error_message && (
-        <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">
-          <strong>Error:</strong> {lora.error_message}
-        </div>
-      )}
     </div>
   );
 }

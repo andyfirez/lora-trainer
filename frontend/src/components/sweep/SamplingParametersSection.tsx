@@ -5,6 +5,7 @@ import ParamGroup from "@/components/sweep/ParamGroup";
 import SweepField from "@/components/sweep/SweepField";
 import SweepPathField from "@/components/sweep/SweepPathField";
 import { InheritedCheckboxField, InheritedSelectField } from "@/components/ui/InheritedGpuField";
+import FormSection, { formSectionClass, formSectionTitleClass } from "@/components/ui/FormSection";
 import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
 import { labelClassName } from "@/components/ui/Input";
 import {
@@ -24,9 +25,6 @@ interface SamplingParametersSectionProps {
   onChange: (config: Config) => void;
   gpuDefaults?: GpuDefaultsInfo;
 }
-
-const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
-const sectionTitleClass = "text-sm font-semibold text-text mb-3 font-display";
 
 function param(config: Config, key: SweepParamKey) {
   const parameters = getParameters(config);
@@ -68,8 +66,7 @@ export default function SamplingParametersSection({
 
   return (
     <>
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Parameters</div>
+      <FormSection title="Parameters">
         <div className="space-y-6">
           <SweepPathField
             label={SWEEP_PARAM_LABELS.base_model_name}
@@ -148,13 +145,13 @@ export default function SamplingParametersSection({
             />
           </ParamGroup>
         </div>
-      </section>
+      </FormSection>
 
-      <section className={sectionClass}>
+      <section className={formSectionClass}>
         <button
           type="button"
           onClick={() => setAdvancedOpen(!advancedOpen)}
-          className={`${sectionTitleClass} w-full text-left flex items-center justify-between`}
+          className={`${formSectionTitleClass} w-full text-left flex items-center justify-between`}
         >
           Advanced (performance)
           <span className="text-muted text-xs">{advancedOpen ? "▲" : "▼"}</span>

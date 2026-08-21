@@ -2,6 +2,7 @@
 
 import PathInput from "@/components/PathInput";
 import LoraEntryField from "@/components/sweep/LoraEntryField";
+import FormSection from "@/components/ui/FormSection";
 import {
   SWEEP_PARAM_LABELS,
   defaultSweepParameter,
@@ -16,9 +17,6 @@ interface SamplingSourceSectionProps {
   config: Config;
   onChange: (config: Config) => void;
 }
-
-const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
-const sectionTitleClass = "text-sm font-semibold text-text mb-3 font-display";
 
 function loraPathParam(config: Config) {
   const parameters = getParameters(config);
@@ -35,8 +33,7 @@ export default function SamplingSourceSection({ config, onChange }: SamplingSour
   }
 
   return (
-    <section className={sectionClass}>
-      <div className={sectionTitleClass}>Source</div>
+    <FormSection title="Source">
       <LoraEntryField
         label={SWEEP_PARAM_LABELS.lora_path}
         param={loraPathParam(config)}
@@ -58,7 +55,7 @@ export default function SamplingSourceSection({ config, onChange }: SamplingSour
         pickerTitle="Select Output Folder"
         kind="directory"
       />
-    </section>
+    </FormSection>
   );
 }
 

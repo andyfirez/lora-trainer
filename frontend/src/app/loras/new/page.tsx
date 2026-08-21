@@ -7,6 +7,7 @@ import useSWR from "swr";
 import { Loader2, Play, Save } from "lucide-react";
 import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 import { inputClassName } from "@/components/ui/Input";
+import ErrorAlert from "@/components/ui/ErrorAlert";
 import Checkbox from "@/components/ui/Checkbox";
 import PageHeader from "@/components/ui/PageHeader";
 import Tabs from "@/components/ui/Tabs";
@@ -92,9 +93,7 @@ function NewLoraPageContent() {
       <PageHeader title="New LoRA" description="Configure and start a new SDXL LoRA training run" />
 
       <div className="flex flex-col gap-4">
-        {error && (
-          <div className="rounded-lg bg-error-muted border border-error/30 text-error px-4 py-3 text-sm">{error}</div>
-        )}
+        {error && <ErrorAlert>{error}</ErrorAlert>}
 
         <div className="flex items-end gap-4">
           <div className="flex-1">

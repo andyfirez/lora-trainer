@@ -8,3 +8,8 @@ export { default as Checkbox } from "./Checkbox";
 export { default as Badge } from "./Badge";
 export { default as Tabs } from "./Tabs";
 export { default as PageHeader } from "./PageHeader";
+export { default as Alert } from "./Alert";
+export type { AlertVariant } from "./Alert";
+export { default as BackLink } from "./BackLink";
+export { default as ErrorAlert } from "./ErrorAlert";
+export { default as FormSection } from "./FormSection";

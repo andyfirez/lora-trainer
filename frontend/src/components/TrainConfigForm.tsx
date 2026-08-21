@@ -18,6 +18,7 @@ import {
 import type { Dataset } from "@/types";
 import type { GpuDefaultsInfo } from "@/lib/api/settings";
 import { InheritedSelectField } from "@/components/ui/InheritedGpuField";
+import FormSection from "@/components/ui/FormSection";
 import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
 
 type Config = Record<string, any>;
@@ -32,8 +33,6 @@ interface TrainConfigFormProps {
   gpuDefaults?: GpuDefaultsInfo;
 }
 
-const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
-const sectionTitleClass = "text-sm font-semibold text-text mb-3 font-display";
 
 function Field({
   label,
@@ -399,8 +398,7 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
   return (
     <div className="space-y-5">
       {/* Model */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Model</div>
+      <FormSection title="Model">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <PathInput
             label="Base Model"
@@ -441,11 +439,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             { value: "pt", label: "pt" },
           ]}
         />
-      </section>
+      </FormSection>
 
       {/* LoRA */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>LoRA</div>
+      <FormSection title="LoRA">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <NumberInput
             label="Rank"
@@ -476,11 +473,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             paramKey="lora_dropout"
           />
         </div>
-      </section>
+      </FormSection>
 
       {/* Training Targets */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Training Targets</div>
+      <FormSection title="Training Targets">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -574,11 +570,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
         <p className="text-xs text-muted">
           CLIP hidden layer used for text encoding during training and sampling. Default 2 matches Kohya.
         </p>
-      </section>
+      </FormSection>
 
       {/* Training Hyperparameters */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Training</div>
+      <FormSection title="Training">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <NumberInput label="Epochs" value={config.epochs} onChange={(v) => set("epochs", v)} min={1} placeholder="30" paramKey="epochs" />
           <NumberInput label="Batch Size" value={config.batch_size} onChange={(v) => set("batch_size", v)} min={1} placeholder="1" paramKey="batch_size" />
@@ -624,11 +619,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             paramKey="noise_offset"
           />
         </div>
-      </section>
+      </FormSection>
 
       {/* Optimizer */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Optimizer</div>
+      <FormSection title="Optimizer">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SelectInput
             label="Type"
@@ -733,11 +727,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             </>
           )}
         </div>
-      </section>
+      </FormSection>
 
       {/* Data / Concepts */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Data</div>
+      <FormSection title="Data">
         <NumberInput
           label="Resolution"
           value={config.resolution}
@@ -867,11 +860,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             </>
           )}
         </div>
-      </section>
+      </FormSection>
 
       {/* Optimization */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Optimization</div>
+      <FormSection title="Optimization">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           {gpuDefaults ? (
             <>
@@ -918,11 +910,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             />
           </div>
         </div>
-      </section>
+      </FormSection>
 
       {/* Performance */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Performance</div>
+      <FormSection title="Performance">
 
         {/* Caching */}
         <div className="space-y-2">
@@ -1003,11 +994,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             />
           </div>
         </div>
-      </section>
+      </FormSection>
 
       {/* Checkpointing */}
-      <section className={sectionClass}>
-        <div className={sectionTitleClass}>Checkpointing</div>
+      <FormSection title="Checkpointing">
         <div className="space-y-4">
           <CheckboxInput
             label="Enable intermediate checkpoints"
@@ -1025,7 +1015,7 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             paramKey="save_every_n_epochs"
           />
         </div>
-      </section>
+      </FormSection>
     </div>
   );
 }

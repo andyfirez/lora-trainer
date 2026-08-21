@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { lorasApi } from "@/lib/api/loras";
-import { BASE_URL } from "@/lib/api/client";
+import { mediaUrl } from "@/lib/media";
 import Card, { CardTitle } from "@/components/ui/Card";
 
 interface LoraSamplesPanelProps {
@@ -38,13 +38,13 @@ export default function LoraSamplesPanel({ loraId, status }: LoraSamplesPanelPro
         {samples.map((sample) => (
           <a
             key={sample.path}
-            href={`${BASE_URL}${sample.url}`}
+            href={mediaUrl(sample.url)}
             target="_blank"
             rel="noreferrer"
             className="block"
           >
             <img
-              src={`${BASE_URL}${sample.url}`}
+              src={mediaUrl(sample.url)}
               alt={sample.filename}
               className="rounded-lg border border-border object-cover aspect-square w-full"
             />

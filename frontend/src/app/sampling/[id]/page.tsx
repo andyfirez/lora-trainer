@@ -2,16 +2,13 @@
 
 import { use } from "react";
 import useSWR from "swr";
-import Link from "next/link";
-import dynamic from "next/dynamic";
-import { ArrowLeft, Download, Loader2, Play, Square } from "lucide-react";
+import { Loader2, Play, Square } from "lucide-react";
 import { samplingsApi } from "@/lib/api/samplings";
 import StatusBadge from "@/components/StatusBadge";
 import SamplingRunPanel from "@/components/sampling/SamplingRunPanel";
+import BackLink from "@/components/ui/BackLink";
+import YamlViewer from "@/components/YamlViewer";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
-
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -41,24 +38,11 @@ export default function SamplingDetailPage({ params }: Props) {
     await samplingsApi.cancel(id);
     mutate();
   };
-  const handleDownloadYaml = () => {
-    const blob = new Blob([sampling.config_yaml], { type: "text/yaml" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${sampling.name}.yaml`;
-    a.click();
-  };
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
-        <Link
-          href="/sampling"
-          className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-text"
-          aria-label="Back to sampling"
-        >
-          <ArrowLeft size={18} />
-        </Link>
+        <BackLink href="/sampling" aria-label="Back to sampling" iconSize={18} />
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-text font-display">{sampling.name}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -79,9 +63,6 @@ export default function SamplingDetailPage({ params }: Props) {
               <Square size={13} /> {sampling.status === "running" ? "Stop" : "Cancel"}
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={handleDownloadYaml}>
-            <Download size={13} /> YAML
-          </Button>
         </div>
       </div>
 
@@ -89,15 +70,7 @@ export default function SamplingDetailPage({ params }: Props) {
 
       <div className="space-y-2">
         <h2 className="text-sm font-medium text-muted">Config YAML</h2>
-        <Card padding="none" className="overflow-hidden" style={{ height: 400 }}>
-          <MonacoEditor
-            height="100%"
-            language="yaml"
-            theme="vs-dark"
-            value={sampling.config_yaml}
-            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 12, scrollBeyondLastLine: false }}
-          />
-        </Card>
+        <YamlViewer value={sampling.config_yaml} downloadFilename={`${sampling.name}.yaml`} />
       </div>
     </div>
   );

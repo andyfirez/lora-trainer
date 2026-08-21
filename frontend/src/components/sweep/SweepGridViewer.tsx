@@ -3,8 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { samplingsApi } from "@/lib/api/samplings";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { mediaUrl } from "@/lib/media";
 
 interface SweepGridViewerProps {
   samplingId: number;
@@ -55,9 +54,9 @@ export default function SweepGridViewer({ samplingId, status }: SweepGridViewerP
               </button>
             </div>
           </div>
-          <a href={`${API_BASE_URL}${currentGrid.url}`} target="_blank" rel="noreferrer">
+          <a href={mediaUrl(currentGrid.url)} target="_blank" rel="noreferrer">
             <img
-              src={`${API_BASE_URL}${currentGrid.url}`}
+              src={mediaUrl(currentGrid.url)}
               alt={currentGrid.title || `Grid ${gridIndex + 1}`}
               className="rounded-xl border border-border w-full"
             />
@@ -82,7 +81,7 @@ export default function SweepGridViewer({ samplingId, status }: SweepGridViewerP
                 }`}
               >
                 <img
-                  src={`${API_BASE_URL}${img.url}`}
+                  src={mediaUrl(img.url)}
                   alt={`Cell ${img.index}`}
                   className="object-cover aspect-square w-full"
                 />

@@ -2,9 +2,8 @@
 
 import { use, useState } from "react";
 import useSWR from "swr";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Loader2, Play, RotateCcw, Square } from "lucide-react";
+import { AlertTriangle, Loader2, Play, RotateCcw, Square } from "lucide-react";
 import { lorasApi } from "@/lib/api/loras";
 import { useCancelLora } from "@/hooks/useCancelLora";
 import StatusBadge from "@/components/StatusBadge";
@@ -15,6 +14,8 @@ import LoraCheckpointPanel from "@/components/lora/LoraCheckpointPanel";
 import LoraSamplesPanel from "@/components/lora/LoraSamplesPanel";
 import LoraConfigPanel from "@/components/lora/LoraConfigPanel";
 import Button from "@/components/ui/Button";
+import Alert from "@/components/ui/Alert";
+import BackLink from "@/components/ui/BackLink";
 import { ModalError, ModalFooter } from "@/components/ui/Modal";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
@@ -26,45 +27,37 @@ interface Props {
 
 function LoraStatusBanner({ lora }: { lora: import("@/types").LoraResponse }) {
   if (lora.status === "queued" && lora.queue_position != null) {
-    return (
-      <div className="rounded-xl border border-accent/30 bg-accent-muted px-4 py-3 text-sm text-text">
-        In queue — position #{lora.queue_position}
-      </div>
-    );
+    return <Alert variant="info">In queue — position #{lora.queue_position}</Alert>;
   }
 
   if (lora.status === "running" && lora.save_checkpoint_requested) {
     return (
-      <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning flex items-center gap-2">
+      <Alert variant="warning" className="flex items-center gap-2 text-warning bg-warning/10">
         <AlertTriangle size={16} />
         Saving checkpoint before stopping…
-      </div>
+      </Alert>
     );
   }
 
   if (lora.status === "failed" && lora.error_message) {
     return (
-      <div className="rounded-xl border border-error/30 bg-error-muted px-4 py-3 text-sm text-error">
+      <Alert variant="error">
         <strong>Training failed:</strong> {lora.error_message}
-      </div>
+      </Alert>
     );
   }
 
   if (lora.path_missing && lora.status === "completed") {
     return (
-      <div className="rounded-xl border border-warning/30 bg-warning-muted px-4 py-3 text-sm text-text flex items-center gap-2">
+      <Alert variant="warning" className="flex items-center gap-2">
         <AlertTriangle size={16} className="text-warning shrink-0" />
         Artifacts not found on disk — paths may be stale.
-      </div>
+      </Alert>
     );
   }
 
   if (lora.status === "completed") {
-    return (
-      <div className="rounded-xl border border-success/30 bg-success-muted px-4 py-3 text-sm text-text">
-        Training completed successfully.
-      </div>
-    );
+    return <Alert variant="success">Training completed successfully.</Alert>;
   }
 
   return null;
@@ -139,13 +132,7 @@ export default function LoraDetailPage({ params }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Link
-            href="/loras"
-            className="p-2 rounded-lg border border-border text-muted hover:text-text hover:bg-white/5"
-            aria-label="Back to LoRAs"
-          >
-            <ArrowLeft size={16} />
-          </Link>
+          <BackLink href="/loras" aria-label="Back to LoRAs" />
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-text font-display truncate">{lora.name}</h1>
             <div className="flex items-center gap-3 mt-1 flex-wrap">

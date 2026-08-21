@@ -2,13 +2,9 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
-import { Download } from "lucide-react";
 import { parse as yamlParse } from "yaml";
-import Button from "@/components/ui/Button";
 import Card, { CardTitle } from "@/components/ui/Card";
-
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+import YamlViewer from "@/components/YamlViewer";
 
 interface LoraConfigPanelProps {
   name: string;
@@ -34,16 +30,6 @@ export default function LoraConfigPanel({ name, configYaml }: LoraConfigPanelPro
     [configYaml],
   );
 
-  const handleDownloadYaml = () => {
-    if (!configYaml) return;
-    const blob = new Blob([configYaml], { type: "text/yaml" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${name}.yaml`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
   if (!configYaml) {
     return (
       <Card>
@@ -55,12 +41,7 @@ export default function LoraConfigPanel({ name, configYaml }: LoraConfigPanelPro
 
   return (
     <Card className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <CardTitle className="text-base">Config</CardTitle>
-        <Button variant="secondary" size="sm" onClick={handleDownloadYaml}>
-          <Download size={14} /> Download YAML
-        </Button>
-      </div>
+      <CardTitle className="text-base">Config</CardTitle>
 
       {datasetIds.length > 0 && (
         <div className="space-y-1">
@@ -80,15 +61,7 @@ export default function LoraConfigPanel({ name, configYaml }: LoraConfigPanelPro
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-border" style={{ height: 400 }}>
-        <MonacoEditor
-          height="400px"
-          defaultLanguage="yaml"
-          theme="vs-dark"
-          value={configYaml}
-          options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }}
-        />
-      </div>
+      <YamlViewer value={configYaml} downloadFilename={`${name}.yaml`} />
     </Card>
   );
 }

@@ -4,7 +4,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CopyMinus, Pencil, Sparkles } from "lucide-react";
+import { CopyMinus, Pencil, Sparkles } from "lucide-react";
 import AutoTagModal from "@/components/dataset/AutoTagModal";
 import EditDatasetModal from "@/components/dataset/EditDatasetModal";
 import DatasetImageCard from "@/components/dataset/DatasetImageCard";
@@ -12,6 +12,7 @@ import ImageCropModal from "@/components/dataset/ImageCropModal";
 import PreprocessPanel from "@/components/dataset/PreprocessPanel";
 import TagFrequencyPanel from "@/components/dataset/TagFrequencyPanel";
 import Button from "@/components/ui/Button";
+import BackLink from "@/components/ui/BackLink";
 import { datasetsApi } from "@/lib/api/datasets";
 import type { AutotagStatusResponse, DatasetItem, ImagePreprocessState, TaggingMode } from "@/types";
 
@@ -252,13 +253,7 @@ export default function DatasetDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <Link
-            href="/datasets"
-            className="p-2 rounded-lg border border-border text-muted hover:text-text hover:bg-white/5"
-            aria-label="Back to datasets"
-          >
-            <ArrowLeft size={16} />
-          </Link>
+          <BackLink href="/datasets" aria-label="Back to datasets" />
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-text font-display truncate">{dataset.name}</h1>
             <p className="text-xs text-muted truncate">{dataset.relative_path}</p>
