@@ -1,6 +1,6 @@
 import type { StorageEntry } from "./api/storage.ts";
 import type { LoraResponse } from "../types/index.ts";
-import { isCatalogItemAtPath, normalizeRelativePath } from "./storagePaths.ts";
+import { isCatalogItemAtPath, normalizeRelativePath, partitionFolderContents } from "./storagePaths.ts";
 
 export interface UnmatchedLoraDir {
   name: string;
@@ -21,37 +21,19 @@ export function partitionLoraFolderContents({
   loras: LoraResponse[];
   currentPath: string;
 }): { folders: StorageEntry[]; loras: LoraResponse[]; unmatchedLoraDirs: UnmatchedLoraDir[] } {
-  const folder = normalizeRelativePath(currentPath);
-  const catalogByPath = new Map(
-    loras.map((lora) => [normalizeRelativePath(lora.relative_path), lora] as const),
-  );
-
-  const visibleLoras = loras.filter((lora) => {
-    const itemPath = normalizeRelativePath(lora.relative_path);
-    if (!folder && !itemPath) {
-      return true;
-    }
-    return isCatalogItemAtPath(lora.relative_path, folder);
-  });
-
   const unmatchedLoraDirs: UnmatchedLoraDir[] = [];
 
-  const folders = entries.filter((entry) => {
-    if (!entry.is_dir) {
-      return false;
-    }
-    const entryPath = normalizeRelativePath(entry.relative_path);
-    if (catalogByPath.has(entryPath)) {
-      return false;
-    }
-    if (entry.is_lora_work_dir) {
-      if (isCatalogItemAtPath(entry.relative_path, folder)) {
+  const { folders, items } = partitionFolderContents({
+    entries,
+    catalogItems: loras,
+    currentPath,
+    excludeFolder: (entry) => entry.is_lora_work_dir === true,
+    onExcludedFolder: (entry, folderPath) => {
+      if (isCatalogItemAtPath(entry.relative_path, folderPath)) {
         unmatchedLoraDirs.push({ name: entry.name, relative_path: entry.relative_path });
       }
-      return false;
-    }
-    return true;
+    },
   });
 
-  return { folders, loras: visibleLoras, unmatchedLoraDirs };
+  return { folders, loras: items, unmatchedLoraDirs };
 }

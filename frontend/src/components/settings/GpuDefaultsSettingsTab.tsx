@@ -5,19 +5,7 @@ import useSWR from "swr";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import { settingsApi, type GpuDefaultsInfo } from "@/lib/api/settings";
-
-const MIXED_PRECISION_OPTIONS = [
-  { value: "float16", label: "float16" },
-  { value: "bfloat16", label: "bfloat16" },
-  { value: "float32", label: "float32" },
-];
-
-const VAE_DTYPE_OPTIONS = [
-  { value: "auto", label: "auto" },
-  { value: "float16", label: "float16" },
-  { value: "bfloat16", label: "bfloat16" },
-  { value: "float32", label: "float32" },
-];
+import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
 
 const ATTENTION_OPTIONS = [
   { value: "sdpa", label: "SDPA (PyTorch 2.x)" },

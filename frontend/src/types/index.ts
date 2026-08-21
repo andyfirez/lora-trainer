@@ -14,6 +14,11 @@ export interface LossResponse {
   points: LossPoint[];
 }
 
+export interface LossBatchResponse {
+  keys: string[];
+  series: Record<string, LossPoint[]>;
+}
+
 export interface CreateLoraRequest {
   name: string;
   config_yaml: string;

@@ -15,3 +15,8 @@ class JobLossResponse(BaseModel):
     key: str
     keys: list[str]
     points: list[LossPoint]
+
+
+class JobLossBatchResponse(BaseModel):
+    keys: list[str]
+    series: dict[str, list[LossPoint]]

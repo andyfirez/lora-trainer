@@ -28,9 +28,9 @@ from src.services.runnable.exceptions import (
     RunnableNotResumableError,
     RunnableOperationNotSupportedError,
 )
-from src.services.runnable.loss_log_reader import read_loss_log
+from src.services.runnable.loss_log_reader import read_loss_log, read_loss_logs_batch
 from src.services.runnable.samples import resolve_safe_sample_file
-from src.services.runnable.schemas import JobLossResponse
+from src.services.runnable.schemas import JobLossBatchResponse, JobLossResponse
 from src.services.storage.catalog_sync import sync_discovered_items
 from src.settings.app_settings import settings
 from src.storage.paths import StorageKind, StoragePaths
@@ -257,6 +257,26 @@ class LoraService:
         config = TrainConfig.from_snapshot_yaml(lora.config_yaml)
         log_path = build_loss_log_path(config)
         return read_loss_log(log_path, key=key, limit=limit, since_step=since_step, stride=stride)
+
+    async def get_loss_batch(
+        self,
+        lora_id: int,
+        *,
+        key_queries: list[tuple[str, int | None]],
+        limit: int = 1_000_000,
+        stride: int = 1,
+    ) -> JobLossBatchResponse:
+        lora = await self.get_lora(lora_id)
+        if not lora.config_yaml:
+            return JobLossBatchResponse(keys=[], series={})
+        config = TrainConfig.from_snapshot_yaml(lora.config_yaml)
+        log_path = build_loss_log_path(config)
+        return read_loss_logs_batch(
+            log_path,
+            key_queries=key_queries,
+            limit=limit,
+            stride=stride,
+        )
 
     def list_samples(self, lora: Lora) -> list[tuple[Path, str, dict]]:
         return list_runnable_samples(lora)

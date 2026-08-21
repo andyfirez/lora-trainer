@@ -15,8 +15,19 @@ import type {
   TagStats,
 } from "@/types";
 
-export function datasetImageUrl(datasetId: number, filename: string, width = 256, cacheKey?: string): string {
-  const base = `${BASE_URL}/datasets/${datasetId}/images/${encodeURIComponent(filename)}?w=${width}`;
+function withCaptionExtension(path: string, captionExtension: string): string {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}caption_extension=${encodeURIComponent(captionExtension)}`;
+}
+
+export function datasetImageUrl(
+  datasetId: number,
+  filename: string,
+  options: { prepared?: boolean; width?: number; cacheKey?: string } = {},
+): string {
+  const { prepared = false, width = 256, cacheKey } = options;
+  const suffix = prepared ? "/prepared" : "";
+  const base = `${BASE_URL}/datasets/${datasetId}/images/${encodeURIComponent(filename)}${suffix}?w=${width}`;
   return cacheKey ? `${base}&v=${encodeURIComponent(cacheKey)}` : base;
 }
 
@@ -24,10 +35,9 @@ export function datasetPreparedImageUrl(
   datasetId: number,
   filename: string,
   width = 256,
-  cacheKey?: string
+  cacheKey?: string,
 ): string {
-  const base = `${BASE_URL}/datasets/${datasetId}/images/${encodeURIComponent(filename)}/prepared?w=${width}`;
-  return cacheKey ? `${base}&v=${encodeURIComponent(cacheKey)}` : base;
+  return datasetImageUrl(datasetId, filename, { prepared: true, width, cacheKey });
 }
 
 export function datasetCropPreviewUrl(datasetId: number, filename: string): string {
@@ -58,17 +68,17 @@ export const datasetsApi = {
   delete: (id: number) => api.delete(`/datasets/${id}`),
   listImages: (id: number) => api.get<DatasetImages>(`/datasets/${id}/images`),
   listItems: (id: number, captionExtension = ".txt") =>
-    api.get<DatasetItems>(`/datasets/${id}/items?caption_extension=${encodeURIComponent(captionExtension)}`),
+    api.get<DatasetItems>(withCaptionExtension(`/datasets/${id}/items`, captionExtension)),
   getPreprocessStatus: (id: number) => api.get<PreprocessStatus>(`/datasets/${id}/preprocess/status`),
   getDuplicates: (id: number) => api.get<DuplicatesInfo>(`/datasets/${id}/duplicates`),
   removeDuplicates: (id: number, captionExtension = ".txt") =>
-    api.post<RemoveDuplicatesResult>(
-      `/datasets/${id}/duplicates/remove?caption_extension=${encodeURIComponent(captionExtension)}`,
-      {}
-    ),
+    api.post<RemoveDuplicatesResult>(withCaptionExtension(`/datasets/${id}/duplicates/remove`, captionExtension), {}),
   deleteImage: (id: number, filename: string, captionExtension = ".txt") =>
     api.delete(
-      `/datasets/${id}/images/${encodeURIComponent(filename)}?caption_extension=${encodeURIComponent(captionExtension)}`
+      withCaptionExtension(
+        `/datasets/${id}/images/${encodeURIComponent(filename)}`,
+        captionExtension,
+      ),
     ),
   getCropMeta: (id: number, filename: string) =>
     api.get<CropMeta>(`/datasets/${id}/images/${encodeURIComponent(filename)}/crop-meta`),
@@ -85,15 +95,15 @@ export const datasetsApi = {
     }),
   getCaption: (id: number, filename: string, captionExtension = ".txt") =>
     api.get<{ filename: string; tags: string[] }>(
-      `/datasets/${id}/captions/${encodeURIComponent(filename)}?caption_extension=${encodeURIComponent(captionExtension)}`
+      withCaptionExtension(`/datasets/${id}/captions/${encodeURIComponent(filename)}`, captionExtension),
     ),
   updateCaption: (id: number, filename: string, tags: string[], captionExtension = ".txt") =>
     api.put<{ filename: string; tags: string[] }>(
-      `/datasets/${id}/captions/${encodeURIComponent(filename)}?caption_extension=${encodeURIComponent(captionExtension)}`,
-      { tags }
+      withCaptionExtension(`/datasets/${id}/captions/${encodeURIComponent(filename)}`, captionExtension),
+      { tags },
     ),
   getTagStats: (id: number, captionExtension = ".txt") =>
-    api.get<TagStats>(`/datasets/${id}/tags/stats?caption_extension=${encodeURIComponent(captionExtension)}`),
+    api.get<TagStats>(withCaptionExtension(`/datasets/${id}/tags/stats`, captionExtension)),
   bulkAddTag: (id: number, tag: string, filenames?: string[], captionExtension = ".txt") =>
     api.post<BulkTagResult>(`/datasets/${id}/tags/bulk-add`, {
       tag,

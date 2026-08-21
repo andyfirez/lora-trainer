@@ -2,7 +2,7 @@
 
 from src.api.dependencies import LoraServiceDep
 from src.api.routers.runnable import RunnableRouterHooks, build_runnable_router
-from src.api.schemas.job_loss import JobLossResponse
+from src.api.schemas.job_loss import JobLossBatchResponse, JobLossResponse
 from src.api.schemas.loras import (
     CancelLoraRequest,
     CreateLoraRequest,
@@ -55,6 +55,33 @@ async def get_lora_loss(
     stride: int = 1,
 ) -> JobLossResponse:
     return await service.get_loss(entity_id, key=key, limit=limit, since_step=since_step, stride=stride)
+
+
+@router.get("/{entity_id}/loss/batch", response_model=JobLossBatchResponse)
+async def get_lora_loss_batch(
+    entity_id: int,
+    service: LoraServiceDep,
+    keys: str = "*",
+    since_steps: str | None = None,
+    limit: int = 1_000_000,
+    stride: int = 1,
+) -> JobLossBatchResponse:
+    if keys.strip() == "*":
+        discovery = await service.get_loss(entity_id, key="loss/loss", limit=1)
+        wanted_keys = discovery.keys or ["loss/loss"]
+        key_queries = [(key, None) for key in wanted_keys]
+        return await service.get_loss_batch(entity_id, key_queries=key_queries, limit=limit, stride=stride)
+
+    wanted_keys = [part.strip() for part in keys.split(",") if part.strip()]
+    since_values = (
+        [None if part.strip() == "" else int(part.strip()) for part in since_steps.split(",")]
+        if since_steps is not None
+        else [None] * len(wanted_keys)
+    )
+    if len(since_values) != len(wanted_keys):
+        since_values = [None] * len(wanted_keys)
+    key_queries = list(zip(wanted_keys, since_values, strict=False))
+    return await service.get_loss_batch(entity_id, key_queries=key_queries, limit=limit, stride=stride)
 
 
 @router.post("/{entity_id}/reproduce", response_model=LoraResponse, status_code=201)

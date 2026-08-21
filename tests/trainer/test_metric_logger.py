@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from src.services.runnable.loss_log_reader import read_loss_log
+from src.services.runnable.loss_log_reader import read_loss_log, read_loss_logs_batch
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 
@@ -59,6 +59,23 @@ def test_read_loss_log_since_step(tmp_path: Path) -> None:
 
     result = read_loss_log(log_file, key="loss/loss", since_step=3)
     assert [p.step for p in result.points] == [4, 5]
+
+
+def test_read_loss_logs_batch(tmp_path: Path) -> None:
+    log_file = tmp_path / "loss_log.db"
+    logger = MetricLogger(log_file)
+    for step in range(1, 4):
+        logger.log({"loss/loss": float(step), "loss/avr_loss": float(step) / 10})
+        logger.commit(step=step)
+    logger.finish()
+
+    result = read_loss_logs_batch(
+        log_file,
+        key_queries=[("loss/loss", None), ("loss/avr_loss", 2)],
+    )
+    assert result.keys == ["loss/avr_loss", "loss/loss"]
+    assert [p.step for p in result.series["loss/loss"]] == [1, 2, 3]
+    assert [p.step for p in result.series["loss/avr_loss"]] == [3]
 
 
 def test_read_loss_log_missing_file(tmp_path: Path) -> None:

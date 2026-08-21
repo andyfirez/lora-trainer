@@ -1,5 +1,5 @@
 """HTTP re-export of job loss metrics schemas."""
 
-from src.services.runnable.schemas import JobLossResponse, LossPoint
+from src.services.runnable.schemas import JobLossBatchResponse, JobLossResponse, LossPoint
 
-__all__ = ["JobLossResponse", "LossPoint"]
+__all__ = ["JobLossBatchResponse", "JobLossResponse", "LossPoint"]

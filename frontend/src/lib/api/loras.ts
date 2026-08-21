@@ -2,6 +2,7 @@ import { api } from "@/lib/api/client";
 import { createRunnableApi } from "@/lib/api/runnableApi";
 import type {
   CreateLoraRequest,
+  LossBatchResponse,
   LossResponse,
   LoraResponse,
   ReproduceLoraRequest,
@@ -21,6 +22,27 @@ export const lorasApi = {
     if (params.stride != null) search.set("stride", String(params.stride));
     const qs = search.toString();
     return api.get<LossResponse>(`/loras/${id}/loss${qs ? `?${qs}` : ""}`);
+  },
+  getLossBatch: (
+    id: number,
+    params: { keys?: string[]; sinceSteps?: Array<number | null>; limit?: number; stride?: number } = {},
+  ) => {
+    const search = new URLSearchParams();
+    if (params.keys?.length) {
+      search.set("keys", params.keys.join(","));
+    } else {
+      search.set("keys", "*");
+    }
+    if (params.sinceSteps?.length) {
+      search.set(
+        "since_steps",
+        params.sinceSteps.map((step) => (step == null ? "" : String(step))).join(","),
+      );
+    }
+    if (params.limit != null) search.set("limit", String(params.limit));
+    if (params.stride != null) search.set("stride", String(params.stride));
+    const qs = search.toString();
+    return api.get<LossBatchResponse>(`/loras/${id}/loss/batch${qs ? `?${qs}` : ""}`);
   },
   reproduce: (id: number, body: ReproduceLoraRequest = {}) =>
     api.post<LoraResponse>(`/loras/${id}/reproduce`, body),

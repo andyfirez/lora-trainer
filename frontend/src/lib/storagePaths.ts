@@ -59,15 +59,21 @@ export function isCatalogItemAtPath(itemPath: string, folderPath: string): boole
   return isDirectChild(itemPath, folderPath);
 }
 
+export interface PartitionFolderOptions<T extends CatalogItem> {
+  entries: StorageEntry[];
+  catalogItems: T[];
+  currentPath: string;
+  excludeFolder?: (entry: StorageEntry, folderPath: string) => boolean;
+  onExcludedFolder?: (entry: StorageEntry, folderPath: string) => void;
+}
+
 export function partitionFolderContents<T extends CatalogItem>({
   entries,
   catalogItems,
   currentPath,
-}: {
-  entries: StorageEntry[];
-  catalogItems: T[];
-  currentPath: string;
-}): { folders: StorageEntry[]; items: T[] } {
+  excludeFolder,
+  onExcludedFolder,
+}: PartitionFolderOptions<T>): { folders: StorageEntry[]; items: T[] } {
   const folder = normalizeRelativePath(currentPath);
   const catalogByPath = new Map(
     catalogItems.map((item) => [normalizeRelativePath(item.relative_path), item] as const)
@@ -84,7 +90,14 @@ export function partitionFolderContents<T extends CatalogItem>({
   const folders = entries.filter((entry) => {
     if (!entry.is_dir) return false;
     const entryPath = normalizeRelativePath(entry.relative_path);
-    return !catalogByPath.has(entryPath);
+    if (catalogByPath.has(entryPath)) {
+      return false;
+    }
+    if (excludeFolder?.(entry, folder)) {
+      onExcludedFolder?.(entry, folder);
+      return false;
+    }
+    return true;
   });
 
   return { folders, items };

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { lorasApi } from "@/lib/api/loras";
-import type { LossPoint, LossResponse } from "@/types";
+import { mergeLossSeries } from "@/lib/lossUtils";
+import type { LossPoint } from "@/types";
 
 type SeriesMap = Record<string, LossPoint[]>;
 
@@ -14,10 +15,12 @@ export default function useLossLog(
   const [series, setSeries] = useState<SeriesMap>({});
   const [keys, setKeys] = useState<string[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error" | "refreshing">("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const didInitialLoadRef = useRef(false);
   const inFlightRef = useRef(false);
   const lastStepByKeyRef = useRef<Record<string, number | null>>({});
+  const keysRef = useRef<string[]>([]);
 
   const lossKeys = useMemo(() => {
     if (keys.length === 0) return ["loss/loss"];
@@ -28,70 +31,61 @@ export default function useLossLog(
     if (!loraId || inFlightRef.current) return;
     inFlightRef.current = true;
     setStatus(didInitialLoadRef.current ? "refreshing" : "loading");
+    setErrorMessage(null);
 
     try {
-      const first = await lorasApi.getLoss(loraId, { key: "loss/loss", limit: 1 });
-      const newKeys = first.keys ?? [];
-      setKeys(newKeys);
+      const isInitialLoad = !didInitialLoadRef.current;
+      const currentKeys = keysRef.current;
+      const wantedKeys = isInitialLoad
+        ? undefined
+        : (currentKeys.length ? [...currentKeys] : ["loss/loss"]).sort();
 
-      const wantedKeys = (newKeys.length ? [...newKeys] : ["loss/loss"]).sort();
-      const results = await Promise.all(
-        wantedKeys.map(async (k) => {
-          const params: { key: string; limit: number; since_step?: number } = { key: k, limit: 1_000_000 };
-          if (reloadInterval && lastStepByKeyRef.current[k] != null) {
-            params.since_step = lastStepByKeyRef.current[k]!;
-          }
-          return lorasApi.getLoss(loraId, params);
-        }),
-      );
+      const batch = await lorasApi.getLossBatch(loraId, {
+        keys: wantedKeys,
+        sinceSteps: wantedKeys?.map((key) => lastStepByKeyRef.current[key] ?? null),
+      });
 
-      setSeries((prev) => {
-        const next: SeriesMap = { ...prev };
-        for (const r of results) {
-          const k = r.key;
-          const newPoints = (r.points ?? []).filter((p) => p.value !== null);
+      const discoveredKeys = batch.keys.length ? batch.keys : wantedKeys ?? ["loss/loss"];
+      keysRef.current = discoveredKeys;
+      setKeys(discoveredKeys);
 
-          if (!didInitialLoadRef.current) {
-            next[k] = newPoints;
-          } else if (newPoints.length) {
-            const existing = next[k] ?? [];
-            const prevLast = existing.length ? existing[existing.length - 1].step : null;
-            const filtered = prevLast == null ? newPoints : newPoints.filter((p) => p.step > prevLast);
-            next[k] = filtered.length ? [...existing, ...filtered] : existing;
-          } else {
-            next[k] = next[k] ?? [];
-          }
+      const resolvedKeys = (discoveredKeys.length ? discoveredKeys : ["loss/loss"]).sort();
+      const results = resolvedKeys.map((key) => ({
+        key,
+        keys: discoveredKeys,
+        points: batch.series[key] ?? [],
+      }));
 
-          const finalArr = next[k] ?? [];
-          lastStepByKeyRef.current[k] = finalArr.length
-            ? finalArr[finalArr.length - 1].step
-            : (lastStepByKeyRef.current[k] ?? null);
-        }
-
-        for (const existingKey of Object.keys(next)) {
-          if (!wantedKeys.includes(existingKey)) {
-            delete next[existingKey];
-            delete lastStepByKeyRef.current[existingKey];
-          }
-        }
-        return next;
+      setSeries((previous) => {
+        const merged = mergeLossSeries({
+          previous,
+          results,
+          wantedKeys: resolvedKeys,
+          isInitialLoad,
+          lastStepByKey: lastStepByKeyRef.current,
+        });
+        lastStepByKeyRef.current = merged.lastStepByKey;
+        return merged.next;
       });
 
       setStatus("success");
       didInitialLoadRef.current = true;
-    } catch {
+    } catch (error) {
       setStatus("error");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load loss logs");
     } finally {
       inFlightRef.current = false;
     }
-  }, [loraId, reloadInterval]);
+  }, [loraId]);
 
   useEffect(() => {
     didInitialLoadRef.current = false;
     lastStepByKeyRef.current = {};
+    keysRef.current = [];
     setSeries({});
     setKeys([]);
     setStatus("idle");
+    setErrorMessage(null);
     void refreshLoss();
 
     if (reloadInterval) {
@@ -100,7 +94,7 @@ export default function useLossLog(
     }
   }, [loraId, reloadInterval, resetKey, refreshLoss]);
 
-  return { series, keys, lossKeys, status, refreshLoss };
+  return { series, keys, lossKeys, status, errorMessage, refreshLoss };
 }
 
-export type { LossPoint, LossResponse };
+export type { LossPoint };

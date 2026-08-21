@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function LossGraph({ loraId, isActive, resetKey }: Props) {
-  const { series, lossKeys, status, refreshLoss } = useLossLog(
+  const { series, lossKeys, status, errorMessage, refreshLoss } = useLossLog(
     loraId,
     isActive ? 2000 : null,
     resetKey,
@@ -70,7 +70,7 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
           <span className="text-xs text-muted">
             {status === "loading" && "Loading…"}
             {status === "refreshing" && "Refreshing…"}
-            {status === "error" && "Error"}
+            {status === "error" && (errorMessage ?? "Error")}
             {status === "success" && hasData && `${totalPoints.toLocaleString()} steps`}
             {status === "success" && !hasData && "No data yet"}
           </span>

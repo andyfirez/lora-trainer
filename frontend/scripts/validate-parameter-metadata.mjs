@@ -9,8 +9,14 @@ import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const metadataPath = join(__dirname, "../src/lib/trainParameterMetadata.ts");
-const source = readFileSync(metadataPath, "utf8");
+const metadataPath = join(__dirname, "../src/lib/metadata");
+const source = [
+  readFileSync(join(metadataPath, "index.ts"), "utf8"),
+  readFileSync(join(__dirname, "../src/lib/sampleSamplerOptions.ts"), "utf8"),
+  ...["model", "lora", "trainingTargets", "training", "optimizer", "data", "optimization", "performance", "checkpointing", "sampling", "logging"].map(
+    (section) => readFileSync(join(metadataPath, `${section}.ts`), "utf8"),
+  ),
+].join("\n");
 
 // Extract keys from the metadata array (simple regex parse — no TS compile needed)
 const keyMatches = [...source.matchAll(/key:\s*"([^"]+)"/g)].map((m) => m[1]);
@@ -124,9 +130,15 @@ for (const block of entryBlocks) {
   const hasRangeGuidance = /rangeGuidance:/.test(block);
   const valueOptionItems = (block.match(/value:\s*"/g) ?? []).length;
 
+  const hasExternalValueOptions = /valueOptions:\s*[A-Za-z_][\w]*/.test(block);
+  const externalSchedulerOptions = (source.match(/diffusersSchedulerOptions/g) ?? []).length > 0
+    && (source.match(/\{ value: "[^"]+", label:/g) ?? []).length >= 2;
+
   if (constraints?.includes("|")) {
+    const hasEnoughInlineOptions = hasValueOptions && valueOptionItems >= 2;
+    const hasEnoughExternalOptions = hasExternalValueOptions && externalSchedulerOptions;
     assert.ok(
-      hasValueOptions && valueOptionItems >= 2,
+      hasEnoughInlineOptions || hasEnoughExternalOptions,
       `Enum parameter ${key} should have valueOptions with ≥ 2 items`,
     );
   }
