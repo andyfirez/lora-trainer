@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from conftest import write_test_image
 from PIL import Image
 from src.db.tables.dataset import Dataset
 from src.db.tables.dataset_image_crop import DatasetImageCrop
@@ -28,10 +29,6 @@ from src.services.datasets.preprocess import (
     resolve_prepared_path,
 )
 from src.services.datasets.training_validation import validate_dataset_for_training
-
-
-def _save_rgb(path: Path, size: tuple[int, int], color: tuple[int, int, int] = (128, 64, 32)) -> None:
-    Image.new("RGB", size, color).save(path)
 
 
 def _square_bucket_config(resolution: int = 1024) -> BucketPreprocessConfig:
@@ -64,7 +61,7 @@ def test_fit_size_landscape() -> None:
 
 def test_apply_crop_produces_square(tmp_path: Path) -> None:
     source = tmp_path / "wide.png"
-    _save_rgb(source, (2000, 1000))
+    write_test_image(source, (2000, 1000))
     image = Image.open(source)
     result = apply_crop(image, 512, 0.5, 0.5)
     assert result.size == (512, 512)
@@ -72,7 +69,7 @@ def test_apply_crop_produces_square(tmp_path: Path) -> None:
 
 def test_bake_image_writes_square_prepared_file(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
-    _save_rgb(source, (1800, 1200))
+    write_test_image(source, (1800, 1200))
     prepared_dir = tmp_path / ".prepared" / "1024"
     output, assignment = bake_image_to_prepared(
         source_path=source,
@@ -92,7 +89,7 @@ def test_bake_image_writes_square_prepared_file(tmp_path: Path) -> None:
 
 def test_bake_image_writes_bucket_prepared_file(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
-    _save_rgb(source, (1216, 918))
+    write_test_image(source, (1216, 918))
     prepared_dir = tmp_path / ".prepared" / "1024"
     output, assignment = bake_image_to_prepared(
         source_path=source,
@@ -112,7 +109,7 @@ def test_bake_image_writes_bucket_prepared_file(tmp_path: Path) -> None:
 def test_resolve_prepared_path_prefers_jpg(tmp_path: Path) -> None:
     prepared_dir = tmp_path / ".prepared" / "1024"
     prepared_dir.mkdir(parents=True)
-    _save_rgb(prepared_dir / "photo.jpg", (512, 512))
+    write_test_image(prepared_dir / "photo.jpg", (512, 512))
     resolved = resolve_prepared_path(prepared_dir, "photo.png")
     assert resolved is not None
     assert resolved.name == "photo.jpg"
@@ -127,7 +124,7 @@ def test_list_image_filenames_includes_avif(tmp_path: Path) -> None:
 
 def test_get_image_state_ready(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
-    _save_rgb(source, (1024, 1024))
+    write_test_image(source, (1024, 1024))
     prepared_dir = prepared_dir_path(tmp_path, 1024)
     bake_image_to_prepared(
         source_path=source,
@@ -154,7 +151,7 @@ def test_get_image_state_ready(tmp_path: Path) -> None:
 
 def test_validate_dataset_for_training_ready(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
-    _save_rgb(source, (1024, 1024))
+    write_test_image(source, (1024, 1024))
     prepared_dir = prepared_dir_path(tmp_path, 1024)
     bake_image_to_prepared(
         source_path=source,
@@ -170,7 +167,7 @@ def test_validate_dataset_for_training_ready(tmp_path: Path) -> None:
         target_resolution=1024,
         preprocess_ready=True,
     )
-    validate_dataset_for_training(dataset, 1024)
+    assert validate_dataset_for_training(dataset, 1024) is None
 
 
 def test_validate_dataset_resolution_mismatch(tmp_path: Path) -> None:
@@ -200,7 +197,7 @@ def test_validate_dataset_bucket_mode_mismatch(tmp_path: Path) -> None:
 
 def test_recompute_preprocess_ready(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
-    _save_rgb(source, (1024, 1024))
+    write_test_image(source, (1024, 1024))
     prepared_dir = prepared_dir_path(tmp_path, 1024)
     bake_image_to_prepared(
         source_path=source,
@@ -233,7 +230,7 @@ def test_recompute_preprocess_ready(tmp_path: Path) -> None:
 
 def test_build_crop_meta_defaults_center(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
-    _save_rgb(source, (1600, 900))
+    write_test_image(source, (1600, 900))
     meta = build_crop_meta(
         image_path=source,
         bucket_config=_square_bucket_config(1024),
@@ -248,7 +245,7 @@ def test_build_crop_meta_defaults_center(tmp_path: Path) -> None:
 
 def test_apply_bucket_crop_matches_assignment(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
-    _save_rgb(source, (1216, 918))
+    write_test_image(source, (1216, 918))
     image = Image.open(source)
     assignment = assign_bucket(1216, 918, resolution=1024, bucket_reso_steps=256)
     result = apply_bucket_crop(image, assignment)
@@ -257,7 +254,7 @@ def test_apply_bucket_crop_matches_assignment(tmp_path: Path) -> None:
 
 def test_validate_bucket_training_with_crops(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
-    _save_rgb(source, (1216, 918))
+    write_test_image(source, (1216, 918))
     bucket_config = _bucket_config(1024)
     prepared_dir = prepared_dir_path(tmp_path, 1024)
     _, assignment = bake_image_to_prepared(
@@ -289,4 +286,4 @@ def test_validate_bucket_training_with_crops(tmp_path: Path) -> None:
         crop_x=assignment.crop_x,
         crop_y=assignment.crop_y,
     )
-    validate_dataset_for_training(dataset, 1024, enable_bucket=True, crops=[crop])
+    assert validate_dataset_for_training(dataset, 1024, enable_bucket=True, crops=[crop]) is None

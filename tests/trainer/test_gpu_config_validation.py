@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
 import pytest
-from src.trainer.config import VaeDtype, WeightDtype
 from src.gpu.validation import validate_gpu_config
+from src.trainer.config import VaeDtype, WeightDtype
 
 
 @patch("src.gpu.validation.is_xformers_available", return_value=False)

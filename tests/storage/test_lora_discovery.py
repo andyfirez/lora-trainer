@@ -1,6 +1,5 @@
 """Tests for LoRA filesystem discovery."""
 
-from pathlib import Path
 
 from src.services.loras.discovery import LoraDiscoveryService
 from src.settings.app_settings import settings
@@ -21,7 +20,7 @@ def test_discover_lora_work_dirs_finds_final_and_checkpoint_only(storage_roots) 
     assert "nested/checkpoint_only" in paths
 
 
-def test_discover_lora_work_dirs_uses_configured_root(tmp_path, monkeypatch) -> None:
+def test_discover_lora_work_dirs_uses_configured_root(tmp_path) -> None:
     lora_root = tmp_path / "custom-lora"
     lora_root.mkdir()
     work_dir = lora_root / "external"

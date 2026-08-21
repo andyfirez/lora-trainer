@@ -3,12 +3,20 @@
 from pathlib import Path
 
 from src.sampler.config import SamplingConfig
-from src.sampler.sweep.models import LoraEntry, SweepMode, SweepParameter, SweepParameters, parse_lora_entry
+from src.sampler.sweep.models import (
+    LoraEntry,
+    SweepMode,
+    SweepParameter,
+    SweepParameters,
+    parse_lora_entry,
+    parse_trigger_words,
+)
 from src.services.sampling.lora_paths import (
     lora_path_sweep_values,
     prepare_sampling_config_lora_paths,
     resolve_lora_paths_from_sampling_config,
 )
+from src.trainer.sdxl.caption import apply_trigger_words_to_prompt
 
 
 def test_resolve_lora_paths_from_flat_list() -> None:
@@ -126,3 +134,13 @@ def test_prepare_include_base_model_sample_prepends_null(tmp_path: Path) -> None
 def test_parse_lora_entry_legacy_string() -> None:
     entry = parse_lora_entry(r"D:\loras\demo.safetensors")
     assert entry == LoraEntry(path=r"D:\loras\demo.safetensors", trigger="")
+
+
+def test_apply_lora_trigger_to_prompt() -> None:
+    prompt = apply_trigger_words_to_prompt("portrait", parse_trigger_words("ohwx, person"))
+    assert prompt == "ohwx, person, portrait"
+
+
+def test_apply_lora_trigger_skips_empty() -> None:
+    prompt = apply_trigger_words_to_prompt("portrait", parse_trigger_words(""))
+    assert prompt == "portrait"

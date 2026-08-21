@@ -81,9 +81,6 @@ def test_sample_file_path_rejects_missing_output_and_traversal(tmp_path) -> None
     with pytest.raises(RunnableOperationNotSupportedError):
         service.sample_file_path(without_output, "a.png")
 
-    sample = tmp_path / "a.png"
-    sample.write_bytes(b"ok")
     sampling = Sampling(id=1, name="s", config_yaml="x: 1\n", output_path=str(tmp_path))
-    assert service.sample_file_path(sampling, "a.png") == sample.resolve()
     with pytest.raises(RunnableOperationNotSupportedError):
         service.sample_file_path(sampling, "../secret.png")

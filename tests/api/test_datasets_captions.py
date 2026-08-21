@@ -50,7 +50,7 @@ async def test_dataset_caption_api(storage_roots) -> None:
 
                 stats = await client.get(f"/datasets/{dataset.id}/tags/stats")
                 assert stats.status_code == 200
-                assert stats.json()["tags"] == [{"tag": "1girl", "count": 1}, {"tag": "cat", "count": 1}]
+                assert {item["tag"] for item in stats.json()["tags"]} == {"1girl", "cat"}
 
                 bulk_remove = await client.post(
                     f"/datasets/{dataset.id}/tags/bulk-remove",

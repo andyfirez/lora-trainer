@@ -72,3 +72,18 @@ def test_vary_lora_path_pairs_triggers(tmp_path) -> None:
 def test_empty_prompt_returns_no_combinations() -> None:
     params = _params(prompt=SweepParameter(mode=SweepMode.FIXED, value=""))
     assert build_combinations(params) == []
+
+
+def test_combinations_with_varying_base_model() -> None:
+    params = SweepParameters(
+        base_model_name=SweepParameter(
+            mode=SweepMode.VARY,
+            values=["modelA", "modelB"],
+        ),
+        prompt=SweepParameter(mode=SweepMode.FIXED, value="hello"),
+    )
+    combos = build_combinations(params)
+    assert len(combos) == 2
+    base_models = {combo.params["base_model_name"] for combo in combos}
+    assert base_models == {"modelA", "modelB"}
+    assert all(combo.params["prompt"] == "hello" for combo in combos)

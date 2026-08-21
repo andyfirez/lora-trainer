@@ -1,6 +1,7 @@
 """Tests for SDXL aspect-ratio bucket assignment."""
 
 import pytest
+from src.trainer.sdxl.bucket_batch_sampler import BucketBatchSampler
 from src.trainer.sdxl.buckets import (
     apply_center_offset,
     assign_bucket,
@@ -28,9 +29,7 @@ def test_assign_bucket_landscape_not_square() -> None:
         bucket_reso_steps=256,
         bucket_no_upscale=True,
     )
-    assert assignment.bucket_width != assignment.bucket_height or (
-        assignment.bucket_width != 1024
-    )
+    assert assignment.bucket_width != assignment.bucket_height
     assert assignment.bucket_width * assignment.bucket_height <= 1024 * 1024
     assert assignment.bucket_width % 256 == 0
     assert assignment.bucket_height % 256 == 0
@@ -115,3 +114,14 @@ def test_apply_center_offset_clamps() -> None:
 def test_assign_bucket_invalid_dimensions() -> None:
     with pytest.raises(ValueError, match="positive"):
         assign_bucket(0, 100, resolution=1024)
+
+
+def test_bucket_batch_sampler_groups_by_resolution() -> None:
+    bucket_keys = ["1024x768", "1024x768", "768x1024", "1024x768"]
+    sampler = BucketBatchSampler(bucket_keys, batch_size=2)
+    batches = list(sampler)
+    assert len(batches) == 3
+    for batch in batches:
+        keys = {bucket_keys[index] for index in batch}
+        assert len(keys) == 1
+    assert sorted(sum(batches, [])) == [0, 1, 2, 3]

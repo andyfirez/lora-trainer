@@ -3,19 +3,14 @@
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from conftest import write_test_image
 from src.services.datasets.duplicates import remove_duplicate_files, scan_duplicates
 from src.services.datasets.service import DatasetsService
 
 
-def _write_image(path: Path, color: tuple[int, int, int] = (100, 120, 140)) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", (64, 64), color).save(path)
-
-
 def test_scan_duplicates_finds_exact_byte_matches(tmp_path: Path) -> None:
-    _write_image(tmp_path / "a.png", (100, 120, 140))
-    _write_image(tmp_path / "b.png", (10, 20, 30))
+    write_test_image(tmp_path / "a.png", size=(64, 64), color=(100, 120, 140))
+    write_test_image(tmp_path / "b.png", size=(64, 64), color=(10, 20, 30))
     (tmp_path / "copy_of_a.png").write_bytes((tmp_path / "a.png").read_bytes())
 
     result = scan_duplicates(tmp_path)
@@ -25,8 +20,8 @@ def test_scan_duplicates_finds_exact_byte_matches(tmp_path: Path) -> None:
 
 
 def test_remove_duplicate_files_deletes_image_and_caption(tmp_path: Path) -> None:
-    _write_image(tmp_path / "keep.png")
-    _write_image(tmp_path / "dup.png")
+    write_test_image(tmp_path / "keep.png", size=(64, 64), color=(100, 120, 140))
+    write_test_image(tmp_path / "dup.png", size=(64, 64), color=(100, 120, 140))
     (tmp_path / "keep.txt").write_text("tag", encoding="utf-8")
     (tmp_path / "dup.txt").write_text("tag", encoding="utf-8")
 
@@ -43,8 +38,8 @@ def test_remove_duplicate_files_deletes_image_and_caption(tmp_path: Path) -> Non
 async def test_remove_duplicates_via_service(storage_roots, datasets_service: DatasetsService) -> None:
     image_dir = storage_roots["datasets"] / "images"
     image_dir.mkdir()
-    _write_image(image_dir / "alpha.png")
-    _write_image(image_dir / "beta.png")
+    write_test_image(image_dir / "alpha.png", size=(64, 64), color=(100, 120, 140))
+    write_test_image(image_dir / "beta.png", size=(64, 64), color=(100, 120, 140))
     (image_dir / "beta.png").write_bytes((image_dir / "alpha.png").read_bytes())
 
     dataset = await datasets_service.create_dataset(name="dupes", relative_path="images")

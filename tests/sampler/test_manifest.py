@@ -34,4 +34,10 @@ def test_manifest_roundtrip(tmp_path: Path) -> None:
     loaded = read_manifest(tmp_path)
     assert loaded is not None
     assert loaded.total_images == 2
-    assert len(loaded.grids) == 1
+    assert loaded.images == manifest.images
+    assert loaded.grids == manifest.grids
+    assert loaded.grids[0].x == manifest.grids[0].x
+    assert loaded.grids[0].y == manifest.grids[0].y
+    assert loaded.grids[0].cells == [[0, 1]]
+    assert loaded.images[0].params == {"prompt": "a"}
+    assert loaded.images[1].params == {"prompt": "b"}

@@ -88,10 +88,12 @@ def test_run_sampling_pass_moves_text_encoders_to_device_before_embeds(
     mock_pass: MagicMock,
     mock_build_scheduler: MagicMock,
 ) -> None:
+    call_order: list[str] = []
     te1 = MagicMock(name="te1")
     te2 = MagicMock(name="te2")
-    te1.to.side_effect = lambda *args, **kwargs: te1
-    te2.to.side_effect = lambda *args, **kwargs: te2
+    te1.to.side_effect = lambda *args, **kwargs: call_order.append("te1.to") or te1
+    te2.to.side_effect = lambda *args, **kwargs: call_order.append("te2.to") or te2
+    mock_precompute.side_effect = lambda *args, **kwargs: call_order.append("precompute") or []
     config = SDXLInferenceConfig()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -111,9 +113,11 @@ def test_run_sampling_pass_moves_text_encoders_to_device_before_embeds(
         log=MagicMock(),
     )
 
-    assert te1.to.call_args_list[0] == (( ), {"device": device, "dtype": torch.float16})
-    assert te2.to.call_args_list[0] == (( ), {"device": device, "dtype": torch.float16})
+    assert te1.to.call_args_list[0] == ((), {"device": device, "dtype": torch.float16})
+    assert te2.to.call_args_list[0] == ((), {"device": device, "dtype": torch.float16})
     mock_precompute.assert_called_once()
     _, precompute_kwargs = mock_precompute.call_args
     assert precompute_kwargs["text_encoder_1"] is te1
     assert precompute_kwargs["text_encoder_2"] is te2
+    assert call_order.index("te1.to") < call_order.index("precompute")
+    assert call_order.index("te2.to") < call_order.index("precompute")

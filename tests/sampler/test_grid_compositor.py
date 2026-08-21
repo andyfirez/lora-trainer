@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from PIL import Image
-
 from src.sampler.sweep.grid_compositor import (
     LABEL_HEIGHT,
     LABEL_WIDTH,

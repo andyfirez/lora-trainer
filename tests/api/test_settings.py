@@ -1,8 +1,6 @@
-import os
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 from src.api.main import app
 from src.settings.app_settings import settings
 

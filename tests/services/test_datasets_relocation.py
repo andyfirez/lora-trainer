@@ -1,18 +1,11 @@
 """Tests for dataset catalog relocation on filesystem moves."""
 
-from pathlib import Path
 
 import pytest
-from PIL import Image
-
+from conftest import write_test_image
 from src.db.tables.dataset import Dataset
 from src.db.tables.dataset_image_crop import DatasetImageCrop
 from src.services.datasets.service import DatasetsService
-
-
-def _write_test_image(path: Path, size: tuple[int, int] = (800, 600)) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", size, (100, 100, 100)).save(path)
 
 
 @pytest.mark.asyncio
@@ -22,7 +15,7 @@ async def test_sync_relocates_dataset_when_moved_to_subfolder(
 ) -> None:
     image_dir = storage_roots["datasets"] / "photos"
     image_dir.mkdir()
-    _write_test_image(image_dir / "img.png")
+    write_test_image(image_dir / "img.png")
 
     dataset = await datasets_service.create_dataset(name="photos", relative_path="photos")
     dataset_id = dataset.id
@@ -47,7 +40,7 @@ async def test_sync_relocates_dataset_when_folder_renamed_with_crops(
     image_dir = storage_roots["datasets"] / "old_name"
     image_dir.mkdir()
     image_path = image_dir / "img.png"
-    _write_test_image(image_path)
+    write_test_image(image_path)
 
     dataset = await datasets_service.create_dataset(name="old_name", relative_path="old_name")
     session.add(
@@ -80,7 +73,7 @@ async def test_sync_creates_new_dataset_when_no_stale_match(
 ) -> None:
     image_dir = storage_roots["datasets"] / "brand_new"
     image_dir.mkdir()
-    _write_test_image(image_dir / "img.png")
+    write_test_image(image_dir / "img.png")
 
     datasets = await datasets_service.list_datasets()
     assert len(datasets) == 1
@@ -104,7 +97,7 @@ async def test_sync_does_not_merge_ambiguous_stale_datasets(
 
     image_dir = storage_roots["datasets"] / "gamma" / "photos"
     image_dir.mkdir(parents=True)
-    _write_test_image(image_dir / "img.png")
+    write_test_image(image_dir / "img.png")
 
     datasets = await datasets_service.list_datasets()
     assert len(datasets) == 1

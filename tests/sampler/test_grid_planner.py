@@ -1,7 +1,12 @@
 """Tests for grid planner."""
 
 from src.sampler.sweep.grid_planner import plan_grids
-from src.sampler.sweep.models import GridLayout, SweepMode, SweepParameter, SweepParameters
+from src.sampler.sweep.models import (
+    GridLayout,
+    SweepMode,
+    SweepParameter,
+    SweepParameters,
+)
 
 
 def test_two_vary_params_single_grid() -> None:

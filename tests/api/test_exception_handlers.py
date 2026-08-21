@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from src.api.exception_handlers import register_exception_handlers
+from src.api.lifespan import create_lifespan
 from src.services.common.exceptions import AppError, NameConflictError, NotFoundError
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
@@ -83,12 +86,6 @@ def _app_for(exc: AppError) -> FastAPI:
     return app
 
 
-@pytest.mark.parametrize(("exc", "status_code"), STATUS_CASES)
-def test_domain_errors_declare_http_status(exc: AppError, status_code: int) -> None:
-    assert isinstance(exc, AppError)
-    assert exc.status_code == status_code
-
-
 @pytest.mark.parametrize(
     ("exc", "base"),
     [
@@ -111,3 +108,20 @@ async def test_app_error_handler_maps_status_and_detail(exc: AppError, status_co
         response = await client.get("/boom")
     assert response.status_code == status_code
     assert response.json() == {"detail": str(exc)}
+
+
+@pytest.mark.asyncio
+async def test_create_lifespan_starts_and_stops_worker() -> None:
+    worker = MagicMock()
+    worker.start = AsyncMock()
+    worker.stop = AsyncMock()
+    migrate = AsyncMock()
+    app = FastAPI()
+
+    lifespan = create_lifespan(worker_factory=lambda: worker, migrate=migrate)
+    async with lifespan(app):
+        migrate.assert_awaited_once()
+        worker.start.assert_awaited_once()
+        assert app.state.runnable_worker is worker
+
+    worker.stop.assert_awaited_once()

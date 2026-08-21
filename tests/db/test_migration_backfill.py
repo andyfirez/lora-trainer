@@ -149,7 +149,6 @@ async def test_backfilled_lora_status_reads_through_orm(tmp_path) -> None:
 
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlmodel.ext.asyncio.session import AsyncSession
-
     from src.db.repositories.lora_repo import LoraRepository
     from src.db.tables.runnable_mixin import RunnableStatus
 
@@ -181,3 +180,43 @@ def test_downgrade_from_head_recreates_legacy_table_shells(tmp_path) -> None:
     }
     conn.close()
     assert {"jobs", "job_configs", "queue_entries", "trained_loras"} <= tables
+
+
+def test_session_factory_registers_all_tables_for_subprocess_metadata() -> None:
+    from sqlmodel import SQLModel
+    from src.db.session import register_all_tables
+
+    register_all_tables()
+    register_all_tables()
+    table_names = set(SQLModel.metadata.tables.keys())
+    assert {
+        "datasets",
+        "dataset_image_crops",
+        "loras",
+        "samplings",
+    }.issubset(table_names)
+
+
+def test_run_migrations_applies_full_schema(tmp_path, monkeypatch) -> None:
+    from src.db.alembic_runner import run_migrations
+
+    db_path = tmp_path / "test.db"
+    monkeypatch.setattr("src.settings.app_settings.settings.database.path", str(db_path))
+    run_migrations()
+    assert db_path.is_file()
+
+    conn = sqlite3.connect(db_path)
+    tables = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+    }
+    conn.close()
+    assert tables == {
+        "alembic_version",
+        "datasets",
+        "dataset_image_crops",
+        "loras",
+        "samplings",
+    }

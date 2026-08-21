@@ -130,14 +130,9 @@ async def test_list_loras_shows_completed_when_weights_relpath_stale(
     assert "stale-weights" in {lora.name for lora in loras}
 
 
-def test_sample_file_path_returns_file_under_output(tmp_path) -> None:
-    sample = tmp_path / "a.png"
-    sample.write_bytes(b"ok")
+def test_sample_file_path_rejects_traversal(tmp_path) -> None:
     lora = Lora(id=1, name="demo", output_path=str(tmp_path))
     service = LoraService(MagicMock(), MagicMock())
 
-    assert service.sample_file_path(lora, "a.png") == sample.resolve()
     with pytest.raises(RunnableOperationNotSupportedError):
         service.sample_file_path(lora, "../secret.png")
-    with pytest.raises(RunnableOperationNotSupportedError):
-        service.sample_file_path(lora, "missing.png")

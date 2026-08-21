@@ -79,3 +79,20 @@ async def test_delete_where_filters_collection(session: AsyncSession) -> None:
 
     remaining = [crop.filename for crop in await crops.list_by_dataset(dataset.id)]
     assert remaining == ["keep.png"]
+
+
+@pytest.mark.asyncio
+async def test_lora_repo_round_trips_fields(session: AsyncSession, tmp_path) -> None:
+    lora = Lora(name="test-lora", base_model_name="test-model", config_yaml="base_model_name: x")
+    session.add(lora)
+    await session.commit()
+    await session.refresh(lora)
+
+    repo = LoraRepository(session)
+    lora.log_path = str(tmp_path / "lora.log")
+    session.add(lora)
+    await session.commit()
+
+    fetched = await repo.get_by_name("test-lora")
+    assert fetched is not None
+    assert fetched.log_path == str(tmp_path / "lora.log")

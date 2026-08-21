@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-
 from src.services.storage.catalog_sync import sync_discovered_items
 
 

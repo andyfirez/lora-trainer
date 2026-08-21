@@ -44,6 +44,17 @@ def _dataset(*, name: str = "demo", relative_path: str = "images") -> Dataset:
     )
 
 
+class TestDatasetResponseMapping:
+    def test_dataset_response_from_orm_object(self, storage_roots) -> None:
+        dataset = _dataset()
+        (storage_roots["datasets"] / "images").mkdir()
+
+        response = DatasetResponse.model_validate(dataset)
+        assert response.relative_path == "images"
+        assert response.resolved_path == str((storage_roots["datasets"] / "images").resolve())
+        assert response.path_missing is False
+
+
 @pytest.mark.asyncio
 async def test_list_datasets_maps_orm_to_response(storage_roots) -> None:
     (storage_roots["datasets"] / "images").mkdir()
@@ -76,11 +87,13 @@ async def test_create_get_import_update_map_orm_to_response(storage_roots) -> No
     )
     updated = await update_dataset(1, DatasetUpdate(description="x"), service)
 
+    expected_path = str((storage_roots["datasets"] / "images").resolve())
     service.update_dataset.assert_awaited_once_with(1, description="x")
     for response in (created, fetched, imported, updated):
         assert isinstance(response, DatasetResponse)
         assert response.name == "demo"
-        assert response.resolved_path != ""
+        assert response.resolved_path == expected_path
+        assert response.path_missing is False
 
 
 @pytest.mark.asyncio

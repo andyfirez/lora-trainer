@@ -1,10 +1,11 @@
-"""Shared pytest fixtures for service tests."""
+"""Shared pytest fixtures and helpers for the backend test suite."""
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
+from PIL import Image
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -21,10 +22,13 @@ from src.services.sampling.service import SamplingService
 from src.settings.app_settings import settings
 
 
-def _write_square_image(path, size: int = 1024) -> None:
-    from PIL import Image
-
-    Image.new("RGB", (size, size), (100, 100, 100)).save(path)
+def write_test_image(
+    path: Path,
+    size: tuple[int, int] = (800, 600),
+    color: tuple[int, int, int] = (100, 100, 100),
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", size, color).save(path)
 
 
 @pytest.fixture(autouse=True)
@@ -55,7 +59,7 @@ async def _prepare_dataset(
     relative_path: str | None = None,
 ) -> Dataset:
     rel = relative_path or image_dir.name
-    _write_square_image(image_dir / "test.png")
+    write_test_image(image_dir / "test.png", size=(1024, 1024))
     dataset = await datasets_service.create_dataset(name=name, relative_path=rel)
     dataset = await datasets_service.update_dataset(
         dataset.id,

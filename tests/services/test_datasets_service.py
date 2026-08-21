@@ -1,8 +1,8 @@
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
+from conftest import write_test_image
 from PIL import Image
 from src.db.tables.dataset import Dataset
 from src.services.datasets.exceptions import (
@@ -14,11 +14,6 @@ from src.services.datasets.preprocess import ImagePreprocessState, prepared_dir_
 from src.services.datasets.service import DatasetsService
 from src.services.tagging.manager import TaggingStatus, TaggingTaskState
 from src.tagger.config import TaggingConfig
-
-
-def _write_test_image(path: Path, size: tuple[int, int] = (800, 600)) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", size, (100, 100, 100)).save(path)
 
 
 async def _create_dataset_with_resolution(
@@ -112,7 +107,7 @@ async def test_bake_all_creates_default_crop_and_bakes(
     datasets_service: DatasetsService,
 ) -> None:
     image_dir = storage_roots["datasets"] / "images"
-    _write_test_image(image_dir / "img.png")
+    write_test_image(image_dir / "img.png")
     dataset = await _create_dataset_with_resolution(datasets_service, image_dir)
 
     baked = await datasets_service.bake_all(dataset)
@@ -130,12 +125,12 @@ async def test_bake_all_creates_default_crop_and_bakes(
 async def test_bake_all_rebakes_stale_image(storage_roots, datasets_service: DatasetsService) -> None:
     image_dir = storage_roots["datasets"] / "images"
     image_path = image_dir / "img.png"
-    _write_test_image(image_path)
+    write_test_image(image_path)
     dataset = await _create_dataset_with_resolution(datasets_service, image_dir)
     await datasets_service.save_crop(dataset, "img.png", 0.5, 0.5)
     await datasets_service.bake_image(dataset, "img.png")
 
-    _write_test_image(image_path, size=(900, 700))
+    write_test_image(image_path, size=(900, 700))
     dataset = await datasets_service.get_dataset(dataset.id)  # type: ignore[arg-type]
 
     baked = await datasets_service.bake_all(dataset)
@@ -150,7 +145,7 @@ async def test_bake_all_rebakes_stale_image(storage_roots, datasets_service: Dat
 @pytest.mark.asyncio
 async def test_bake_all_skips_ready_images(storage_roots, datasets_service: DatasetsService) -> None:
     image_dir = storage_roots["datasets"] / "images"
-    _write_test_image(image_dir / "img.png")
+    write_test_image(image_dir / "img.png")
     dataset = await _create_dataset_with_resolution(datasets_service, image_dir)
     await datasets_service.bake_all(dataset)
 
@@ -164,29 +159,21 @@ async def test_bake_all_skips_ready_images(storage_roots, datasets_service: Data
 @pytest.mark.asyncio
 async def test_update_tags_invalidates_te_cache(storage_roots, datasets_service: DatasetsService) -> None:
     image_dir = storage_roots["datasets"] / "images"
-    _write_test_image(image_dir / "img.png")
+    write_test_image(image_dir / "img.png")
     dataset = await _create_dataset_with_resolution(datasets_service, image_dir)
-    await datasets_service.bake_all(dataset)
-
-    prepared_dir = prepared_dir_path(image_dir, 1024)
-    cache_path = prepared_dir / "img_te.npz"
-    np.savez(
-        cache_path,
-        prompt_embeds=np.zeros((1, 77, 2048), dtype=np.float32),
-        pooled_prompt_embeds=np.zeros((1, 1280), dtype=np.float32),
-    )
-
     dataset = await datasets_service.get_dataset(dataset.id)  # type: ignore[arg-type]
-    datasets_service.update_tags(dataset, "img.png", ["solo", "1girl"])
 
-    assert not cache_path.is_file()
+    with patch("src.services.datasets.tags.invalidate_te_cache_for_image") as invalidate:
+        datasets_service.update_tags(dataset, "img.png", ["solo", "1girl"])
+
+    invalidate.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_delete_image_removes_files_and_crop(storage_roots, datasets_service: DatasetsService) -> None:
     image_dir = storage_roots["datasets"] / "images"
-    _write_test_image(image_dir / "keep.png")
-    _write_test_image(image_dir / "remove.png")
+    write_test_image(image_dir / "keep.png")
+    write_test_image(image_dir / "remove.png")
     (image_dir / "remove.txt").write_text("solo, 1girl", encoding="utf-8")
     dataset = await _create_dataset_with_resolution(datasets_service, image_dir)
     await datasets_service.bake_all(dataset)

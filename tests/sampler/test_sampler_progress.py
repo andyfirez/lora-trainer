@@ -4,16 +4,7 @@ from src.sampler.progress_utils import diffusion_progress_step, total_diffusion_
 from src.trainer.inference_config import SDXLInferenceConfig
 
 
-def test_sample_prompts_available_on_config() -> None:
-    config = SDXLInferenceConfig(sample_prompts=["ohwx, portrait"])
-    assert config.sample_prompts == ["ohwx, portrait"]
-
-
-def test_sample_prompts_same_for_base_model_sampling() -> None:
-    config = SDXLInferenceConfig(sample_prompts=["portrait"])
-    assert config.sample_prompts == ["portrait"]
-
-    config = SDXLInferenceConfig(sample_prompts=["a", "b"], sample_steps=30)
+def test_total_diffusion_steps_counts_lora_and_prompts() -> None:
     assert total_diffusion_steps(lora_count=1, prompt_count=2, sample_steps=30) == 60
 
 

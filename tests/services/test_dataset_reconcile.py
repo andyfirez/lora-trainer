@@ -4,25 +4,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from conftest import write_test_image
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.tables.dataset_image_crop import DatasetImageCrop
 from src.services.datasets.preprocess import (
-    BucketPreprocessConfig,
-    ImagePreprocessState,
     StoredCropRecord,
-    get_image_state,
     has_complete_bucket_metadata,
     prepared_dir_path,
 )
 from src.services.datasets.service import DatasetsService
 from src.trainer.concept_training_metadata import resolve_concept_training_metadata
-
-
-def _write_image(path: Path, size: tuple[int, int] = (800, 600)) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", size, (100, 100, 100)).save(path)
 
 
 async def _dataset_with_image(
@@ -35,7 +27,7 @@ async def _dataset_with_image(
 ) -> tuple[object, Path]:
     image_dir = storage_roots["datasets"] / relative_path
     image_dir.mkdir(parents=True, exist_ok=True)
-    _write_image(image_dir / filename)
+    write_test_image(image_dir / filename)
     dataset = await datasets_service.create_dataset(name="reconcile", relative_path=relative_path)
     dataset = await datasets_service.update_dataset(
         dataset.id,
@@ -77,7 +69,7 @@ async def test_reconcile_removes_orphan_prepared_without_source(
 
     prepared_dir = prepared_dir_path(image_dir, 1024)
     orphan_prepared = prepared_dir / "ghost.jpg"
-    Image.new("RGB", (1024, 1024), (0, 0, 0)).save(orphan_prepared)
+    write_test_image(orphan_prepared, size=(1024, 1024), color=(0, 0, 0))
 
     result = await datasets_service.reconcile_dataset(dataset)
 
@@ -129,14 +121,6 @@ async def test_list_items_with_states_reconciles_orphan_crop(
 
 
 def test_get_image_state_requires_bucket_metadata_when_baked() -> None:
-    bucket_config = BucketPreprocessConfig(
-        enable_bucket=True,
-        resolution=1024,
-        min_bucket_reso=512,
-        max_bucket_reso=2048,
-        bucket_reso_steps=64,
-        bucket_no_upscale=True,
-    )
     record = StoredCropRecord(
         crop_center_x=0.5,
         crop_center_y=0.5,

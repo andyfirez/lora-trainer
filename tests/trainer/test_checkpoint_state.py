@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from src.trainer.sdxl.checkpoint_state import (
@@ -57,9 +58,11 @@ def test_find_latest_checkpoint(tmp_path: Path) -> None:
     newer = tmp_path / "demo_step50.safetensors"
     older.write_bytes(b"1")
     newer.write_bytes(b"2")
+    older_mtime = older.stat().st_mtime
+    os.utime(newer, (older_mtime + 10, older_mtime + 10))
 
     latest = find_latest_checkpoint(tmp_path, "demo", "safetensors")
-    assert latest in {older, newer}
+    assert latest == newer
 
 
 def test_parse_epoch_and_step_from_name() -> None:

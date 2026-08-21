@@ -67,6 +67,7 @@ def test_inspect_image_bytes() -> None:
     assert result.height == 64
     assert result.preview_base64 is not None
     assert result.preview_base64.startswith("data:image/jpeg;base64,")
+    assert result.parameters["Sampler"] == "Euler a"
 
 
 def test_inspect_image_bytes_without_metadata() -> None:
@@ -79,12 +80,6 @@ def test_inspect_image_bytes_without_metadata() -> None:
     assert result.parameters == {}
     assert result.width == 32
     assert result.height == 24
-
-
-@pytest.mark.parametrize("geninfo", [SAMPLE_GENINFO])
-def test_inspect_image_bytes_roundtrip(geninfo: str) -> None:
-    result = inspect_image_bytes(_png_with_parameters(geninfo))
-    assert result.parameters["Sampler"] == "Euler a"
 
 
 def test_inspect_image_bytes_rejects_invalid_payload() -> None:

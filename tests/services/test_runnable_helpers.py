@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from src.services.runnable.artifacts import list_runnable_samples, read_runnable_logs
+from src.services.runnable.samples import resolve_safe_sample_file
 
 
 def test_read_runnable_logs_empty_without_path() -> None:
@@ -31,3 +32,32 @@ def test_list_runnable_samples_from_output_dir(tmp_path: Path) -> None:
     found = list_runnable_samples(entity)
     assert len(found) == 1
     assert found[0][0].name == "preview.png"
+
+
+def test_resolve_safe_sample_file_accepts_nested_file(tmp_path: Path) -> None:
+    nested = tmp_path / "samples"
+    nested.mkdir()
+    sample = nested / "a.png"
+    sample.write_bytes(b"ok")
+
+    assert resolve_safe_sample_file(tmp_path, "samples/a.png") == sample.resolve()
+
+
+def test_resolve_safe_sample_file_rejects_missing(tmp_path: Path) -> None:
+    assert resolve_safe_sample_file(tmp_path, "missing.png") is None
+
+
+def test_resolve_safe_sample_file_rejects_traversal(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "secret.png"
+    outside.write_bytes(b"no")
+    assert resolve_safe_sample_file(tmp_path, "../secret.png") is None
+
+
+def test_resolve_safe_sample_file_rejects_prefix_sibling(tmp_path: Path) -> None:
+    base = tmp_path / "foo"
+    sibling = tmp_path / "foobar"
+    base.mkdir()
+    sibling.mkdir()
+    (sibling / "x.png").write_bytes(b"x")
+
+    assert resolve_safe_sample_file(base, "../foobar/x.png") is None
