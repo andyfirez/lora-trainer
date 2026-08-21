@@ -30,28 +30,26 @@ export default function DatasetFolderItem({ dataset, onDelete }: DatasetFolderIt
   );
 
   return (
-    <div>
-      <StorageCatalogRow
-        href={`/datasets/${dataset.id}`}
-        icon={<Database size={18} className="text-accent" />}
-        title={dataset.name}
-        meta={meta}
-        actions={
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(event) => {
-              event.preventDefault();
-              onDelete();
-            }}
-            className="text-error hover:text-error"
-            aria-label="Delete dataset"
-          >
-            <Trash2 size={14} />
-          </Button>
-        }
-      />
-      <div className="px-4 pb-3 sm:hidden">{meta}</div>
-    </div>
+    <StorageCatalogRow
+      href={`/datasets/${dataset.id}`}
+      icon={<Database size={18} className="text-accent" />}
+      title={dataset.name}
+      meta={meta}
+      duplicateMetaOnMobile
+      actions={
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(event) => {
+            event.preventDefault();
+            onDelete();
+          }}
+          className="text-error hover:text-error"
+          aria-label="Delete dataset"
+        >
+          <Trash2 size={14} />
+        </Button>
+      }
+    />
   );
 }

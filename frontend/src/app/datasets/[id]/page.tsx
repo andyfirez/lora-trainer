@@ -1,9 +1,7 @@
 "use client";
 
-import useSWR from "swr";
-import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { CopyMinus, Pencil, Sparkles } from "lucide-react";
 import AutoTagModal from "@/components/dataset/AutoTagModal";
 import EditDatasetModal from "@/components/dataset/EditDatasetModal";
@@ -13,11 +11,11 @@ import PreprocessPanel from "@/components/dataset/PreprocessPanel";
 import TagFrequencyPanel from "@/components/dataset/TagFrequencyPanel";
 import Button from "@/components/ui/Button";
 import BackLink from "@/components/ui/BackLink";
-import { datasetsApi } from "@/lib/api/datasets";
-import type { AutotagStatusResponse, DatasetItem, ImagePreprocessState, TaggingMode } from "@/types";
+import ErrorAlert from "@/components/ui/ErrorAlert";
+import { useDatasetDetail } from "@/hooks/useDatasetDetail";
+import type { ImagePreprocessState } from "@/types";
 
 const PAGE_SIZE = 24;
-const CAPTION_EXTENSION = ".txt";
 
 export default function DatasetDetailPage() {
   const params = useParams();
@@ -25,202 +23,35 @@ export default function DatasetDetailPage() {
   const [page, setPage] = useState(1);
   const [showAutoTag, setShowAutoTag] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const [localItems, setLocalItems] = useState<DatasetItem[]>([]);
   const [cropFilename, setCropFilename] = useState<string | null>(null);
   const [filterIncomplete, setFilterIncomplete] = useState(false);
-  const [preparing, setPreparing] = useState(false);
   const [removingDuplicates, setRemovingDuplicates] = useState(false);
-  const bakingInFlight = useRef(false);
-  const lastBakeKey = useRef<string | null>(null);
 
   const {
-    data: dataset,
-    error: datasetError,
-    mutate: mutateDataset,
-  } = useSWR(Number.isFinite(datasetId) ? `/datasets/${datasetId}` : null, () =>
-    datasetsApi.get(datasetId)
-  );
-
-  const {
-    data: itemsData,
-    mutate: mutateItems,
-    isLoading: itemsLoading,
-  } = useSWR(Number.isFinite(datasetId) ? `/datasets/${datasetId}/items` : null, () =>
-    datasetsApi.listItems(datasetId, CAPTION_EXTENSION)
-  );
-
-  const { data: tagStats, mutate: mutateStats } = useSWR(
-    Number.isFinite(datasetId) ? `/datasets/${datasetId}/tags/stats` : null,
-    () => datasetsApi.getTagStats(datasetId, CAPTION_EXTENSION)
-  );
-
-  const { data: preprocessStatus, mutate: mutatePreprocessStatus } = useSWR(
-    Number.isFinite(datasetId) ? `/datasets/${datasetId}/preprocess/status` : null,
-    () => datasetsApi.getPreprocessStatus(datasetId)
-  );
-
-  const { data: duplicatesInfo, mutate: mutateDuplicates } = useSWR(
-    Number.isFinite(datasetId) ? `/datasets/${datasetId}/duplicates` : null,
-    () => datasetsApi.getDuplicates(datasetId)
-  );
-
-  const { data: taggingStatus, mutate: mutateTaggingStatus } = useSWR<AutotagStatusResponse>(
-    Number.isFinite(datasetId) ? `/datasets/${datasetId}/autotag/status` : null,
-    () => datasetsApi.getAutotagStatus(datasetId),
-    {
-      refreshInterval: (latest) => (latest?.status === "running" ? 1500 : 0),
-    }
-  );
-
-  useEffect(() => {
-    if (itemsData?.items) {
-      setLocalItems(itemsData.items);
-    }
-  }, [itemsData]);
-
-  const prevTaggingStatus = useRef<string | null>(null);
-  useEffect(() => {
-    if (!taggingStatus) return;
-    if (taggingStatus.status === "completed" && prevTaggingStatus.current === "running") {
-      void mutateItems();
-      void mutateStats();
-    }
-    prevTaggingStatus.current = taggingStatus.status;
-  }, [taggingStatus, mutateItems, mutateStats]);
-
-  const refreshAll = useCallback(async () => {
-    await Promise.all([
-      mutateItems(),
-      mutateStats(),
-      mutatePreprocessStatus(),
-      mutateDataset(),
-      mutateDuplicates(),
-    ]);
-  }, [mutateItems, mutateStats, mutatePreprocessStatus, mutateDataset, mutateDuplicates]);
-
-  const handleSaveTags = useCallback(
-    async (filename: string, tags: string[]) => {
-      await datasetsApi.updateCaption(datasetId, filename, tags, CAPTION_EXTENSION);
-    },
-    [datasetId]
-  );
-
-  const handleTagsSaved = useCallback(
-    (filename: string, tags: string[]) => {
-      setLocalItems((prev) =>
-        prev.map((item) =>
-          item.filename === filename ? { ...item, tags, has_caption: tags.length > 0 } : item
-        )
-      );
-      void mutateStats();
-    },
-    [mutateStats]
-  );
-
-  const handleBulkAdd = useCallback(
-    async (tag: string) => {
-      await datasetsApi.bulkAddTag(datasetId, tag, undefined, CAPTION_EXTENSION);
-      await refreshAll();
-    },
-    [datasetId, refreshAll]
-  );
-
-  const handleBulkRemove = useCallback(
-    async (tag: string) => {
-      await datasetsApi.bulkRemoveTag(datasetId, tag, undefined, CAPTION_EXTENSION);
-      await refreshAll();
-    },
-    [datasetId, refreshAll]
-  );
-
-  const handleAutoTag = useCallback(
-    async (options: { mode: TaggingMode; threshold: number; model: string; strip_rating: boolean }) => {
-      await datasetsApi.autotag(datasetId, {
-        ...options,
-        caption_extension: CAPTION_EXTENSION,
-      });
-      void mutateTaggingStatus();
-    },
-    [datasetId, mutateTaggingStatus]
-  );
-
-  const handleRemoveDuplicates = useCallback(async () => {
-    const duplicateCount = duplicatesInfo?.duplicate_count ?? 0;
-    if (duplicateCount <= 0) return;
-    if (
-      !confirm(
-        `Remove ${duplicateCount} duplicate image${duplicateCount === 1 ? "" : "s"}? This cannot be undone.`
-      )
-    ) {
-      return;
-    }
-    setRemovingDuplicates(true);
-    try {
-      await datasetsApi.removeDuplicates(datasetId, CAPTION_EXTENSION);
-      await refreshAll();
-    } finally {
-      setRemovingDuplicates(false);
-    }
-  }, [datasetId, duplicatesInfo?.duplicate_count, refreshAll]);
-
-  const handleDeleteImage = useCallback(
-    async (filename: string) => {
-      await datasetsApi.deleteImage(datasetId, filename, CAPTION_EXTENSION);
-      await refreshAll();
-    },
-    [datasetId, refreshAll]
-  );
-
-  const handleDatasetSaved = useCallback(async () => {
-    setPage(1);
-    lastBakeKey.current = null;
-    await refreshAll();
-  }, [refreshAll]);
-
-  useEffect(() => {
-    if (!Number.isFinite(datasetId) || !dataset?.target_resolution || !preprocessStatus || cropFilename) {
-      return;
-    }
-
-    const incomplete =
-      preprocessStatus.no_crop + preprocessStatus.cropped + preprocessStatus.stale;
-    if (incomplete <= 0) {
-      lastBakeKey.current = null;
-      return;
-    }
-    if (bakingInFlight.current) return;
-
-    const bakeKey = [
-      dataset.target_resolution,
-      preprocessStatus.total,
-      preprocessStatus.no_crop,
-      preprocessStatus.cropped,
-      preprocessStatus.stale,
-    ].join(":");
-    if (lastBakeKey.current === bakeKey) return;
-
-    lastBakeKey.current = bakeKey;
-    bakingInFlight.current = true;
-    setPreparing(true);
-
-    void (async () => {
-      try {
-        await datasetsApi.bakeAll(datasetId);
-        lastBakeKey.current = null;
-        await refreshAll();
-      } catch {
-        // Status refresh will reflect partial progress; same bakeKey prevents retry loops.
-      } finally {
-        bakingInFlight.current = false;
-        setPreparing(false);
-      }
-    })();
-  }, [dataset?.target_resolution, preprocessStatus, cropFilename, datasetId, refreshAll]);
+    dataset,
+    datasetError,
+    items,
+    itemsLoading,
+    tagStats,
+    preprocessStatus,
+    duplicatesInfo,
+    taggingStatus,
+    preparing,
+    bakeError,
+    handleSaveTags,
+    handleTagsSaved,
+    handleBulkAdd,
+    handleBulkRemove,
+    handleAutoTag,
+    handleRemoveDuplicates,
+    handleDeleteImage,
+    handleDatasetSaved,
+  } = useDatasetDetail(datasetId, { autoBakePaused: cropFilename != null });
 
   const filteredItems = useMemo(() => {
-    if (!filterIncomplete) return localItems;
-    return localItems.filter((item) => item.preprocess_state !== "ready");
-  }, [localItems, filterIncomplete]);
+    if (!filterIncomplete) return items;
+    return items.filter((item) => item.preprocess_state !== "ready");
+  }, [items, filterIncomplete]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
   const pageItems = useMemo(() => {
@@ -240,6 +71,29 @@ export default function DatasetDetailPage() {
     if (taggingStatus.status === "completed") return "Auto-tagging completed.";
     return taggingStatus.error ? `Auto-tagging failed: ${taggingStatus.error}` : "Auto-tagging failed.";
   })();
+
+  const onDatasetSaved = async () => {
+    setPage(1);
+    await handleDatasetSaved();
+  };
+
+  const onRemoveDuplicates = async () => {
+    const duplicateCount = duplicatesInfo?.duplicate_count ?? 0;
+    if (duplicateCount <= 0) return;
+    if (
+      !confirm(
+        `Remove ${duplicateCount} duplicate image${duplicateCount === 1 ? "" : "s"}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setRemovingDuplicates(true);
+    try {
+      await handleRemoveDuplicates();
+    } finally {
+      setRemovingDuplicates(false);
+    }
+  };
 
   if (datasetError) {
     return <div className="text-error">Failed to load dataset</div>;
@@ -271,6 +125,8 @@ export default function DatasetDetailPage() {
         </div>
       </div>
 
+      {bakeError && <ErrorAlert>{bakeError}</ErrorAlert>}
+
       {taggingBannerMessage && (
         <div
           className={`rounded-xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3 ${
@@ -289,7 +145,7 @@ export default function DatasetDetailPage() {
         dataset={dataset}
         status={preprocessStatus}
         preparing={preparing}
-        onUpdated={handleDatasetSaved}
+        onUpdated={onDatasetSaved}
       />
 
       <TagFrequencyPanel
@@ -310,7 +166,7 @@ export default function DatasetDetailPage() {
               variant="secondary"
               size="sm"
               disabled={removingDuplicates || taggingActive}
-              onClick={() => void handleRemoveDuplicates()}
+              onClick={() => void onRemoveDuplicates()}
             >
               <CopyMinus size={14} />
               {removingDuplicates ? "Removing…" : "Remove duplicates"}
@@ -319,7 +175,9 @@ export default function DatasetDetailPage() {
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-          <span>{filteredItems.length} images{filterIncomplete ? " (filtered)" : ""}</span>
+          <span>
+            {filteredItems.length} images{filterIncomplete ? " (filtered)" : ""}
+          </span>
           <label className="flex items-center gap-2 text-xs cursor-pointer">
             <input
               type="checkbox"
@@ -334,12 +192,7 @@ export default function DatasetDetailPage() {
           </label>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((value) => value - 1)}
-              >
+              <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
                 Prev
               </Button>
               <span>
@@ -392,22 +245,13 @@ export default function DatasetDetailPage() {
           filename={cropFilename}
           targetResolution={dataset.target_resolution}
           onClose={() => setCropFilename(null)}
-          onSaved={handleDatasetSaved}
+          onSaved={onDatasetSaved}
         />
       )}
 
-      <EditDatasetModal
-        open={showEdit}
-        dataset={dataset}
-        onClose={() => setShowEdit(false)}
-        onSaved={handleDatasetSaved}
-      />
+      <EditDatasetModal open={showEdit} dataset={dataset} onClose={() => setShowEdit(false)} onSaved={onDatasetSaved} />
 
-      <AutoTagModal
-        open={showAutoTag}
-        onClose={() => setShowAutoTag(false)}
-        onSubmit={handleAutoTag}
-      />
+      <AutoTagModal open={showAutoTag} onClose={() => setShowAutoTag(false)} onSubmit={handleAutoTag} />
     </div>
   );
 }

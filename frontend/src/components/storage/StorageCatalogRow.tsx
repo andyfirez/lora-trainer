@@ -10,22 +10,33 @@ interface StorageCatalogRowProps {
   title: string;
   meta?: ReactNode;
   actions?: ReactNode;
+  duplicateMetaOnMobile?: boolean;
 }
 
-export default function StorageCatalogRow({ href, icon, title, meta, actions }: StorageCatalogRowProps) {
+export default function StorageCatalogRow({
+  href,
+  icon,
+  title,
+  meta,
+  actions,
+  duplicateMetaOnMobile = false,
+}: StorageCatalogRowProps) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors group">
-      <Link href={href} className="flex items-center gap-3 flex-1 min-w-0">
-        <span className="shrink-0">{icon}</span>
-        <span className="flex-1 min-w-0">
-          <span className="block truncate font-medium text-text group-hover:text-accent transition-colors">
-            {title}
+    <>
+      <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors group">
+        <Link href={href} className="flex items-center gap-3 flex-1 min-w-0">
+          <span className="shrink-0">{icon}</span>
+          <span className="flex-1 min-w-0">
+            <span className="block truncate font-medium text-text group-hover:text-accent transition-colors">
+              {title}
+            </span>
           </span>
-        </span>
-        <ChevronRight size={16} className="text-muted shrink-0" />
-      </Link>
-      {meta ? <div className="hidden sm:block shrink-0 max-w-md">{meta}</div> : null}
-      {actions ? <div className="shrink-0">{actions}</div> : null}
-    </div>
+          <ChevronRight size={16} className="text-muted shrink-0" />
+        </Link>
+        {meta ? <div className="hidden sm:block shrink-0 max-w-md">{meta}</div> : null}
+        {actions ? <div className="shrink-0">{actions}</div> : null}
+      </div>
+      {duplicateMetaOnMobile && meta ? <div className="px-4 pb-3 sm:hidden">{meta}</div> : null}
+    </>
   );
 }
