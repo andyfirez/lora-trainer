@@ -12,6 +12,7 @@ import StatusBadge from "@/components/StatusBadge";
 import ProgressTimingInfo from "@/components/ProgressTimingInfo";
 import { Table, TableHead, TableBody, TableRow, TableHeader, TableCell } from "@/components/ui/Table";
 import type { SamplingResponse } from "@/types";
+import { canCancel, canEnqueue, cancelActionLabel } from "@/lib/runnableStatus";
 
 const ACTIVE_STATUSES = new Set(["draft", "queued", "running"]);
 
@@ -139,10 +140,7 @@ export default function SamplingPage() {
                   <TableCell className="text-muted">{new Date(sampling.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
-                      {(sampling.status === "draft" ||
-                        sampling.status === "failed" ||
-                        sampling.status === "cancelled" ||
-                        sampling.status === "orphan") && (
+                      {canEnqueue(sampling.status) && (
                         <button
                           onClick={() => void handleEnqueue(sampling)}
                           title="Enqueue"
@@ -151,10 +149,10 @@ export default function SamplingPage() {
                           <Play size={14} />
                         </button>
                       )}
-                      {(sampling.status === "queued" || sampling.status === "running") && (
+                      {canCancel(sampling.status) && (
                         <button
                           onClick={() => void handleCancel(sampling)}
-                          title={sampling.status === "running" ? "Stop" : "Cancel"}
+                          title={cancelActionLabel(sampling.status)}
                           className="p-1.5 rounded hover:bg-white/10 text-error hover:text-error"
                         >
                           <X size={14} />
