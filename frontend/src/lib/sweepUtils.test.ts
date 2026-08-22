@@ -5,6 +5,7 @@ import {
   applyLoraStack,
   collapseStackToSingleLora,
   loraParameterFromStack,
+  loraPathsFromParameter,
   parseLoraEntries,
   parseLoraEntry,
 } from "./sweepUtils.ts";
@@ -48,6 +49,25 @@ describe("lora stack helpers", () => {
     assert.equal(parameters.lora_weight?.value, 0.7);
     assert.equal(parameters.lora_path?.mode, "fixed");
     assert.ok(Array.isArray(parameters.lora_path?.value));
+  });
+
+  it("syncs first active stack weight onto lora_weight", () => {
+    const next = applyLoraStack({}, [
+      { path: "a.safetensors", trigger: "", weight: 0.7, bypassed: true },
+      { path: "b.safetensors", trigger: "", weight: 0.3 },
+    ]);
+    const parameters = next.parameters as {
+      lora_weight?: { value?: unknown };
+    };
+    assert.equal(parameters.lora_weight?.value, 0.3);
+  });
+
+  it("loraPathsFromParameter skips bypassed entries", () => {
+    const param = loraParameterFromStack([
+      { path: "a.safetensors", bypassed: true },
+      { path: "b.safetensors" },
+    ]);
+    assert.deepEqual(loraPathsFromParameter(param), ["b.safetensors"]);
   });
 
   it("collapses a stack to the first LoRA when leaving normal mode", () => {

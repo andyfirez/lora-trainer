@@ -43,7 +43,7 @@ def _stack_trigger(entries: list[LoraEntry]) -> str:
 
 
 def _apply_lora_params(params: dict[str, Any], entries: list[LoraEntry]) -> None:
-    file_entries = [entry for entry in entries if lora_entry_path(entry)]
+    file_entries = [entry for entry in entries if lora_entry_path(entry) and not entry.bypassed]
     if len(file_entries) > 1:
         params["lora_path"] = lora_entry_path(file_entries[0])
         params["lora_stack"] = [lora_entry_to_param_value(entry) for entry in file_entries]

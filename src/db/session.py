@@ -15,6 +15,7 @@ def register_all_tables() -> None:
     import src.db.tables.dataset  # noqa: F401
     import src.db.tables.dataset_image_crop  # noqa: F401
     import src.db.tables.lora  # noqa: F401
+    import src.db.tables.prompt_builder  # noqa: F401
     import src.db.tables.sampling  # noqa: F401
 
 

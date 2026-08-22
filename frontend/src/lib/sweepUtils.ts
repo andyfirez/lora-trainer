@@ -4,6 +4,7 @@ export interface LoraEntry {
   path?: string | null;
   trigger?: string;
   weight?: number;
+  bypassed?: boolean;
 }
 
 export interface SweepParameter {
@@ -75,7 +76,7 @@ export function getParameters(config: Record<string, unknown>): SweepParameters 
 }
 
 export function emptyLoraEntry(): LoraEntry {
-  return { path: null, trigger: "", weight: 1 };
+  return { path: null, trigger: "", weight: 1, bypassed: false };
 }
 
 function parseLoraWeight(value: unknown): number {
@@ -92,12 +93,13 @@ export function parseLoraEntry(value: unknown): LoraEntry {
       path: pathText || null,
       trigger: String(record.trigger ?? "").trim(),
       weight: parseLoraWeight(record.weight ?? 1),
+      bypassed: Boolean(record.bypassed),
     };
   }
   if (value == null || (typeof value === "string" && !value.trim())) {
     return emptyLoraEntry();
   }
-  return { path: String(value).trim(), trigger: "", weight: 1 };
+  return { path: String(value).trim(), trigger: "", weight: 1, bypassed: false };
 }
 
 export function parseLoraEntries(value: unknown): LoraEntry[] {
@@ -113,6 +115,7 @@ export function normalizeLoraEntry(entry: LoraEntry): LoraEntry {
     path: path || null,
     trigger: String(entry.trigger ?? "").trim(),
     weight: parseLoraWeight(entry.weight ?? 1),
+    bypassed: Boolean(entry.bypassed),
   };
 }
 
@@ -185,6 +188,7 @@ function effectiveValuesForKey(parameters: SweepParameters, key: SweepParamKey):
 
 export function loraPathsFromParameter(param: SweepParameter | undefined): string[] {
   return loraEntriesFromParameter(param)
+    .filter((entry) => !entry.bypassed)
     .map((entry) => loraEntryPath(entry))
     .filter((path): path is string => path != null);
 }
@@ -279,7 +283,7 @@ export function setParameter(
 
 export function applyLoraStack(config: Record<string, unknown>, entries: LoraEntry[]): Record<string, unknown> {
   const normalized = entries.map(normalizeLoraEntry);
-  const first = normalized.find((entry) => loraEntryPath(entry));
+  const first = normalized.find((entry) => loraEntryPath(entry) && !entry.bypassed);
   const value = normalized.length <= 1 ? (normalized[0] ?? emptyLoraEntry()) : normalized;
   let next = setParameter(config, "lora_path", { mode: "fixed", value });
   if (first) {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { pngInfoApi } from "@/lib/api/pngInfo";
+import { loadPngInspectState, savePngInspectState } from "@/lib/pngInfoState";
 import type { PngInfoResponse } from "@/types";
 
 export interface PngInspectState {
@@ -23,6 +24,16 @@ const initialState: PngInspectState = {
   result: null,
   copied: false,
 };
+
+function createInitialState(): PngInspectState {
+  const persisted = loadPngInspectState();
+  return {
+    ...initialState,
+    fileName: persisted.fileName,
+    result: persisted.result,
+    error: persisted.error,
+  };
+}
 
 type PngInspectAction =
   | { type: "SET_DRAG_ACTIVE"; active: boolean }
@@ -46,7 +57,7 @@ function pngInspectReducer(state: PngInspectState, action: PngInspectAction): Pn
         localPreviewUrl: action.previewUrl,
       };
     case "SUCCESS":
-      return { ...state, loading: false, result: action.result };
+      return { ...state, loading: false, error: null, result: action.result };
     case "ERROR":
       return { ...state, loading: false, error: action.error };
     case "SET_COPIED":
@@ -57,7 +68,7 @@ function pngInspectReducer(state: PngInspectState, action: PngInspectAction): Pn
 }
 
 export function usePngInspect() {
-  const [state, dispatch] = useReducer(pngInspectReducer, initialState);
+  const [state, dispatch] = useReducer(pngInspectReducer, undefined, createInitialState);
   const previewUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -71,6 +82,15 @@ export function usePngInspect() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (state.loading) return;
+    savePngInspectState({
+      fileName: state.fileName,
+      result: state.result,
+      error: state.error,
+    });
+  }, [state.loading, state.fileName, state.result, state.error]);
 
   const inspectFile = useCallback(async (file: File) => {
     if (!file.type.startsWith("image/")) {

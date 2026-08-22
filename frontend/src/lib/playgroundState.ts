@@ -54,6 +54,16 @@ export function savePlaygroundState(state: PlaygroundPersistedState): void {
   globalThis.localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(state));
 }
 
+export function applyPromptsToPlayground(
+  positive: string,
+  negative: string,
+): PlaygroundPersistedState {
+  const state = loadPlaygroundState();
+  let config = setParameter(state.config, "prompt", { mode: "fixed", value: positive });
+  config = setParameter(config, "negative_prompt", { mode: "fixed", value: negative });
+  return { ...state, config };
+}
+
 export function collapseSweepToFixed(config: Record<string, unknown>): Record<string, unknown> {
   let next = { ...config };
   for (const key of SWEEP_PARAM_ORDER) {

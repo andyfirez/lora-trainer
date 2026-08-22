@@ -8,12 +8,19 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.repositories.lora_repo import LoraRepository
+from src.db.repositories.prompt_builder_repo import (
+    PromptSectionRepository,
+    PromptSectionValueRepository,
+    PromptTemplateRepository,
+    PromptTemplateSectionRepository,
+)
 from src.db.repositories.sampling_repo import SamplingRepository
 from src.db.session import session_factory
 from src.db.tables.dataset import Dataset
 from src.services.datasets.service import DatasetsService
 from src.services.files.service import FilesService
 from src.services.loras.service import LoraService
+from src.services.prompt_builder.service import PromptBuilderService
 from src.services.sampling.service import SamplingService
 from src.services.settings.service import SettingsService
 from src.services.tagging.service import TaggingService
@@ -81,12 +88,22 @@ def _get_settings_service() -> SettingsService:
     return SettingsService()
 
 
+def _get_prompt_builder_service(session: SessionDep) -> PromptBuilderService:
+    return PromptBuilderService(
+        PromptSectionRepository(session),
+        PromptSectionValueRepository(session),
+        PromptTemplateRepository(session),
+        PromptTemplateSectionRepository(session),
+    )
+
+
 LoraServiceDep = Annotated[LoraService, Depends(_get_lora_service)]
 SamplingServiceDep = Annotated[SamplingService, Depends(_get_sampling_service)]
 DatasetsServiceDep = Annotated[DatasetsService, Depends(_get_datasets_service)]
 FilesServiceDep = Annotated[FilesService, Depends(_get_files_service)]
 TaggingServiceDep = Annotated[TaggingService, Depends(_get_tagging_service)]
 SettingsServiceDep = Annotated[SettingsService, Depends(_get_settings_service)]
+PromptBuilderServiceDep = Annotated[PromptBuilderService, Depends(_get_prompt_builder_service)]
 
 
 async def get_dataset_by_id(dataset_id: int, service: DatasetsServiceDep) -> Dataset:

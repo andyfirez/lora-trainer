@@ -31,6 +31,7 @@ class LoraEntry(BaseModel):
     path: str | None = None
     trigger: str = ""
     weight: float = 1.0
+    bypassed: bool = False
 
 
 def normalize_lora_path_value(value: object | None) -> str | None:
@@ -61,6 +62,7 @@ def parse_lora_entry(value: Any) -> LoraEntry:
             path=normalize_lora_path_value(path),
             trigger=str(trigger or "").strip(),
             weight=_parse_lora_weight(value.get("weight", 1.0)),
+            bypassed=bool(value.get("bypassed", False)),
         )
     if value is None or (isinstance(value, str) and not value.strip()):
         return LoraEntry(path=None, trigger="")
@@ -90,6 +92,7 @@ def lora_entry_to_param_value(entry: LoraEntry) -> dict[str, Any]:
         "path": lora_entry_path(entry),
         "trigger": entry.trigger,
         "weight": entry.weight,
+        "bypassed": entry.bypassed,
     }
 
 
@@ -119,7 +122,7 @@ def dedupe_lora_entries(entries: list[LoraEntry]) -> list[LoraEntry]:
             continue
         if path not in seen_files:
             seen_files.add(path)
-            result.append(LoraEntry(path=path, trigger=entry.trigger, weight=entry.weight))
+            result.append(LoraEntry(path=path, trigger=entry.trigger, weight=entry.weight, bypassed=entry.bypassed))
     return result
 
 

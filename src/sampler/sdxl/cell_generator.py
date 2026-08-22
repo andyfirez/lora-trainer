@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Callable
 
+from src.sampler.wildcards import expand_prompt_wildcards
 from src.services.png_info.writer import build_a1111_infotext
 from src.trainer.concept_training_metadata import (
     ConceptTrainingMetadata,
@@ -40,6 +41,8 @@ def generate_sampling_cell(
     preview_path: Path | None = None,
 ) -> None:
     config = sampling_config
+    expanded_prompt = expand_prompt_wildcards(prompt)
+    expanded_negative = expand_prompt_wildcards(config.sample_negative_prompt or "")
     width = config.sample_width or config.resolution
     height = config.sample_height or config.resolution
     log.info(
@@ -47,7 +50,7 @@ def generate_sampling_cell(
         width,
         height,
         config.sample_steps,
-        prompt[:120],
+        expanded_prompt[:120],
     )
     reference_add_time_ids = resolve_reference_add_time_ids(
         concept_metadata,
@@ -62,8 +65,8 @@ def generate_sampling_cell(
             on_progress(image_offset + completed, total_steps)
 
     infotext = build_a1111_infotext(
-        prompt=prompt,
-        negative_prompt=config.sample_negative_prompt,
+        prompt=expanded_prompt,
+        negative_prompt=expanded_negative,
         steps=config.sample_steps,
         sampler=config.sample_scheduler,
         cfg_scale=config.sample_cfg_scale,
@@ -85,9 +88,11 @@ def generate_sampling_cell(
         tokenizer_2=stack.tokenizer_2,
         noise_scheduler=stack.noise_scheduler,
         lora_config=lora_config,
-        sampling_config=config,
+        sampling_config=config.model_copy(
+            update={"sample_negative_prompt": expanded_negative},
+        ),
         device=stack.device,
-        sample_prompts=[prompt],
+        sample_prompts=[expanded_prompt],
         output_dir=output_dir,
         output_stem="cell",
         log=log,

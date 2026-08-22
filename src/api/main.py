@@ -14,6 +14,7 @@ from src.api.routers import (
     files,
     loras,
     png_info,
+    prompt_builder,
     samplings,
     storage,
 )
@@ -42,6 +43,7 @@ app.include_router(datasets.router)
 app.include_router(files.router)
 app.include_router(settings_router.router)
 app.include_router(storage.router)
+app.include_router(prompt_builder.router)
 app.include_router(png_info.router)
 
 

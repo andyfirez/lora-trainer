@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { CircleSlash, Plus, X } from "lucide-react";
 import PathInput from "@/components/PathInput";
 import ModeToggle from "@/components/sweep/ModeToggle";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import type { LoraEntry, SweepMode, SweepParameter } from "@/lib/sweepUtils";
+import { cn } from "@/lib/cn";
 import {
   emptyLoraEntry,
   normalizeLoraEntry,
@@ -172,14 +173,29 @@ function LoraStackField({
       <div className="space-y-2">
         {rows.map((entry, i) => (
           <div key={i} className="flex items-start gap-2 min-w-0">
-            <div className="flex-1 min-w-0">
+            <div className={cn("flex-1 min-w-0", entry.bypassed && "opacity-50")}>
               <LoraEntryRow
                 entry={normalizeLoraEntry(entry)}
                 onChange={(next) => updateRow(i, next)}
-                showTrigger
                 showWeight
               />
             </div>
+            {loraEntryPath(entry) ? (
+              <button
+                type="button"
+                onClick={() => updateRow(i, { ...normalizeLoraEntry(entry), bypassed: !entry.bypassed })}
+                className={cn(
+                  "p-1.5 rounded shrink-0 mt-1 transition-colors",
+                  entry.bypassed
+                    ? "bg-warning/15 text-warning hover:bg-warning/25"
+                    : "text-muted hover:bg-white/10 hover:text-text",
+                )}
+                aria-pressed={entry.bypassed}
+                title={entry.bypassed ? "Enable LoRA" : "Bypass LoRA"}
+              >
+                <CircleSlash size={13} />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => removeRow(i)}
@@ -222,6 +238,7 @@ function LoraEntryRow({
       path: normalized,
       trigger: normalized ? entry.trigger ?? "" : "",
       weight: entry.weight ?? 1,
+      bypassed: normalized ? Boolean(entry.bypassed) : false,
     });
   }
 

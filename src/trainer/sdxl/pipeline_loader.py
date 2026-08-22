@@ -35,6 +35,10 @@ def _stack_file_entries(lora_stack: list[dict[str, Any]] | None) -> list[tuple[P
             raw_weight = getattr(item, "weight", 1.0)
         if raw_path is None or not str(raw_path).strip():
             continue
+        if isinstance(item, dict) and item.get("bypassed"):
+            continue
+        if not isinstance(item, dict) and getattr(item, "bypassed", False):
+            continue
         try:
             weight = float(raw_weight)
         except (TypeError, ValueError):

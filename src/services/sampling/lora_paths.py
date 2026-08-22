@@ -62,6 +62,8 @@ def resolve_lora_paths_from_sampling_config(sampling_config: SamplingConfig) -> 
         add(path)
 
     for entry in lora_path_sweep_values(sampling_config.parameters.lora_path):
+        if entry.bypassed:
+            continue
         add(lora_entry_path(entry))
 
     return ordered
@@ -118,7 +120,11 @@ def prepare_sampling_config_lora_paths(
         include_base_model_sample=sampling_config.include_base_model_sample and not keep_stack,
         default_trigger=default_trigger,
     )
-    file_paths = [path for entry in sweep_entries if (path := lora_entry_path(entry))]
+    file_paths = [
+        path
+        for entry in sweep_entries
+        if not entry.bypassed and (path := lora_entry_path(entry))
+    ]
 
     if not sweep_entries:
         return sampling_config, []
