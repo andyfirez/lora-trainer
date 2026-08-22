@@ -19,9 +19,11 @@ from src.services.datasets.preprocess import (
     _fit_size,
     apply_bucket_crop,
     apply_crop,
+    apply_selection_crop,
     assign_bucket,
     bake_image_to_prepared,
     build_crop_meta,
+    build_preview_image,
     compute_preprocess_status,
     get_image_state,
     prepared_dir_path,
@@ -65,6 +67,75 @@ def test_apply_crop_produces_square(tmp_path: Path) -> None:
     image = Image.open(source)
     result = apply_crop(image, 512, 0.5, 0.5)
     assert result.size == (512, 512)
+
+
+def test_apply_selection_crop_upscales_zoomed_region(tmp_path: Path) -> None:
+    source = tmp_path / "wide.png"
+    write_test_image(source, (2000, 1000), color=(255, 0, 0))
+    image = Image.open(source)
+    preview, _ = build_preview_image(image, _square_bucket_config(1024))
+    selection = (256, 128, 512, 512)
+    result = apply_selection_crop(preview, selection, (1024, 1024))
+    assert result.size == (1024, 1024)
+
+
+def test_bake_image_with_selection_uses_zoomed_region(tmp_path: Path) -> None:
+    source = tmp_path / "img.png"
+    write_test_image(source, (1800, 1200))
+    prepared_dir = tmp_path / ".prepared" / "1024"
+    image = Image.open(source)
+    preview, _ = build_preview_image(image, _square_bucket_config(1024))
+    stored = StoredCropRecord(
+        crop_center_x=0.5,
+        crop_center_y=0.5,
+        source_mtime=source.stat().st_mtime,
+        baked_at=None,
+        selection_x=preview.width // 4,
+        selection_y=preview.height // 4,
+        selection_width=preview.width // 2,
+        selection_height=preview.height // 2,
+    )
+    output, assignment = bake_image_to_prepared(
+        source_path=source,
+        prepared_dir=prepared_dir,
+        bucket_config=_square_bucket_config(1024),
+        center_x=0.5,
+        center_y=0.5,
+        stored=stored,
+    )
+    assert assignment is None
+    with Image.open(output) as baked:
+        assert baked.size == (1024, 1024)
+
+
+def test_bake_image_with_selection_bucket_mode(tmp_path: Path) -> None:
+    source = tmp_path / "img.png"
+    write_test_image(source, (1216, 918))
+    prepared_dir = tmp_path / ".prepared" / "1024"
+    image = Image.open(source)
+    preview, assignment = build_preview_image(image, _bucket_config(1024))
+    assert assignment is not None
+    stored = StoredCropRecord(
+        crop_center_x=0.5,
+        crop_center_y=0.5,
+        source_mtime=source.stat().st_mtime,
+        baked_at=None,
+        selection_x=preview.width // 4,
+        selection_y=preview.height // 4,
+        selection_width=preview.width // 2,
+        selection_height=preview.height // 2,
+    )
+    output, baked_assignment = bake_image_to_prepared(
+        source_path=source,
+        prepared_dir=prepared_dir,
+        bucket_config=_bucket_config(1024),
+        center_x=0.5,
+        center_y=0.5,
+        stored=stored,
+    )
+    assert baked_assignment is not None
+    with Image.open(output) as baked:
+        assert baked.size == (baked_assignment.bucket_width, baked_assignment.bucket_height)
 
 
 def test_bake_image_writes_square_prepared_file(tmp_path: Path) -> None:

@@ -23,9 +23,11 @@ from src.services.datasets.preprocess import (
     ImagePreprocessState,
     PreprocessStatus,
     StoredCropRecord,
+    _load_rgb,
     bake_image_to_prepared,
     build_crop_meta,
     build_fitted_preview_bytes,
+    build_preview_image,
     compute_preprocess_status,
     default_crop_center,
     get_image_state,
@@ -93,11 +95,33 @@ class DatasetPreprocessService:
         filename: str,
         crop_center_x: float,
         crop_center_y: float,
+        selection_x: int | None = None,
+        selection_y: int | None = None,
+        selection_width: int | None = None,
+        selection_height: int | None = None,
     ) -> CropMeta:
         bucket_config = self._require_bucket_config(dataset)
         path = self._resolve_image_path(dataset, filename)
         now = datetime.now(timezone.utc)
         mtime = source_mtime(path)
+
+        has_selection = (
+            selection_x is not None
+            and selection_y is not None
+            and selection_width is not None
+            and selection_height is not None
+        )
+        if has_selection:
+            source = _load_rgb(path)
+            preview, _ = build_preview_image(
+                source,
+                bucket_config,
+                center_x=crop_center_x,
+                center_y=crop_center_y,
+            )
+            crop_center_x = (selection_x + selection_width / 2) / preview.width  # type: ignore[operator]
+            crop_center_y = (selection_y + selection_height / 2) / preview.height  # type: ignore[operator]
+
         existing = await self._crop_repo.get_by_dataset_and_filename(dataset.id, filename)  # type: ignore[arg-type]
         if existing is None:
             crop = DatasetImageCrop(
@@ -107,6 +131,10 @@ class DatasetPreprocessService:
                 crop_center_y=crop_center_y,
                 source_mtime=mtime,
                 baked_at=None,
+                selection_x=selection_x if has_selection else None,
+                selection_y=selection_y if has_selection else None,
+                selection_width=selection_width if has_selection else None,
+                selection_height=selection_height if has_selection else None,
             )
             await self._crop_repo.add(crop)
         else:
@@ -120,6 +148,10 @@ class DatasetPreprocessService:
             existing.scale_to_height = None
             existing.crop_x = 0
             existing.crop_y = 0
+            existing.selection_x = selection_x if has_selection else None
+            existing.selection_y = selection_y if has_selection else None
+            existing.selection_width = selection_width if has_selection else None
+            existing.selection_height = selection_height if has_selection else None
             existing.updated_at = now
             await self._crop_repo.save_and_flush(existing)
             crop = existing
@@ -286,6 +318,10 @@ class DatasetPreprocessService:
             scale_to_height=crop.scale_to_height,
             crop_x=crop.crop_x,
             crop_y=crop.crop_y,
+            selection_x=crop.selection_x,
+            selection_y=crop.selection_y,
+            selection_width=crop.selection_width,
+            selection_height=crop.selection_height,
         )
 
     def _require_bucket_config(self, dataset: Dataset) -> BucketPreprocessConfig:

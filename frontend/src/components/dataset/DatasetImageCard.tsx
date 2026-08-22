@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import TagChipEditor from "@/components/dataset/TagChipEditor";
 import Button from "@/components/ui/Button";
-import { datasetImageUrl, datasetPreparedImageUrl } from "@/lib/api/datasets";
+import { datasetCropPreviewUrl, datasetImageUrl, datasetPreparedImageUrl } from "@/lib/api/datasets";
 import type { ImagePreprocessState } from "@/types";
 
 interface Props {
@@ -99,9 +99,12 @@ export default function DatasetImageCard({
       ? "bg-running-muted text-running border-running/30"
       : stateInfo?.className;
   const usePrepared = preprocessState === "ready" && !preparedFailed;
+  const useCropPreview = canCrop && preprocessState !== "ready" && !preparedFailed;
   const thumbnailSrc = usePrepared
     ? datasetPreparedImageUrl(datasetId, filename, 256, cacheKey)
-    : datasetImageUrl(datasetId, filename, { width: 256, cacheKey });
+    : useCropPreview
+      ? datasetCropPreviewUrl(datasetId, filename)
+      : datasetImageUrl(datasetId, filename, { width: 256, cacheKey });
 
   return (
     <div className="bg-surface rounded-xl border border-border overflow-hidden flex flex-col">
@@ -114,7 +117,6 @@ export default function DatasetImageCard({
           title={canCrop ? "Edit crop" : "Set target resolution first"}
         >
           <img
-            key={thumbnailSrc}
             src={thumbnailSrc}
             alt={filename}
             className="w-full h-full object-cover pointer-events-none"

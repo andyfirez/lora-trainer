@@ -1,15 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Cropper, {
-  type Area,
-  type MediaSize,
-  getInitialCropFromCroppedAreaPixels,
-} from "react-easy-crop";
+import Cropper, { type Area, type MediaSize, getInitialCropFromCroppedAreaPixels } from "react-easy-crop";
 import Modal, { ModalError, ModalFooter } from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { labelClassName } from "@/components/ui/Input";
 import { datasetCropPreviewUrl, datasetsApi } from "@/lib/api/datasets";
+import {
+  areaToCenter,
+  centerToArea,
+  computeDisplayCropSize,
+  cropDimensions,
+  normalizeSelectionForSave,
+  previewCanvasSize,
+  selectionToInitialArea,
+} from "@/lib/imageCropUtils";
 import type { CropMeta } from "@/types";
 
 interface Props {
@@ -22,55 +27,6 @@ interface Props {
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
-const PREVIEW_MAX = 160;
-
-function cropDimensions(meta: CropMeta, targetResolution: number): { width: number; height: number } {
-  if (meta.enable_bucket && meta.bucket_width && meta.bucket_height) {
-    return { width: meta.bucket_width, height: meta.bucket_height };
-  }
-  return { width: targetResolution, height: targetResolution };
-}
-
-function centerToArea(meta: CropMeta, cropWidth: number, cropHeight: number): Area {
-  const halfW = cropWidth / 2;
-  const halfH = cropHeight / 2;
-  const x = Math.max(0, Math.min(meta.crop_center_x * meta.fitted_width - halfW, meta.fitted_width - cropWidth));
-  const y = Math.max(0, Math.min(meta.crop_center_y * meta.fitted_height - halfH, meta.fitted_height - cropHeight));
-  return { x, y, width: cropWidth, height: cropHeight };
-}
-
-function areaToCenter(area: Area, meta: CropMeta): { x: number; y: number } {
-  const halfW = area.width / 2;
-  const halfH = area.height / 2;
-  const cx = Math.max(halfW, Math.min(area.x + halfW, meta.fitted_width - halfW));
-  const cy = Math.max(halfH, Math.min(area.y + halfH, meta.fitted_height - halfH));
-  return {
-    x: cx / meta.fitted_width,
-    y: cy / meta.fitted_height,
-  };
-}
-
-function computeDisplayCropSize(
-  mediaSize: MediaSize,
-  cropWidth: number,
-  cropHeight: number
-): { width: number; height: number } {
-  const scale = mediaSize.width / mediaSize.naturalWidth;
-  const width = Math.round(cropWidth * scale);
-  const height = Math.round(cropHeight * scale);
-  return {
-    width: Math.min(width, Math.floor(mediaSize.width)),
-    height: Math.min(height, Math.floor(mediaSize.height)),
-  };
-}
-
-function previewCanvasSize(cropWidth: number, cropHeight: number): { width: number; height: number } {
-  const scale = PREVIEW_MAX / Math.max(cropWidth, cropHeight);
-  return {
-    width: Math.round(cropWidth * scale),
-    height: Math.round(cropHeight * scale),
-  };
-}
 
 interface CropperSession {
   mediaSize: MediaSize;
@@ -78,8 +34,6 @@ interface CropperSession {
   crop: { x: number; y: number };
   zoom: number;
   initialArea: Area;
-  cropWidth: number;
-  cropHeight: number;
 }
 
 function drawCropPreview(
@@ -87,7 +41,7 @@ function drawCropPreview(
   image: HTMLImageElement,
   area: Area,
   outputWidth: number,
-  outputHeight: number
+  outputHeight: number,
 ): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -100,6 +54,7 @@ function drawCropPreview(
 export default function ImageCropModal({ datasetId, filename, targetResolution, onClose, onSaved }: Props) {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const sourceImageRef = useRef<HTMLImageElement | null>(null);
+  const croppedAreaPixelsRef = useRef<Area | null>(null);
   const [meta, setMeta] = useState<CropMeta | null>(null);
   const [session, setSession] = useState<CropperSession | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -114,6 +69,11 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
 
   const cropSize = meta ? cropDimensions(meta, targetResolution) : { width: targetResolution, height: targetResolution };
   const previewSize = previewCanvasSize(cropSize.width, cropSize.height);
+
+  const initialCroppedAreaPixels = useMemo(() => {
+    if (!meta) return undefined;
+    return selectionToInitialArea(meta) ?? centerToArea(meta, cropSize.width, cropSize.height);
+  }, [meta, cropSize.width, cropSize.height]);
 
   const cropDescription = meta
     ? `${filename}${
@@ -153,7 +113,9 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
         if (cancelled) return;
         setMeta(loaded);
         const dims = cropDimensions(loaded, targetResolution);
-        setCroppedAreaPixels(centerToArea(loaded, dims.width, dims.height));
+        const initialArea = selectionToInitialArea(loaded) ?? centerToArea(loaded, dims.width, dims.height);
+        croppedAreaPixelsRef.current = initialArea;
+        setCroppedAreaPixels(initialArea);
       } catch (err: unknown) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load crop");
@@ -174,7 +136,7 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
       if (!canvas || !image || !area) return;
       drawCropPreview(canvas, image, area, previewSize.width, previewSize.height);
     },
-    [previewSize.width, previewSize.height]
+    [previewSize.width, previewSize.height],
   );
 
   useEffect(() => {
@@ -183,51 +145,50 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
 
   const handleMediaLoaded = useCallback(
     (mediaSize: MediaSize) => {
-      if (!meta || session) return;
+      if (!meta || session || !initialCroppedAreaPixels) return;
       const dims = cropDimensions(meta, targetResolution);
       const displayCropSize = computeDisplayCropSize(mediaSize, dims.width, dims.height);
-      const initialArea = centerToArea(meta, dims.width, dims.height);
       const initial = getInitialCropFromCroppedAreaPixels(
-        initialArea,
+        initialCroppedAreaPixels,
         mediaSize,
         0,
         displayCropSize,
         MIN_ZOOM,
-        MAX_ZOOM
+        MAX_ZOOM,
       );
       setSession({
         mediaSize,
         cropSize: displayCropSize,
         crop: initial.crop,
         zoom: initial.zoom,
-        initialArea,
-        cropWidth: dims.width,
-        cropHeight: dims.height,
+        initialArea: initialCroppedAreaPixels,
       });
       setCrop(initial.crop);
       setZoom(initial.zoom);
-      setCroppedAreaPixels(initialArea);
+      croppedAreaPixelsRef.current = initialCroppedAreaPixels;
+      setCroppedAreaPixels(initialCroppedAreaPixels);
     },
-    [meta, session, targetResolution]
+    [initialCroppedAreaPixels, meta, session, targetResolution],
   );
 
   const handleCropAreaChange = useCallback((_cropped: Area, pixels: Area) => {
+    croppedAreaPixelsRef.current = pixels;
     setCroppedAreaPixels(pixels);
   }, []);
 
   const handleSave = async () => {
-    if (!meta || !croppedAreaPixels || !session) return;
+    const pixels = croppedAreaPixelsRef.current;
+    if (!meta || !pixels || !session) return;
     setSaving(true);
     setError(null);
     try {
-      const normalizedArea: Area = {
-        x: croppedAreaPixels.x,
-        y: croppedAreaPixels.y,
-        width: session.cropWidth,
-        height: session.cropHeight,
-      };
-      const center = areaToCenter(normalizedArea, meta);
-      await datasetsApi.saveCrop(datasetId, filename, center.x, center.y);
+      const selection = normalizeSelectionForSave(pixels);
+      const center = areaToCenter(pixels, meta);
+      await datasetsApi.saveCrop(datasetId, filename, {
+        crop_center_x: center.x,
+        crop_center_y: center.y,
+        ...selection,
+      });
       await datasetsApi.bakeImage(datasetId, filename);
       onSaved();
       onClose();
@@ -264,6 +225,7 @@ export default function ImageCropModal({ datasetId, filename, targetResolution, 
               maxZoom={MAX_ZOOM}
               cropSize={session.cropSize}
               objectFit="contain"
+              roundCropAreaPixels
               onCropChange={setCrop}
               onZoomChange={setZoom}
               onCropAreaChange={handleCropAreaChange}

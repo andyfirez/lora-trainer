@@ -24,4 +24,8 @@ class DatasetImageCrop(TimestampMixin, SQLModel, table=True):
     scale_to_height: Optional[int] = Field(default=None, ge=64, le=4096)
     crop_x: int = Field(default=0, ge=0)
     crop_y: int = Field(default=0, ge=0)
+    selection_x: Optional[int] = Field(default=None, ge=0)
+    selection_y: Optional[int] = Field(default=None, ge=0)
+    selection_width: Optional[int] = Field(default=None, ge=1)
+    selection_height: Optional[int] = Field(default=None, ge=1)
     content_hash: Optional[str] = Field(default=None, max_length=64)

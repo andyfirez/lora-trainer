@@ -210,6 +210,10 @@ export interface CropMeta {
   scale_to_height?: number | null;
   crop_x?: number;
   crop_y?: number;
+  selection_x?: number | null;
+  selection_y?: number | null;
+  selection_width?: number | null;
+  selection_height?: number | null;
 }
 
 export interface DatasetItems {

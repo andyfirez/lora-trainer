@@ -122,6 +122,34 @@ async def test_bake_all_creates_default_crop_and_bakes(
 
 
 @pytest.mark.asyncio
+async def test_save_crop_with_selection_persists_rect(storage_roots, datasets_service: DatasetsService) -> None:
+    image_dir = storage_roots["datasets"] / "images"
+    write_test_image(image_dir / "img.png", (1800, 1200))
+    dataset = await _create_dataset_with_resolution(datasets_service, image_dir)
+
+    meta = await datasets_service.save_crop(
+        dataset,
+        "img.png",
+        0.5,
+        0.5,
+        selection_x=100,
+        selection_y=120,
+        selection_width=400,
+        selection_height=400,
+    )
+
+    assert meta.selection_x == 100
+    assert meta.selection_y == 120
+    assert meta.selection_width == 400
+    assert meta.selection_height == 400
+    await datasets_service.bake_image(dataset, "img.png")
+    prepared = prepared_dir_path(image_dir, 1024) / "img.jpg"
+    assert prepared.is_file()
+    with Image.open(prepared) as img:
+        assert img.size == (1024, 1024)
+
+
+@pytest.mark.asyncio
 async def test_bake_all_rebakes_stale_image(storage_roots, datasets_service: DatasetsService) -> None:
     image_dir = storage_roots["datasets"] / "images"
     image_path = image_dir / "img.png"

@@ -82,11 +82,19 @@ export const datasetsApi = {
     ),
   getCropMeta: (id: number, filename: string) =>
     api.get<CropMeta>(`/datasets/${id}/images/${encodeURIComponent(filename)}/crop-meta`),
-  saveCrop: (id: number, filename: string, crop_center_x: number, crop_center_y: number) =>
-    api.put<CropMeta>(`/datasets/${id}/images/${encodeURIComponent(filename)}/crop`, {
-      crop_center_x,
-      crop_center_y,
-    }),
+  saveCrop: (
+    id: number,
+    filename: string,
+    body: {
+      crop_center_x: number;
+      crop_center_y: number;
+      selection_x?: number;
+      selection_y?: number;
+      selection_width?: number;
+      selection_height?: number;
+    },
+  ) =>
+    api.put<CropMeta>(`/datasets/${id}/images/${encodeURIComponent(filename)}/crop`, body),
   bakeImage: (id: number, filename: string) =>
     api.post<CropMeta>(`/datasets/${id}/images/${encodeURIComponent(filename)}/bake`, {}),
   bakeAll: (id: number, filenames?: string[]) =>

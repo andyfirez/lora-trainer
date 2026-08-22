@@ -171,8 +171,21 @@ class DatasetsService:
         filename: str,
         crop_center_x: float,
         crop_center_y: float,
+        selection_x: int | None = None,
+        selection_y: int | None = None,
+        selection_width: int | None = None,
+        selection_height: int | None = None,
     ) -> CropMeta:
-        return await self._preprocess.save_crop(dataset, filename, crop_center_x, crop_center_y)
+        return await self._preprocess.save_crop(
+            dataset,
+            filename,
+            crop_center_x,
+            crop_center_y,
+            selection_x,
+            selection_y,
+            selection_width,
+            selection_height,
+        )
 
     async def bake_image(self, dataset: Dataset, filename: str) -> None:
         await self._preprocess.bake_image(dataset, filename)

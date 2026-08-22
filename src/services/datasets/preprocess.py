@@ -68,6 +68,21 @@ class StoredCropRecord:
     scale_to_height: int | None = None
     crop_x: int = 0
     crop_y: int = 0
+    selection_x: int | None = None
+    selection_y: int | None = None
+    selection_width: int | None = None
+    selection_height: int | None = None
+
+
+def has_complete_selection(record: StoredCropRecord | None) -> bool:
+    if record is None:
+        return False
+    return (
+        record.selection_x is not None
+        and record.selection_y is not None
+        and record.selection_width is not None
+        and record.selection_height is not None
+    )
 
 
 @dataclass(frozen=True)
@@ -97,6 +112,10 @@ class CropMeta:
     scale_to_height: int | None = None
     crop_x: int = 0
     crop_y: int = 0
+    selection_x: int | None = None
+    selection_y: int | None = None
+    selection_width: int | None = None
+    selection_height: int | None = None
 
 
 def prepared_dir_path(image_dir: str | Path, resolution: int) -> Path:
@@ -471,6 +490,10 @@ def build_crop_meta(
             scale_to_height=assignment.scale_to_height,
             crop_x=assignment.crop_x,
             crop_y=assignment.crop_y,
+            selection_x=stored.selection_x if stored else None,
+            selection_y=stored.selection_y if stored else None,
+            selection_width=stored.selection_width if stored else None,
+            selection_height=stored.selection_height if stored else None,
         )
 
     resolution = bucket_config.resolution
@@ -501,7 +524,61 @@ def build_crop_meta(
         source_height=source_height,
         state=state,
         enable_bucket=False,
+        selection_x=stored.selection_x if stored else None,
+        selection_y=stored.selection_y if stored else None,
+        selection_width=stored.selection_width if stored else None,
+        selection_height=stored.selection_height if stored else None,
     )
+
+
+def build_preview_image(
+    image: Image.Image,
+    bucket_config: BucketPreprocessConfig,
+    *,
+    center_x: float = 0.5,
+    center_y: float = 0.5,
+    stored: StoredCropRecord | None = None,
+) -> tuple[Image.Image, BucketAssignment | None]:
+    if bucket_config.enable_bucket:
+        assignment = _resolve_assignment(
+            source_width=image.width,
+            source_height=image.height,
+            bucket_config=bucket_config,
+            center_x=center_x,
+            center_y=center_y,
+            stored=stored,
+        )
+        preview = image.resize(
+            (assignment.scale_to_width, assignment.scale_to_height),
+            Image.Resampling.LANCZOS,
+        )
+        return preview, assignment
+    return _resize_to_fit(image, bucket_config.resolution), None
+
+
+def _clamp_selection(
+    preview_width: int,
+    preview_height: int,
+    selection: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    x, y, w, h = selection
+    x = max(0, min(x, preview_width - 1))
+    y = max(0, min(y, preview_height - 1))
+    w = max(1, min(w, preview_width - x))
+    h = max(1, min(h, preview_height - y))
+    return x, y, w, h
+
+
+def apply_selection_crop(
+    preview: Image.Image,
+    selection: tuple[int, int, int, int],
+    output_size: tuple[int, int],
+) -> Image.Image:
+    x, y, w, h = _clamp_selection(preview.width, preview.height, selection)
+    cropped = preview.crop((x, y, x + w, y + h))
+    if cropped.size == output_size:
+        return cropped
+    return cropped.resize(output_size, Image.Resampling.LANCZOS)
 
 
 def bake_image_to_prepared(
@@ -516,7 +593,28 @@ def bake_image_to_prepared(
     prepared_dir.mkdir(parents=True, exist_ok=True)
     image = _load_rgb(source_path)
     bucket_assignment: BucketAssignment | None = None
-    if bucket_config.enable_bucket:
+
+    if has_complete_selection(stored):
+        assert stored is not None
+        preview, bucket_assignment = build_preview_image(
+            image,
+            bucket_config,
+            center_x=center_x,
+            center_y=center_y,
+            stored=stored,
+        )
+        selection = (
+            stored.selection_x,  # type: ignore[arg-type]
+            stored.selection_y,  # type: ignore[arg-type]
+            stored.selection_width,  # type: ignore[arg-type]
+            stored.selection_height,  # type: ignore[arg-type]
+        )
+        if bucket_config.enable_bucket and bucket_assignment is not None:
+            output_size = (bucket_assignment.bucket_width, bucket_assignment.bucket_height)
+        else:
+            output_size = (bucket_config.resolution, bucket_config.resolution)
+        result = apply_selection_crop(preview, selection, output_size)
+    elif bucket_config.enable_bucket:
         bucket_assignment = _resolve_assignment(
             source_width=image.width,
             source_height=image.height,
@@ -538,22 +636,7 @@ def build_fitted_preview_bytes(source_path: Path, bucket_config: BucketPreproces
     from io import BytesIO
 
     image = _load_rgb(source_path)
-    if bucket_config.enable_bucket:
-        assignment = assign_bucket(
-            image.width,
-            image.height,
-            resolution=bucket_config.resolution,
-            min_bucket_reso=bucket_config.min_bucket_reso,
-            max_bucket_reso=bucket_config.max_bucket_reso,
-            bucket_reso_steps=bucket_config.bucket_reso_steps,
-            bucket_no_upscale=bucket_config.bucket_no_upscale,
-        )
-        preview = image.resize(
-            (assignment.scale_to_width, assignment.scale_to_height),
-            Image.Resampling.LANCZOS,
-        )
-    else:
-        preview = _resize_to_fit(image, bucket_config.resolution)
+    preview, _ = build_preview_image(image, bucket_config)
     buffer = BytesIO()
     preview.save(buffer, format="JPEG", quality=90)
     return buffer.getvalue()

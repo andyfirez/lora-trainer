@@ -3,14 +3,51 @@
 import useSWR from "swr";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { datasetsApi } from "@/lib/api/datasets";
-import type { AutotagStatusResponse, DatasetItem, TaggingMode } from "@/types";
+import type {
+  AutotagStatusResponse,
+  DatasetItem,
+  DatasetItems,
+  ImagePreprocessState,
+  PreprocessStatus,
+  TaggingMode,
+} from "@/types";
 
 export const CAPTION_EXTENSION = ".txt";
+
+type PreprocessStateKey = ImagePreprocessState;
+
+function decrementPreprocessStatus(
+  status: PreprocessStatus,
+  state: PreprocessStateKey | null | undefined,
+): PreprocessStatus {
+  const next: PreprocessStatus = {
+    ...status,
+    total: Math.max(0, status.total - 1),
+  };
+  if (state === "no_crop") next.no_crop = Math.max(0, next.no_crop - 1);
+  else if (state === "stale") next.stale = Math.max(0, next.stale - 1);
+  else if (state === "cropped") next.cropped = Math.max(0, next.cropped - 1);
+  else if (state === "ready") next.ready = Math.max(0, next.ready - 1);
+  next.preprocess_ready = next.total > 0 && next.ready === next.total;
+  return next;
+}
+
+function removeItemsFromCache(
+  current: DatasetItems | undefined,
+  filenames: Set<string>,
+): DatasetItems | undefined {
+  if (!current) return current;
+  return {
+    ...current,
+    items: current.items.filter((item) => !filenames.has(item.filename)),
+  };
+}
 
 export function useDatasetDetail(datasetId: number, options?: { autoBakePaused?: boolean }) {
   const autoBakePaused = options?.autoBakePaused ?? false;
   const [preparing, setPreparing] = useState(false);
   const [bakeError, setBakeError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const bakingInFlight = useRef(false);
   const lastBakeKey = useRef<string | null>(null);
 
@@ -64,6 +101,10 @@ export function useDatasetDetail(datasetId: number, options?: { autoBakePaused?:
       mutateDuplicates(),
     ]);
   }, [mutateItems, mutateStats, mutatePreprocessStatus, mutateDataset, mutateDuplicates]);
+
+  const refreshWithoutDataset = useCallback(async () => {
+    await Promise.all([mutateItems(), mutateStats(), mutatePreprocessStatus(), mutateDuplicates()]);
+  }, [mutateItems, mutateStats, mutatePreprocessStatus, mutateDuplicates]);
 
   const resetBakeTracking = useCallback(() => {
     lastBakeKey.current = null;
@@ -173,16 +214,76 @@ export function useDatasetDetail(datasetId: number, options?: { autoBakePaused?:
   );
 
   const handleRemoveDuplicates = useCallback(async () => {
-    await datasetsApi.removeDuplicates(datasetId, CAPTION_EXTENSION);
-    await refreshAll();
-  }, [datasetId, refreshAll]);
+    const previousItems = itemsData;
+    const previousStatus = preprocessStatus;
+    const previousDuplicates = duplicatesInfo;
+
+    void mutateDuplicates({ duplicate_count: 0 }, { revalidate: false });
+
+    try {
+      await datasetsApi.removeDuplicates(datasetId, CAPTION_EXTENSION);
+      await refreshWithoutDataset();
+    } catch (error) {
+      void mutateItems(previousItems, { revalidate: false });
+      if (previousStatus) {
+        void mutatePreprocessStatus(previousStatus, { revalidate: false });
+      }
+      void mutateDuplicates(previousDuplicates, { revalidate: false });
+      setDeleteError(error instanceof Error ? error.message : "Failed to remove duplicates");
+      throw error;
+    }
+  }, [
+    datasetId,
+    duplicatesInfo,
+    itemsData,
+    mutateDuplicates,
+    mutateItems,
+    mutatePreprocessStatus,
+    preprocessStatus,
+    refreshWithoutDataset,
+  ]);
 
   const handleDeleteImage = useCallback(
     async (filename: string) => {
-      await datasetsApi.deleteImage(datasetId, filename, CAPTION_EXTENSION);
-      await refreshAll();
+      const deletedItem = itemsData?.items.find((item) => item.filename === filename);
+      const previousItems = itemsData;
+      const previousStatus = preprocessStatus;
+
+      setDeleteError(null);
+      void mutateItems((current) => removeItemsFromCache(current, new Set([filename])), {
+        revalidate: false,
+      });
+      if (preprocessStatus) {
+        void mutatePreprocessStatus(
+          decrementPreprocessStatus(
+            preprocessStatus,
+            (deletedItem?.preprocess_state as PreprocessStateKey | undefined) ?? "no_crop",
+          ),
+          { revalidate: false },
+        );
+      }
+
+      try {
+        await datasetsApi.deleteImage(datasetId, filename, CAPTION_EXTENSION);
+        await Promise.all([mutateStats(), mutateDuplicates(), mutatePreprocessStatus()]);
+      } catch (error) {
+        void mutateItems(previousItems, { revalidate: false });
+        if (previousStatus) {
+          void mutatePreprocessStatus(previousStatus, { revalidate: false });
+        }
+        setDeleteError(error instanceof Error ? error.message : "Failed to delete image");
+        throw error;
+      }
     },
-    [datasetId, refreshAll],
+    [
+      datasetId,
+      itemsData,
+      mutateDuplicates,
+      mutateItems,
+      mutatePreprocessStatus,
+      mutateStats,
+      preprocessStatus,
+    ],
   );
 
   const handleDatasetSaved = useCallback(async () => {
@@ -206,6 +307,15 @@ export function useDatasetDetail(datasetId: number, options?: { autoBakePaused?:
     [mutateItems],
   );
 
+  const handleCropSaved = useCallback(
+    async (filename: string) => {
+      resetBakeTracking();
+      updateItemLocally(filename, (item) => ({ ...item, preprocess_state: "ready" }));
+      await mutatePreprocessStatus();
+    },
+    [mutatePreprocessStatus, resetBakeTracking, updateItemLocally],
+  );
+
   return {
     dataset,
     datasetError,
@@ -217,6 +327,7 @@ export function useDatasetDetail(datasetId: number, options?: { autoBakePaused?:
     taggingStatus,
     preparing,
     bakeError,
+    deleteError,
     refreshAll,
     resetBakeTracking,
     handleSaveTags,
@@ -227,6 +338,7 @@ export function useDatasetDetail(datasetId: number, options?: { autoBakePaused?:
     handleRemoveDuplicates,
     handleDeleteImage,
     handleDatasetSaved,
+    handleCropSaved,
     updateItemLocally,
   };
 }

@@ -98,11 +98,19 @@ class CropMetaResponse(BaseModel):
     scale_to_height: Optional[int] = None
     crop_x: int = 0
     crop_y: int = 0
+    selection_x: Optional[int] = None
+    selection_y: Optional[int] = None
+    selection_width: Optional[int] = None
+    selection_height: Optional[int] = None
 
 
 class CropUpdateRequest(BaseModel):
     crop_center_x: float = Field(ge=0.0, le=1.0)
     crop_center_y: float = Field(ge=0.0, le=1.0)
+    selection_x: Optional[int] = Field(default=None, ge=0)
+    selection_y: Optional[int] = Field(default=None, ge=0)
+    selection_width: Optional[int] = Field(default=None, ge=1)
+    selection_height: Optional[int] = Field(default=None, ge=1)
 
 
 class BakeRequest(BaseModel):

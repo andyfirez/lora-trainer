@@ -26,6 +26,7 @@ export default function DatasetDetailPage() {
   const [cropFilename, setCropFilename] = useState<string | null>(null);
   const [filterIncomplete, setFilterIncomplete] = useState(false);
   const [removingDuplicates, setRemovingDuplicates] = useState(false);
+  const [imageCacheKeys, setImageCacheKeys] = useState<Record<string, string>>({});
 
   const {
     dataset,
@@ -38,6 +39,7 @@ export default function DatasetDetailPage() {
     taggingStatus,
     preparing,
     bakeError,
+    deleteError,
     handleSaveTags,
     handleTagsSaved,
     handleBulkAdd,
@@ -46,7 +48,21 @@ export default function DatasetDetailPage() {
     handleRemoveDuplicates,
     handleDeleteImage,
     handleDatasetSaved,
+    handleCropSaved,
   } = useDatasetDetail(datasetId, { autoBakePaused: cropFilename != null });
+
+  const bumpImageCacheKey = (filename: string) => {
+    setImageCacheKeys((prev) => ({
+      ...prev,
+      [filename]: String(Date.now()),
+    }));
+  };
+
+  const onCropSaved = async (filename: string) => {
+    bumpImageCacheKey(filename);
+    await handleCropSaved(filename);
+    setCropFilename(null);
+  };
 
   const filteredItems = useMemo(() => {
     if (!filterIncomplete) return items;
@@ -126,6 +142,7 @@ export default function DatasetDetailPage() {
       </div>
 
       {bakeError && <ErrorAlert>{bakeError}</ErrorAlert>}
+      {deleteError && <ErrorAlert>{deleteError}</ErrorAlert>}
 
       {taggingBannerMessage && (
         <div
@@ -227,7 +244,7 @@ export default function DatasetDetailPage() {
                 preprocessState={item.preprocess_state as ImagePreprocessState | undefined}
                 canCrop={dataset.target_resolution != null}
                 preparing={preparing}
-                cacheKey={dataset.updated_at}
+                cacheKey={imageCacheKeys[item.filename] ?? item.preprocess_state ?? "raw"}
                 onCropClick={() => setCropFilename(item.filename)}
                 onDelete={handleDeleteImage}
                 deleteDisabled={taggingActive || preparing}
@@ -245,7 +262,7 @@ export default function DatasetDetailPage() {
           filename={cropFilename}
           targetResolution={dataset.target_resolution}
           onClose={() => setCropFilename(null)}
-          onSaved={onDatasetSaved}
+          onSaved={() => void onCropSaved(cropFilename)}
         />
       )}
 

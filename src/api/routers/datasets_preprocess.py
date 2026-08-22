@@ -32,6 +32,10 @@ def _crop_meta_response(meta: CropMeta) -> CropMetaResponse:
         scale_to_height=meta.scale_to_height,
         crop_x=meta.crop_x,
         crop_y=meta.crop_y,
+        selection_x=meta.selection_x,
+        selection_y=meta.selection_y,
+        selection_width=meta.selection_width,
+        selection_height=meta.selection_height,
     )
 
 
@@ -76,7 +80,16 @@ async def save_crop(
     body: CropUpdateRequest,
     service: DatasetsServiceDep,
 ) -> CropMetaResponse:
-    meta = await service.save_crop(dataset, filename, body.crop_center_x, body.crop_center_y)
+    meta = await service.save_crop(
+        dataset,
+        filename,
+        body.crop_center_x,
+        body.crop_center_y,
+        body.selection_x,
+        body.selection_y,
+        body.selection_width,
+        body.selection_height,
+    )
     return _crop_meta_response(meta)
 
 
