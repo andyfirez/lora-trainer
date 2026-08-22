@@ -13,6 +13,7 @@ from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 from src.trainer.sdxl.sampling import SamplePromptEmbeds
 
 StepProgressCallback = Callable[[int, int], None]
+LatentStepCallback = Callable[[int, int, Tensor], None]
 
 
 def ksample_sdxl_latent(
@@ -25,6 +26,7 @@ def ksample_sdxl_latent(
     seed: int | None,
     prompt_index: int,
     on_step_end: StepProgressCallback | None = None,
+    on_latent: LatentStepCallback | None = None,
     log: logging.Logger | None = None,
     log_prefix: str = "",
 ) -> Tensor:
@@ -95,6 +97,8 @@ def ksample_sdxl_latent(
             completed = step_index + 1
             if on_step_end is not None:
                 on_step_end(completed, total_steps)
+            if on_latent is not None:
+                on_latent(completed, total_steps, latent)
 
     if log is not None:
         if device.type == "cuda":

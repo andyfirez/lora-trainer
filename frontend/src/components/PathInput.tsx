@@ -52,7 +52,7 @@ export default function PathInput({
   return (
     <div className="w-full min-w-0">
       {label ? (
-        <div className="flex items-center mb-1">
+        <div className="flex items-center">
           <label className={labelClassName}>{label}</label>
           {hint && <FieldHint hint={hint} hintAnchor={hintAnchor} />}
         </div>

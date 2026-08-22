@@ -52,7 +52,7 @@ export default function TrainTargetsSection({ form }: TrainTargetsSectionProps) 
                   <td className="py-2">
                     <div className="flex items-center gap-1">
                       <select
-                        className="rounded-lg bg-bg border border-border px-2 py-1 text-xs text-text focus:outline-none focus:border-accent"
+                        className="rounded-lg bg-input border border-border px-2 py-1 text-xs text-text focus:outline-none focus:border-accent"
                         value={(partConfig.weight_dtype as string) ?? "float16"}
                         onChange={(e) => setNested(part, "weight_dtype", e.target.value)}
                       >
@@ -72,7 +72,7 @@ export default function TrainTargetsSection({ form }: TrainTargetsSectionProps) 
                       <div className="flex items-center gap-1">
                         <input
                           type="number"
-                          className="rounded-lg bg-bg border border-border px-2 py-1 text-xs text-text focus:outline-none focus:border-accent w-28"
+                          className="rounded-lg bg-input border border-border px-2 py-1 text-xs text-text focus:outline-none focus:border-accent w-28"
                           value={(partConfig.learning_rate as number) ?? 0.00005}
                           min={0}
                           step={0.00001}

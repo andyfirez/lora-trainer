@@ -16,6 +16,8 @@ type Config = Record<string, unknown>;
 interface SamplingSourceSectionProps {
   config: Config;
   onChange: (config: Config) => void;
+  allowVary?: boolean;
+  showIncludeBase?: boolean;
 }
 
 function loraPathParam(config: Config) {
@@ -23,7 +25,12 @@ function loraPathParam(config: Config) {
   return parameters.lora_path ?? defaultSweepParameter("string");
 }
 
-export default function SamplingSourceSection({ config, onChange }: SamplingSourceSectionProps) {
+export default function SamplingSourceSection({
+  config,
+  onChange,
+  allowVary = true,
+  showIncludeBase = true,
+}: SamplingSourceSectionProps) {
   function set(key: string, value: unknown) {
     onChange({ ...config, [key]: value });
   }
@@ -38,20 +45,23 @@ export default function SamplingSourceSection({ config, onChange }: SamplingSour
         label={SWEEP_PARAM_LABELS.lora_path}
         param={loraPathParam(config)}
         onChange={updateLoraPathParam}
+        allowVary={allowVary}
       />
-      <label className="flex items-center gap-2 cursor-pointer text-sm">
-        <input
-          type="checkbox"
-          checked={(config.include_base_model_sample as boolean) ?? false}
-          onChange={(e) => set("include_base_model_sample", e.target.checked)}
-        />
-        Include base model (no LoRA) in sweep
-      </label>
+      {showIncludeBase ? (
+        <label className="flex items-center gap-2 cursor-pointer text-sm">
+          <input
+            type="checkbox"
+            checked={(config.include_base_model_sample as boolean) ?? false}
+            onChange={(e) => set("include_base_model_sample", e.target.checked)}
+          />
+          Include base model (no LoRA) in sweep
+        </label>
+      ) : null}
       <PathInput
         label="Output Folder"
         value={(config.output_dir as string) ?? ""}
         onChange={(v) => set("output_dir", v)}
-        placeholder="D:\loras\output"
+        placeholder="output (project folder)"
         pickerTitle="Select Output Folder"
         kind="directory"
       />

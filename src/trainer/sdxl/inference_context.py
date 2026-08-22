@@ -36,6 +36,56 @@ class AdapterMergeState:
     models: MergedInferenceModels
 
 
+def merge_and_unload_peft(model: Any) -> Any:
+    """Bake PEFT adapters into base weights and return the unwrapped module."""
+    if hasattr(model, "merge_and_unload"):
+        return model.merge_and_unload()
+    return model
+
+
+def bake_lora_into_models(
+    *,
+    unet: Any,
+    text_encoder_1: Any,
+    text_encoder_2: Any,
+    state_dict: dict[str, Any],
+    lora_config: SDXLInferenceConfig,
+    weight: float = 1.0,
+) -> tuple[Any, Any, Any]:
+    """Attach one LoRA, apply weights, merge, and unload so another can follow."""
+    from src.trainer.sdxl.lora_io import apply_lora_state_dict
+    from src.trainer.sdxl.lora_peft import attach_sdxl_lora_adapters
+
+    attachment = attach_sdxl_lora_adapters(
+        unet,
+        text_encoder_1,
+        text_encoder_2,
+        lora_config,
+        enable_lora=True,
+    )
+    unet = attachment.unet
+    text_encoder_1 = attachment.text_encoder_1
+    text_encoder_2 = attachment.text_encoder_2
+    apply_lora_state_dict(
+        state_dict,
+        unet=unet,
+        text_encoder_1=text_encoder_1,
+        text_encoder_2=text_encoder_2,
+        config=lora_config,
+    )
+    apply_lora_weight_to_model(unet, weight)
+    if lora_config.text_encoder_1.train:
+        apply_lora_weight_to_model(text_encoder_1, weight)
+    if lora_config.text_encoder_2.train:
+        apply_lora_weight_to_model(text_encoder_2, weight)
+    unet = merge_and_unload_peft(unet)
+    if lora_config.text_encoder_1.train:
+        text_encoder_1 = merge_and_unload_peft(text_encoder_1)
+    if lora_config.text_encoder_2.train:
+        text_encoder_2 = merge_and_unload_peft(text_encoder_2)
+    return unet, text_encoder_1, text_encoder_2
+
+
 def apply_lora_weight_to_model(model: Any, weight: float) -> None:
     """Scale active LoRA adapters before merge."""
     if abs(weight - 1.0) < 1e-6:
@@ -141,6 +191,8 @@ def run_sampling_pass_with_embeds(
     log_step_context: str = "[sample {prompt_index}/{n_prompts}]",
     output_filenames: list[str] | None = None,
     clear_embed_cache_on_te_train: bool = False,
+    png_infotext: str | None = None,
+    preview_path: Path | None = None,
 ) -> None:
     """Precompute embeds, create session, and run one sampling pass."""
     inference_unet.eval()
@@ -212,6 +264,8 @@ def run_sampling_pass_with_embeds(
         on_step=on_step,
         log_step_context=log_step_context,
         output_filenames=output_filenames,
+        png_infotext=png_infotext,
+        preview_path=preview_path,
     )
 
 
@@ -240,6 +294,8 @@ def run_merged_adapter_sampling(
     clear_embed_cache_on_te_train: bool = True,
     lora_weight: float = 1.0,
     output_filenames: list[str] | None = None,
+    png_infotext: str | None = None,
+    preview_path: Path | None = None,
 ) -> None:
     """Merge adapters, precompute embeds, run one sampling pass, then unmerge."""
     log.info("Merging LoRA adapters for inference (weight=%.2f)...", lora_weight)
@@ -276,6 +332,8 @@ def run_merged_adapter_sampling(
             on_step=on_step,
             log_step_context=log_step_context,
             output_filenames=output_filenames,
+            png_infotext=png_infotext,
+            preview_path=preview_path,
             clear_embed_cache_on_te_train=clear_embed_cache_on_te_train
             and (lora_config.text_encoder_1.train or lora_config.text_encoder_2.train),
         )

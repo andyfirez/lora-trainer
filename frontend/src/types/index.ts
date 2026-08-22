@@ -31,7 +31,7 @@ export interface ReproduceLoraRequest {
 
 export interface CreateSamplingRequest {
   name: string;
-  config_yaml: string;
+  config: Record<string, unknown>;
   lora_paths?: string[];
 }
 
@@ -97,7 +97,7 @@ export interface LoraResponse extends RunnableResponse {
 }
 
 export interface SamplingResponse extends RunnableResponse {
-  config_yaml: string;
+  config: Record<string, unknown>;
   lora_paths: string[];
   progress_step: number | null;
   progress_total: number | null;

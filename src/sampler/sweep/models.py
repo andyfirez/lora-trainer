@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,7 @@ class SweepMode(str, Enum):
 class LoraEntry(BaseModel):
     path: str | None = None
     trigger: str = ""
+    weight: float = 1.0
 
 
 def normalize_lora_path_value(value: object | None) -> str | None:
@@ -43,6 +44,13 @@ def parse_trigger_words(trigger: str) -> list[str]:
     return [word.strip() for word in trigger.split(",") if word.strip()]
 
 
+def _parse_lora_weight(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 1.0
+
+
 def parse_lora_entry(value: Any) -> LoraEntry:
     if isinstance(value, LoraEntry):
         return value
@@ -52,6 +60,7 @@ def parse_lora_entry(value: Any) -> LoraEntry:
         return LoraEntry(
             path=normalize_lora_path_value(path),
             trigger=str(trigger or "").strip(),
+            weight=_parse_lora_weight(value.get("weight", 1.0)),
         )
     if value is None or (isinstance(value, str) and not value.strip()):
         return LoraEntry(path=None, trigger="")
@@ -60,12 +69,28 @@ def parse_lora_entry(value: Any) -> LoraEntry:
     return LoraEntry(path=normalize_lora_path_value(value), trigger="")
 
 
+def is_lora_entry_list(value: Any) -> bool:
+    return isinstance(value, list)
+
+
+def parse_lora_entries(value: Any) -> list[LoraEntry]:
+    if is_lora_entry_list(value):
+        if not value:
+            return [LoraEntry()]
+        return [parse_lora_entry(item) for item in value]
+    return [parse_lora_entry(value)]
+
+
 def lora_entry_path(entry: LoraEntry) -> str | None:
     return normalize_lora_path_value(entry.path)
 
 
 def lora_entry_to_param_value(entry: LoraEntry) -> dict[str, Any]:
-    return {"path": lora_entry_path(entry), "trigger": entry.trigger}
+    return {
+        "path": lora_entry_path(entry),
+        "trigger": entry.trigger,
+        "weight": entry.weight,
+    }
 
 
 def format_lora_path_label(path: str | None, trigger: str = "") -> str:
@@ -90,11 +115,11 @@ def dedupe_lora_entries(entries: list[LoraEntry]) -> list[LoraEntry]:
         if path is None:
             if not seen_empty:
                 seen_empty = True
-                result.append(LoraEntry(path=None, trigger=entry.trigger))
+                result.append(LoraEntry(path=None, trigger=entry.trigger, weight=entry.weight))
             continue
         if path not in seen_files:
             seen_files.add(path)
-            result.append(LoraEntry(path=path, trigger=entry.trigger))
+            result.append(LoraEntry(path=path, trigger=entry.trigger, weight=entry.weight))
     return result
 
 
@@ -161,13 +186,24 @@ class SweepParameters(BaseModel):
     def get_param(self, key: str) -> SweepParameter:
         return getattr(self, key)
 
-    def set_resolved_lora_sweep_values(self, entries: list[LoraEntry]) -> SweepParameters:
+    def set_resolved_lora_sweep_values(
+        self,
+        entries: list[LoraEntry],
+        *,
+        mode: SweepMode | None = None,
+    ) -> SweepParameters:
         if not entries:
             return self
         payload = [lora_entry_to_param_value(entry) for entry in entries]
         updated = self.model_copy(deep=True)
-        if len(payload) == 1:
-            updated.lora_path = SweepParameter(mode=SweepMode.FIXED, value=payload[0])
+        resolved_mode = mode
+        if resolved_mode is None:
+            resolved_mode = SweepMode.FIXED if len(payload) == 1 else SweepMode.VARY
+        if resolved_mode == SweepMode.FIXED:
+            updated.lora_path = SweepParameter(
+                mode=SweepMode.FIXED,
+                value=payload[0] if len(payload) == 1 else payload,
+            )
         else:
             updated.lora_path = SweepParameter(mode=SweepMode.VARY, values=payload)
         return updated

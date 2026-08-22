@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import { labelClassName } from "./Input";
 
 export const selectClassName =
-  "w-full rounded-lg bg-bg border border-border px-3 py-2 text-sm text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors";
+  "w-full rounded-lg bg-input border border-border px-3 py-2 text-sm text-text focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors";
 
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;

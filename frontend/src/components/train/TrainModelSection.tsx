@@ -1,6 +1,7 @@
 "use client";
 
 import PathInput from "@/components/PathInput";
+import BaseModelSelect from "@/components/BaseModelSelect";
 import FormSection from "@/components/ui/FormSection";
 import { trainHint } from "@/lib/trainParameterMetadata";
 import { stripLoraVersionSuffix } from "@/lib/trainConfigSanitize";
@@ -17,13 +18,10 @@ export default function TrainModelSection({ form }: TrainModelSectionProps) {
   return (
     <FormSection title="Model">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <PathInput
+        <BaseModelSelect
           label="Base Model"
           value={(config.base_model_name as string) ?? ""}
           onChange={(value) => set("base_model_name", value)}
-          placeholder="sdxl-base"
-          kind="model"
-          pickerTitle="Select base model"
           {...trainHint("base_model_name")}
         />
         <PathInput

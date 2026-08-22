@@ -26,6 +26,7 @@ def run_sweep_sampling(
     log: logging.Logger | None = None,
     concept_metadata: dict[int, ConceptTrainingMetadata] | None = None,
     compose_grids: bool = True,
+    flat_output: bool = True,
 ) -> None:
     """Run a parameter sweep sampling job."""
     engine = SweepEngine(
@@ -38,5 +39,6 @@ def run_sweep_sampling(
         log=log,
         concept_metadata=concept_metadata,
         compose_grids=compose_grids,
+        flat_output=flat_output,
     )
     engine.run()

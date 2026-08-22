@@ -9,6 +9,7 @@ module.exports = {
           DEFAULT: "var(--surface)",
           raised: "var(--surface-raised)",
         },
+        input: "var(--input)",
         border: {
           DEFAULT: "var(--border)",
           subtle: "var(--border-subtle)",

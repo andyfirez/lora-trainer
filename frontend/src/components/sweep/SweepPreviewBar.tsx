@@ -23,7 +23,7 @@ export default function SweepPreviewBar({ config }: SweepPreviewBarProps) {
             ? ` · ${plan.gridCount} grid${plan.gridCount !== 1 ? "s" : ""} (${plan.cols}×${plan.rows})`
             : ""}
         </span>
-        <span className="text-xs text-muted">Save config, then run from config detail or training job</span>
+        <span className="text-xs text-muted">Images write to the output folder</span>
       </div>
     </div>
   );

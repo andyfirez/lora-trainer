@@ -51,7 +51,7 @@ export default function TagFrequencyPanel({ tags, onBulkAdd, onBulkRemove, disab
             }}
             placeholder="Add to all images…"
             disabled={disabled || adding}
-            className="min-w-0 flex-1 rounded-md bg-bg border border-border px-2 py-1 text-xs text-text placeholder-muted focus:outline-none focus:border-accent"
+            className="min-w-0 flex-1 rounded-md bg-input border border-border px-2 py-1 text-xs text-text placeholder-muted focus:outline-none focus:border-accent"
           />
           <button
             type="button"

@@ -74,6 +74,29 @@ def test_empty_prompt_returns_no_combinations() -> None:
     assert build_combinations(params) == []
 
 
+def test_fixed_lora_stack_is_one_combo(tmp_path) -> None:
+    lora_a = tmp_path / "a.safetensors"
+    lora_b = tmp_path / "b.safetensors"
+    params = _params(
+        prompt=SweepParameter(mode=SweepMode.FIXED, value="hello"),
+        lora_path=SweepParameter(
+            mode=SweepMode.FIXED,
+            value=[
+                {"path": str(lora_a), "trigger": "ohwx", "weight": 0.8},
+                {"path": str(lora_b), "trigger": "sks", "weight": 0.4},
+            ],
+        ),
+    )
+    combos = build_combinations(params)
+    assert len(combos) == 1
+    assert combos[0].params["lora_path"] == str(lora_a)
+    assert combos[0].params["lora_trigger"] == "ohwx, sks"
+    stack = combos[0].params["lora_stack"]
+    assert len(stack) == 2
+    assert stack[0]["weight"] == 0.8
+    assert stack[1]["path"] == str(lora_b)
+
+
 def test_combinations_with_varying_base_model() -> None:
     params = SweepParameters(
         base_model_name=SweepParameter(

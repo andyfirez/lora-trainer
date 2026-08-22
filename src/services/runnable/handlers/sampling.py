@@ -15,9 +15,9 @@ class SamplingHandler(RunnableHandler):
     def build_command(self, entity_id: int) -> list[str]:
         return [sys.executable, "-u", "-m", "src.sampler.runner", "--sampling-id", str(entity_id)]
 
-    def validate_config_yaml(self, config_yaml: str) -> None:
-        config = SamplingConfig.from_snapshot_yaml(config_yaml)
-        config.validate_gpu()
+    def validate_config(self, config: dict) -> None:
+        parsed = SamplingConfig.from_snapshot(config)
+        parsed.validate_gpu()
 
     async def _load_entity(self, session: AsyncSession, entity_id: int) -> Sampling | None:
         return await SamplingRepository(session).get_by_id(entity_id)

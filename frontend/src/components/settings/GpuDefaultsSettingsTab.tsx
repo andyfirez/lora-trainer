@@ -15,7 +15,7 @@ const ATTENTION_OPTIONS = [
 
 const labelClassName = "block text-sm font-medium mb-1";
 const selectClassName =
-  "w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40";
+  "w-full rounded-lg border border-border bg-input px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40";
 
 export default function GpuDefaultsSettingsTab() {
   const { data, isLoading, mutate } = useSWR("/settings", () => settingsApi.get());

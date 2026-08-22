@@ -13,3 +13,5 @@ export type { AlertVariant } from "./Alert";
 export { default as BackLink } from "./BackLink";
 export { default as ErrorAlert } from "./ErrorAlert";
 export { default as FormSection } from "./FormSection";
+export { default as Slider } from "./Slider";
+export { default as AutoGrowTextarea } from "./AutoGrowTextarea";

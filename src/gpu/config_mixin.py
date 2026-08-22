@@ -1,4 +1,4 @@
-"""Shared YAML/GPU helpers for TrainConfig and SamplingConfig."""
+"""Shared GPU helpers for TrainConfig and SamplingConfig."""
 
 from __future__ import annotations
 
@@ -13,23 +13,10 @@ if TYPE_CHECKING:
     from src.settings.models import GpuDefaultsSettings
 
 
-class YamlGpuConfigMixin:
-    """Common from_yaml / validate_gpu / snapshot helpers for GPU-aware config models."""
+class GpuConfigMixin:
+    """GPU resolution/validation helpers for config models."""
 
     FORBIDDEN_ENTITY_GPU_KEYS: ClassVar[frozenset[str]] = FORBIDDEN_GLOBAL_GPU_KEYS
-
-    @classmethod
-    def from_yaml(cls, yaml_str: str, *, snapshot: bool = False):
-        data = yaml.safe_load(yaml_str) or {}
-        if not isinstance(data, dict):
-            data = {}
-        if not snapshot:
-            data = strip_global_gpu_keys(data)
-        return cls.model_validate(data)
-
-    @classmethod
-    def from_snapshot_yaml(cls, yaml_str: str):
-        return cls.from_yaml(yaml_str, snapshot=True)
 
     def resolve_gpu(self, defaults: GpuDefaultsSettings) -> ResolvedGpuConfig:
         raise NotImplementedError
@@ -48,6 +35,23 @@ class YamlGpuConfigMixin:
             mixed_precision=resolved.mixed_precision,
             vae_dtype=resolved.vae_dtype,
         )
+
+
+class YamlGpuConfigMixin(GpuConfigMixin):
+    """YAML I/O + GPU helpers for TrainConfig."""
+
+    @classmethod
+    def from_yaml(cls, yaml_str: str, *, snapshot: bool = False):
+        data = yaml.safe_load(yaml_str) or {}
+        if not isinstance(data, dict):
+            data = {}
+        if not snapshot:
+            data = strip_global_gpu_keys(data)
+        return cls.model_validate(data)
+
+    @classmethod
+    def from_snapshot_yaml(cls, yaml_str: str):
+        return cls.from_yaml(yaml_str, snapshot=True)
 
     def _entity_yaml_data(self) -> dict[str, object]:
         raise NotImplementedError

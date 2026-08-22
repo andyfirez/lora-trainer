@@ -114,7 +114,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
             step={64}
             value={resolution}
             onChange={(e) => handleResolutionChange(Number(e.target.value))}
-            className="w-32 rounded-lg bg-bg border border-border px-3 py-1.5 text-sm text-text"
+            className="w-32 rounded-lg bg-input border border-border px-3 py-1.5 text-sm text-text"
           />
         </div>
         {(saving || preparing) && (
@@ -145,7 +145,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
                 step={8}
                 value={bucketSteps}
                 onChange={(e) => handleBucketStepsChange(Number(e.target.value))}
-                className="w-24 rounded-lg bg-bg border border-border px-2 py-1 text-sm text-text"
+                className="w-24 rounded-lg bg-input border border-border px-2 py-1 text-sm text-text"
               />
             </div>
             <label className="flex items-center gap-2 text-text cursor-pointer">

@@ -14,7 +14,7 @@ from src.services.runnable import queue, runtime
 @pytest.mark.asyncio
 async def test_enqueue_assigns_incrementing_positions_across_both_tables(session: AsyncSession) -> None:
     lora = Lora(name="lora-1", config_yaml="base_model_name: x")
-    sampling = Sampling(name="sampling-1", config_yaml="output_dir: /tmp\n")
+    sampling = Sampling(name="sampling-1", config={"output_dir": "/tmp"})
     session.add(lora)
     session.add(sampling)
     await session.flush()
@@ -31,7 +31,7 @@ async def test_enqueue_assigns_incrementing_positions_across_both_tables(session
 @pytest.mark.asyncio
 async def test_next_queued_returns_lowest_position_across_tables(session: AsyncSession) -> None:
     lora = Lora(name="lora-2", config_yaml="base_model_name: x")
-    sampling = Sampling(name="sampling-2", config_yaml="output_dir: /tmp\n")
+    sampling = Sampling(name="sampling-2", config={"output_dir": "/tmp"})
     session.add(lora)
     session.add(sampling)
     await session.flush()
@@ -45,7 +45,7 @@ async def test_next_queued_returns_lowest_position_across_tables(session: AsyncS
 
 @pytest.mark.asyncio
 async def test_running_any_finds_running_entity_of_either_kind(session: AsyncSession) -> None:
-    sampling = Sampling(name="sampling-3", config_yaml="output_dir: /tmp\n", status=RunnableStatus.RUNNING)
+    sampling = Sampling(name="sampling-3", config={"output_dir": "/tmp"}, status=RunnableStatus.RUNNING)
     session.add(sampling)
     await session.flush()
 

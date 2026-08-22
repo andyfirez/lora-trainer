@@ -11,8 +11,10 @@ from src.sampler.sweep.models import (
     SweepMode,
     SweepParameter,
     dedupe_lora_entries,
+    is_lora_entry_list,
     lora_entry_path,
     normalize_lora_path_value,
+    parse_lora_entries,
     parse_lora_entry,
 )
 from src.services.sampling.exceptions import (
@@ -28,7 +30,7 @@ def lora_path_sweep_values(param: SweepParameter) -> list[LoraEntry]:
         entries = [parse_lora_entry(value) for value in param.values]
         return dedupe_lora_entries(entries)
     if param.value is not None:
-        return dedupe_lora_entries([parse_lora_entry(param.value)])
+        return dedupe_lora_entries(parse_lora_entries(param.value))
     return []
 
 
@@ -98,7 +100,9 @@ def prepare_sampling_config_lora_paths(
     default_trigger: str | None = None,
 ) -> tuple[SamplingConfig, list[str]]:
     """Merge entity-level and config-level LoRA paths; preserve triggers and empty entries."""
-    explicit = lora_path_sweep_values(sampling_config.parameters.lora_path)
+    original = sampling_config.parameters.lora_path
+    keep_stack = original.mode == SweepMode.FIXED and is_lora_entry_list(original.value)
+    explicit = lora_path_sweep_values(original)
     extra_file_paths: list[str] = []
     seen: set[str] = set()
     for candidate in (entity_lora_paths or []) + resolve_lora_paths_from_sampling_config(sampling_config):
@@ -111,7 +115,7 @@ def prepare_sampling_config_lora_paths(
     sweep_entries = _merge_lora_sweep_entries(
         explicit,
         extra_file_paths,
-        include_base_model_sample=sampling_config.include_base_model_sample,
+        include_base_model_sample=sampling_config.include_base_model_sample and not keep_stack,
         default_trigger=default_trigger,
     )
     file_paths = [path for entry in sweep_entries if (path := lora_entry_path(entry))]
@@ -119,6 +123,11 @@ def prepare_sampling_config_lora_paths(
     if not sweep_entries:
         return sampling_config, []
 
+    if keep_stack:
+        return (
+            sampling_config.with_resolved_lora_sweep(sweep_entries, file_paths, mode=SweepMode.FIXED),
+            file_paths,
+        )
     return sampling_config.with_resolved_lora_sweep(sweep_entries, file_paths), file_paths
 
 

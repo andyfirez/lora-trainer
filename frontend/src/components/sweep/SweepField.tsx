@@ -2,6 +2,7 @@
 
 import { Plus, X } from "lucide-react";
 import ModeToggle from "@/components/sweep/ModeToggle";
+import AutoGrowTextarea from "@/components/ui/AutoGrowTextarea";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
 import type { SelectOption } from "@/lib/sampleSamplerOptions";
@@ -15,6 +16,7 @@ interface SweepFieldProps {
   placeholder?: string;
   multiline?: boolean;
   selectOptions?: SelectOption[];
+  allowVary?: boolean;
 }
 
 const numberInputClass = `${inputClassName} max-w-[10rem]`;
@@ -28,8 +30,9 @@ export default function SweepField({
   placeholder,
   multiline = false,
   selectOptions = [],
+  allowVary = true,
 }: SweepFieldProps) {
-  const mode = param.mode ?? "fixed";
+  const mode = allowVary ? (param.mode ?? "fixed") : "fixed";
   const defaultSelectValue = selectOptions[0]?.value ?? "";
 
   function renderSelect(value: unknown, onSelect: (v: string) => void, className: string) {
@@ -98,8 +101,8 @@ export default function SweepField({
     }
     if (multiline) {
       return (
-        <textarea
-          className={`${inputClassName} min-h-[72px]`}
+        <AutoGrowTextarea
+          minRows={2}
           value={String(param.value ?? "")}
           placeholder={placeholder}
           onChange={(e) => updateFixed(e.target.value)}
@@ -130,8 +133,9 @@ export default function SweepField({
     }
     if (multiline) {
       return (
-        <textarea
-          className={`${inputClassName} min-h-[56px] flex-1 min-w-0`}
+        <AutoGrowTextarea
+          minRows={2}
+          className="flex-1 min-w-0"
           value={String(value ?? "")}
           placeholder={placeholder}
           onChange={(e) => updateValue(i, e.target.value)}
@@ -182,7 +186,7 @@ export default function SweepField({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <label className={labelClassName}>{label}</label>
-        <ModeToggle mode={mode} onChange={setMode} />
+        {allowVary ? <ModeToggle mode={mode} onChange={setMode} /> : null}
       </div>
       {mode === "fixed" ? renderFixedInput() : renderVaryContent()}
     </div>

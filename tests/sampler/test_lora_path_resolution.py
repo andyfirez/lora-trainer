@@ -131,9 +131,39 @@ def test_prepare_include_base_model_sample_prepends_null(tmp_path: Path) -> None
     assert values[1]["trigger"] == "ohwx, person"
 
 
+def test_prepare_keeps_fixed_lora_stack(tmp_path: Path) -> None:
+    a = tmp_path / "a.safetensors"
+    b = tmp_path / "b.safetensors"
+    a.write_bytes(b"x")
+    b.write_bytes(b"x")
+    config = SamplingConfig(
+        parameters=SweepParameters(
+            lora_path=SweepParameter(
+                mode=SweepMode.FIXED,
+                value=[
+                    {"path": str(a), "trigger": "a", "weight": 0.8},
+                    {"path": str(b), "trigger": "b", "weight": 0.4},
+                ],
+            )
+        )
+    )
+    updated, paths = prepare_sampling_config_lora_paths(config, [str(a), str(b)])
+    assert paths == [str(a), str(b)]
+    assert updated.parameters.lora_path.mode == SweepMode.FIXED
+    values = updated.parameters.lora_path.value
+    assert isinstance(values, list)
+    assert values[0]["weight"] == 0.8
+    assert values[1]["path"] == str(b)
+
+
 def test_parse_lora_entry_legacy_string() -> None:
     entry = parse_lora_entry(r"D:\loras\demo.safetensors")
     assert entry == LoraEntry(path=r"D:\loras\demo.safetensors", trigger="")
+
+
+def test_parse_lora_entry_reads_weight() -> None:
+    entry = parse_lora_entry({"path": r"D:\loras\demo.safetensors", "trigger": "x", "weight": 0.55})
+    assert entry.weight == 0.55
 
 
 def test_apply_lora_trigger_to_prompt() -> None:

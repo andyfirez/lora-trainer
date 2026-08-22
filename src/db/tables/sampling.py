@@ -1,7 +1,8 @@
 """Sampling SQLModel table — source of truth for sampling config + runtime + results."""
 
-from typing import Optional
+from typing import Any, Optional
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 from src.db.tables.runnable_mixin import RunnableMixin
@@ -13,11 +14,14 @@ class Sampling(RunnableMixin, TimestampMixin, SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    # Sampling always has a config — no "discovered" concept here.
-    config_yaml: str = Field(description="Snapshot YAML — source of truth")
-
-    lora_paths_yaml: Optional[str] = Field(
-        default=None, description="YAML-serialized list of resolved LoRA paths"
+    config: dict[str, Any] = Field(
+        sa_column=Column(JSON, nullable=False),
+        description="Snapshot JSON — source of truth",
+    )
+    lora_paths: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=True),
+        description="Resolved LoRA file paths",
     )
     progress_step: Optional[int] = Field(default=None)
     progress_total: Optional[int] = Field(default=None)

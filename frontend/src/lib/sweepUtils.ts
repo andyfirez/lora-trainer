@@ -3,6 +3,7 @@ export type SweepMode = "fixed" | "vary";
 export interface LoraEntry {
   path?: string | null;
   trigger?: string;
+  weight?: number;
 }
 
 export interface SweepParameter {
@@ -74,7 +75,12 @@ export function getParameters(config: Record<string, unknown>): SweepParameters 
 }
 
 export function emptyLoraEntry(): LoraEntry {
-  return { path: null, trigger: "" };
+  return { path: null, trigger: "", weight: 1 };
+}
+
+function parseLoraWeight(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 1;
 }
 
 export function parseLoraEntry(value: unknown): LoraEntry {
@@ -85,12 +91,20 @@ export function parseLoraEntry(value: unknown): LoraEntry {
     return {
       path: pathText || null,
       trigger: String(record.trigger ?? "").trim(),
+      weight: parseLoraWeight(record.weight ?? 1),
     };
   }
   if (value == null || (typeof value === "string" && !value.trim())) {
     return emptyLoraEntry();
   }
-  return { path: String(value).trim(), trigger: "" };
+  return { path: String(value).trim(), trigger: "", weight: 1 };
+}
+
+export function parseLoraEntries(value: unknown): LoraEntry[] {
+  if (Array.isArray(value)) {
+    return value.length ? value.map(parseLoraEntry) : [emptyLoraEntry()];
+  }
+  return [parseLoraEntry(value)];
 }
 
 export function normalizeLoraEntry(entry: LoraEntry): LoraEntry {
@@ -98,6 +112,7 @@ export function normalizeLoraEntry(entry: LoraEntry): LoraEntry {
   return {
     path: path || null,
     trigger: String(entry.trigger ?? "").trim(),
+    weight: parseLoraWeight(entry.weight ?? 1),
   };
 }
 
@@ -127,15 +142,26 @@ function dedupeLoraEntries(entries: LoraEntry[]): LoraEntry[] {
   return result;
 }
 
-function loraEntriesFromParameter(param: SweepParameter | undefined): LoraEntry[] {
+export function loraEntriesFromParameter(param: SweepParameter | undefined): LoraEntry[] {
   if (!param) return [emptyLoraEntry()];
   if (param.mode === "vary" && param.values?.length) {
     return dedupeLoraEntries(param.values.map((v) => parseLoraEntry(v)));
   }
   if (param.value !== undefined && param.value !== null && param.value !== "") {
-    return dedupeLoraEntries([parseLoraEntry(param.value)]);
+    return dedupeLoraEntries(parseLoraEntries(param.value));
   }
   return [emptyLoraEntry()];
+}
+
+export function loraParameterFromStack(entries: LoraEntry[]): SweepParameter {
+  const withPath = entries.map(normalizeLoraEntry).filter((entry) => loraEntryPath(entry));
+  if (withPath.length === 0) {
+    return { mode: "fixed", value: emptyLoraEntry() };
+  }
+  if (withPath.length === 1) {
+    return { mode: "fixed", value: withPath[0] };
+  }
+  return { mode: "fixed", value: withPath };
 }
 
 function effectiveValuesForKey(parameters: SweepParameters, key: SweepParamKey): unknown[] {
@@ -149,7 +175,7 @@ function effectiveValuesForKey(parameters: SweepParameters, key: SweepParamKey):
   }
   if (param.value !== undefined && param.value !== null && param.value !== "") {
     if (key === "lora_path") {
-      return [loraEntryPath(parseLoraEntry(param.value))];
+      return loraEntriesFromParameter(param).map((entry) => loraEntryPath(entry));
     }
     return [param.value];
   }
@@ -249,6 +275,24 @@ export function setParameter(
 ): Record<string, unknown> {
   const parameters = { ...getParameters(config), [key]: param };
   return { ...config, parameters };
+}
+
+export function applyLoraStack(config: Record<string, unknown>, entries: LoraEntry[]): Record<string, unknown> {
+  const normalized = entries.map(normalizeLoraEntry);
+  const first = normalized.find((entry) => loraEntryPath(entry));
+  const value = normalized.length <= 1 ? (normalized[0] ?? emptyLoraEntry()) : normalized;
+  let next = setParameter(config, "lora_path", { mode: "fixed", value });
+  if (first) {
+    next = setParameter(next, "lora_weight", { mode: "fixed", value: first.weight ?? 1 });
+  }
+  return syncLoraPathsToParameters(next);
+}
+
+export function collapseStackToSingleLora(config: Record<string, unknown>): Record<string, unknown> {
+  const param = getParameters(config).lora_path;
+  if (!param || param.mode === "vary") return syncLoraPathsToParameters(config);
+  const first = parseLoraEntries(param.value).find((entry) => loraEntryPath(entry)) ?? emptyLoraEntry();
+  return applyLoraStack(config, [first]);
 }
 
 export function setGridLayout(

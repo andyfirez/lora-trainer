@@ -1,6 +1,6 @@
 """Sampling service exceptions."""
 
-from src.services.common.exceptions import AppError
+from src.services.common.exceptions import AppError, NotFoundError
 
 
 class SamplingLoRAPathNotFoundError(AppError):
@@ -16,3 +16,12 @@ class SamplingPromptsNotConfiguredError(AppError):
 
     def __init__(self) -> None:
         super().__init__("At least one sample prompt must be configured before running sampling")
+
+
+class LivePreviewNotReadyError(NotFoundError):
+    def __init__(self, sampling_id: int) -> None:
+        super().__init__(
+            "Live preview",
+            sampling_id,
+            message=f"Live preview is not ready for sampling id={sampling_id}",
+        )

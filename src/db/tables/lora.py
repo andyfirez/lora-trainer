@@ -13,6 +13,8 @@ class Lora(RunnableMixin, TimestampMixin, SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
 
+    config_yaml: Optional[str] = Field(default=None, description="Snapshot YAML — source of truth")
+
     # Artifacts (empty until the first run resolves them; required once completed)
     relative_path: str = Field(default="", description="Work directory relative to lora_root")
     weights_relpath: str = Field(default="", description="Weights file relative to lora_root")

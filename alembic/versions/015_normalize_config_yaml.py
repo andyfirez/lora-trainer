@@ -218,7 +218,11 @@ def _migrate_sampling_yaml(config_yaml: str) -> str | None:
         if not isinstance(data, dict):
             return None
         migrated_data = _migrate_sampling_yaml_raw(data)
-        normalized = SamplingConfig.model_validate(migrated_data).to_yaml()
+        normalized = yaml.dump(
+            SamplingConfig.model_validate(migrated_data)._entity_data(),
+            allow_unicode=True,
+            sort_keys=False,
+        )
         if yaml.safe_load(normalized) == yaml.safe_load(config_yaml):
             return None
         return normalized

@@ -14,6 +14,7 @@ interface SweepPathFieldProps {
   placeholder?: string;
   pickerTitle?: string;
   kind?: PickKind;
+  allowVary?: boolean;
 }
 
 function normalizePathValue(value: unknown): string | null {
@@ -29,8 +30,9 @@ export default function SweepPathField({
   placeholder = "Path to .safetensors",
   pickerTitle = "Select LoRA",
   kind = "file",
+  allowVary = true,
 }: SweepPathFieldProps) {
-  const mode = param.mode ?? "fixed";
+  const mode = allowVary ? (param.mode ?? "fixed") : "fixed";
 
   function setMode(next: SweepMode) {
     if (next === "vary") {
@@ -69,7 +71,7 @@ export default function SweepPathField({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <label className={labelClassName}>{label}</label>
-        <ModeToggle mode={mode} onChange={setMode} />
+        {allowVary ? <ModeToggle mode={mode} onChange={setMode} /> : null}
       </div>
       {mode === "fixed" ? (
         <PathInput

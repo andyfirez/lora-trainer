@@ -92,6 +92,24 @@ def test_ksample_calls_progress_callback_for_each_step() -> None:
     assert progress == [(1, 3), (2, 3), (3, 3)]
 
 
+def test_ksample_calls_latent_callback_for_each_step() -> None:
+    session = _build_session(sample_steps=2)
+    latents: list[tuple[int, int, tuple[int, ...]]] = []
+
+    ksample_sdxl_latent(
+        session,
+        _build_embeds(),
+        width=64,
+        height=64,
+        guidance_scale=7.5,
+        seed=1,
+        prompt_index=0,
+        on_latent=lambda completed, total, latent: latents.append((completed, total, tuple(latent.shape))),
+    )
+
+    assert latents == [(1, 2, (1, 4, 8, 8)), (2, 2, (1, 4, 8, 8))]
+
+
 def test_ksample_builds_cfg_batch_inputs() -> None:
     session = _build_session(sample_steps=1)
     embeds = _build_embeds()

@@ -1,13 +1,16 @@
 """Business logic for sampling: create, start, cancel, results."""
 
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
-import yaml
 from src.db.repositories.sampling_repo import SamplingRepository
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.db.tables.sampling import Sampling
 from src.sampler.config import SamplingConfig
+from src.sampler.output_paths import (
+    effective_sampling_output_dir,
+    resolve_sampling_config_output_dir,
+)
 from src.services.runnable.artifacts import list_runnable_samples, read_runnable_logs
 from src.services.runnable.exceptions import (
     RunnableNotFoundError,
@@ -16,6 +19,7 @@ from src.services.runnable.exceptions import (
 )
 from src.services.runnable.handlers import get_runnable_handler
 from src.services.runnable.samples import resolve_safe_sample_file
+from src.services.sampling.exceptions import LivePreviewNotReadyError
 from src.services.sampling.lora_paths import (
     prepare_sampling_config_lora_paths,
     resolve_lora_paths_from_sampling_config,
@@ -24,6 +28,7 @@ from src.services.sampling.lora_paths import (
     validate_sample_prompts,
 )
 from src.settings.app_settings import settings
+from src.trainer.sdxl.latent_sampling.preview import LIVE_PREVIEW_FILENAME
 
 
 class SamplingService:
@@ -41,34 +46,33 @@ class SamplingService:
 
     @staticmethod
     def _validate_output_dir(config: SamplingConfig) -> None:
-        raw = config.output_dir.strip()
-        if not raw:
-            raise RunnableValidationError("output_dir is required")
-        if not Path(raw).expanduser().is_absolute():
-            raise RunnableValidationError("output_dir must be an absolute path")
+        try:
+            resolve_sampling_config_output_dir(effective_sampling_output_dir(config))
+        except ValueError as exc:
+            raise RunnableValidationError(str(exc)) from exc
 
     async def create_sampling(
         self,
         *,
         name: str,
-        config_yaml: str,
+        config: dict[str, Any],
         lora_paths: list[str] | None = None,
     ) -> Sampling:
-        config = SamplingConfig.from_yaml(config_yaml)
-        self._validate_output_dir(config)
+        parsed = SamplingConfig.from_dict(config)
+        self._validate_output_dir(parsed)
         entity_lora_paths = (
-            lora_paths if lora_paths is not None else resolve_lora_paths_from_sampling_config(config)
+            lora_paths if lora_paths is not None else resolve_lora_paths_from_sampling_config(parsed)
         )
-        config, paths = prepare_sampling_config_lora_paths(config, entity_lora_paths or None)
+        parsed, paths = prepare_sampling_config_lora_paths(parsed, entity_lora_paths or None)
         if paths:
             validate_lora_paths(paths)
-        validate_sample_prompts(config)
-        snapshot = config.with_resolved_gpu(settings.gpu_defaults)
+        validate_sample_prompts(parsed)
+        snapshot = parsed.with_resolved_gpu(settings.gpu_defaults)
         snapshot.validate_gpu()
         sampling = Sampling(
             name=name,
-            config_yaml=snapshot.to_snapshot_yaml(),
-            lora_paths_yaml=yaml.safe_dump(paths, allow_unicode=True, sort_keys=False),
+            config=snapshot.to_snapshot(),
+            lora_paths=paths,
             status=RunnableStatus.DRAFT,
         )
         sampling = await self._repo.add(sampling)
@@ -81,7 +85,7 @@ class SamplingService:
         sampling = await self.get_sampling(sampling_id)
 
         async def before_enqueue() -> None:
-            get_runnable_handler("sampling").validate_config_yaml(sampling.config_yaml or "")
+            get_runnable_handler("sampling").validate_config(sampling.config or {})
             sampling.progress_step = None
             sampling.progress_total = None
             sampling.progress_status = None
@@ -107,8 +111,7 @@ class SamplingService:
         return read_runnable_logs(sampling, tail)
 
     def get_lora_paths(self, sampling: Sampling) -> list[str]:
-        data = yaml.safe_load(sampling.lora_paths_yaml or "[]") or []
-        return [str(path) for path in data]
+        return [str(path) for path in (sampling.lora_paths or [])]
 
     def list_samples(self, sampling: Sampling) -> list[tuple[Path, str, dict]]:
         return list_runnable_samples(sampling)
@@ -126,4 +129,12 @@ class SamplingService:
         target = resolve_safe_sample_file(Path(sampling.output_path), relative_path)
         if target is None:
             raise RunnableOperationNotSupportedError("Sampling", sampling.id or 0, "sample file")
+        return target
+
+    def live_preview_path(self, sampling: Sampling) -> Path:
+        if not sampling.output_path:
+            raise LivePreviewNotReadyError(sampling.id or 0)
+        target = resolve_safe_sample_file(Path(sampling.output_path), LIVE_PREVIEW_FILENAME)
+        if target is None:
+            raise LivePreviewNotReadyError(sampling.id or 0)
         return target

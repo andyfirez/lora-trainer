@@ -17,3 +17,8 @@ class StorageBrowseResponse(BaseModel):
     root: str
     relative_path: str
     entries: list[StorageEntryResponse]
+
+
+class BaseModelsListResponse(BaseModel):
+    root: str
+    models: list[StorageEntryResponse]

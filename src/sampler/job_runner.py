@@ -5,7 +5,6 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
-import yaml
 from src.db.repositories.sampling_repo import SamplingRepository
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.db.tables.sampling import Sampling
@@ -85,12 +84,10 @@ async def run_sampling(sampling_id: int) -> int:
             sampling_id,
             lambda entity: setattr(entity, "log_path", str(log_path)),
         )
-        config_yaml = sampling.config_yaml
-        lora_paths_yaml = sampling.lora_paths_yaml
         output_path = sampling.output_path
 
-        sampling_config = SamplingConfig.from_snapshot_yaml(config_yaml)
-        stored_lora_paths = [str(p) for p in (yaml.safe_load(lora_paths_yaml or "[]") or [])]
+        sampling_config = SamplingConfig.from_snapshot(sampling.config)
+        stored_lora_paths = [str(p) for p in (sampling.lora_paths or [])]
         sampling_config, effective_lora_paths = prepare_sampling_config_lora_paths(
             sampling_config,
             stored_lora_paths or None,
@@ -131,7 +128,8 @@ async def run_sampling(sampling_id: int) -> int:
             log=run_logger,
             concept_metadata=None,
             sampling_id=sampling_id,
-            compose_grids=True,
+            compose_grids=sampling_config.compose_grids,
+            flat_output=True,
         )
         await _update_progress_status(sampling_id, None)
         run_logger.info("Sampling id=%d completed successfully", sampling_id)

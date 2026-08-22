@@ -7,13 +7,13 @@ from src.trainer.config import VaeDtype, WeightDtype
 
 def test_sampling_config_entity_defaults_are_sparse() -> None:
     config = SamplingConfig()
-    yaml_data = config.to_yaml()
+    data = config._entity_data()
 
-    assert "tf32" not in yaml_data
-    assert "attention_mechanism" not in yaml_data
-    assert "mixed_precision" not in yaml_data
-    assert "vae_dtype" not in yaml_data
-    assert "sample_vae_tiling" not in yaml_data
+    assert "tf32" not in data
+    assert "attention_mechanism" not in data
+    assert "mixed_precision" not in data
+    assert "vae_dtype" not in data
+    assert "sample_vae_tiling" not in data
 
 
 def test_sampling_config_to_inference_config_propagates_resolved_gpu(monkeypatch) -> None:
@@ -48,32 +48,27 @@ def test_sampling_config_inference_config_field_updates_uses_resolved_vae_tiling
     assert updates["sample_vae_tiling"] is False
 
 
-def test_sampling_config_default_yaml_roundtrip() -> None:
-    config = SamplingConfig.from_yaml(SamplingConfig.default_yaml())
+def test_sampling_config_default_roundtrip() -> None:
+    config = SamplingConfig.from_dict(SamplingConfig()._entity_data())
     assert config.parameters.lora_weight.first_value() == 1.0
 
 
 def test_sampling_config_inference_config_field_updates_preserves_prompts() -> None:
-    config = SamplingConfig.from_yaml(
-        """
-output_dir: /tmp
-parameters:
-  prompt:
-    mode: vary
-    values:
-      - a
-      - b
-"""
+    config = SamplingConfig.from_dict(
+        {
+            "output_dir": "/tmp",
+            "parameters": {"prompt": {"mode": "vary", "values": ["a", "b"]}},
+        }
     )
     updates = config.inference_config_field_updates()
     assert updates["sample_prompts"] == ["a", "b"]
 
 
-def test_sampling_config_snapshot_yaml_includes_gpu_fields() -> None:
+def test_sampling_config_snapshot_includes_gpu_fields() -> None:
     defaults = GpuDefaultsSettings(tf32=False, attention_mechanism="xformers")
     config = SamplingConfig(mixed_precision=WeightDtype.BFLOAT_16).with_resolved_gpu(defaults)
-    snapshot = config.to_snapshot_yaml()
+    snapshot = config.to_snapshot()
 
-    assert "tf32: false" in snapshot
-    assert "attention_mechanism: xformers" in snapshot
-    assert "mixed_precision: bfloat16" in snapshot
+    assert snapshot["tf32"] is False
+    assert snapshot["attention_mechanism"] == "xformers"
+    assert snapshot["mixed_precision"] == "bfloat16"

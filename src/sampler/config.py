@@ -1,24 +1,24 @@
-"""Sampling configuration — Pydantic model, serialized as YAML."""
+"""Sampling configuration — Pydantic model, serialized as JSON."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-import yaml
 from pydantic import BaseModel, Field
+from src.gpu import (
+    FORBIDDEN_GLOBAL_GPU_KEYS,
+    GpuConfigMixin,
+    ResolvedGpuConfig,
+    resolve_gpu_config,
+    strip_global_gpu_keys,
+    strip_gpu_overrides_matching_defaults,
+)
 from src.sampler.sweep.models import (
     SWEEP_PARAM_ORDER,
     GridLayout,
     LoraEntry,
     SweepMode,
     SweepParameters,
-)
-from src.gpu import (
-    FORBIDDEN_GLOBAL_GPU_KEYS,
-    ResolvedGpuConfig,
-    YamlGpuConfigMixin,
-    resolve_gpu_config,
-    strip_gpu_overrides_matching_defaults,
 )
 from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
 
@@ -57,7 +57,7 @@ FORBIDDEN_LEGACY_SAMPLING_KEYS: frozenset[str] = LEGACY_FLAT_SAMPLING_KEYS | FOR
 FORBIDDEN_ENTITY_GPU_KEYS: frozenset[str] = FORBIDDEN_GLOBAL_GPU_KEYS
 
 
-class SamplingConfig(YamlGpuConfigMixin, BaseModel):
+class SamplingConfig(GpuConfigMixin, BaseModel):
     """SDXL LoRA sampling configuration with unified parameter sweep support."""
 
     output_dir: str = ""
@@ -67,12 +67,13 @@ class SamplingConfig(YamlGpuConfigMixin, BaseModel):
     mixed_precision: WeightDtype | None = None
     vae_dtype: VaeDtype | None = None
 
-    # Snapshot/runtime GPU fields (explicit in job YAML; omitted from entity YAML)
+    # Snapshot/runtime GPU fields (explicit in job snapshot; omitted from entity data)
     tf32: bool | None = None
     attention_mechanism: str | None = None
 
     lora_paths: list[str] = Field(default_factory=list)
     include_base_model_sample: bool = False
+    compose_grids: bool = False
     grid: GridLayout = Field(default_factory=GridLayout)
     parameters: SweepParameters = Field(default_factory=SweepParameters)
 
@@ -103,7 +104,19 @@ class SamplingConfig(YamlGpuConfigMixin, BaseModel):
             sample_vae_tiling=self.sample_vae_tiling,
         )
 
-    def _entity_yaml_data(self) -> dict[str, object]:
+    @classmethod
+    def from_dict(cls, data: Any, *, snapshot: bool = False) -> "SamplingConfig":
+        if not isinstance(data, dict):
+            data = {}
+        if not snapshot:
+            data = strip_global_gpu_keys(data)
+        return cls.model_validate(data)
+
+    @classmethod
+    def from_snapshot(cls, data: Any) -> "SamplingConfig":
+        return cls.from_dict(data, snapshot=True)
+
+    def _entity_data(self) -> dict[str, object]:
         from src.settings.app_settings import settings
 
         data = self.model_dump(mode="json", exclude_none=True)
@@ -111,9 +124,8 @@ class SamplingConfig(YamlGpuConfigMixin, BaseModel):
             data.pop(field, None)
         return strip_gpu_overrides_matching_defaults(data, settings.gpu_defaults)
 
-    def to_snapshot_yaml(self) -> str:
-        data = self.model_dump(mode="json", exclude_none=True)
-        return yaml.dump(data, allow_unicode=True, sort_keys=False)
+    def to_snapshot(self) -> dict[str, object]:
+        return self.model_dump(mode="json", exclude_none=True)
 
     def effective_prompts(self) -> list[str]:
         return self._prompts_from_parameters(self.parameters)
@@ -194,10 +206,12 @@ class SamplingConfig(YamlGpuConfigMixin, BaseModel):
         self,
         entries: list[LoraEntry],
         file_paths: list[str],
+        *,
+        mode: SweepMode | None = None,
     ) -> "SamplingConfig":
         if not entries:
             return self
-        updated_params = self.parameters.set_resolved_lora_sweep_values(entries)
+        updated_params = self.parameters.set_resolved_lora_sweep_values(entries, mode=mode)
         return self.model_copy(update={"parameters": updated_params, "lora_paths": file_paths})
 
     def with_resolved_lora_paths(self, paths: list[str]) -> "SamplingConfig":

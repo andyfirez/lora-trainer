@@ -1,6 +1,6 @@
 """Pydantic schemas for the /samplings API."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -8,7 +8,7 @@ from src.api.schemas.runnable import RunnableResponse
 
 
 class SamplingResponse(RunnableResponse):
-    config_yaml: str
+    config: dict[str, Any]
     lora_paths: list[str] = Field(default_factory=list)
     progress_step: Optional[int] = None
     progress_total: Optional[int] = None
@@ -17,5 +17,5 @@ class SamplingResponse(RunnableResponse):
 
 class CreateSamplingRequest(BaseModel):
     name: str
-    config_yaml: str
+    config: dict[str, Any]
     lora_paths: Optional[list[str]] = None

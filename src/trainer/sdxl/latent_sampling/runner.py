@@ -7,8 +7,10 @@ from pathlib import Path
 
 import torch
 
+from src.services.png_info.writer import pnginfo_with_parameters
 from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.latent_sampling.ksample import ksample_sdxl_latent
+from src.trainer.sdxl.latent_sampling.preview import preview_from_latent
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 from src.trainer.sdxl.latent_sampling.vae_decode import decode_sdxl_latent
 from src.trainer.sdxl.sampling import SamplePromptEmbeds
@@ -117,6 +119,8 @@ def run_sdxl_sampling_pass(
     on_step: StepProgressCallback | None = None,
     log_step_context: str = "",
     output_filenames: list[str] | None = None,
+    png_infotext: str | None = None,
+    preview_path: Path | None = None,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     n_prompts = len(embeds_list)
@@ -192,6 +196,18 @@ def run_sdxl_sampling_pass(
             if config.sample_offload_unet_before_decode:
                 _ensure_unet_on_device(session, log, prefix=prefix)
 
+            def _on_latent(completed: int, total: int, current_latent: torch.Tensor) -> None:
+                if preview_path is None:
+                    return
+                preview_from_latent(
+                    current_latent,
+                    path=preview_path,
+                    width=width,
+                    height=height,
+                    completed=completed,
+                    total=total,
+                )
+
             ksample_started_at = time.perf_counter()
             latent = ksample_sdxl_latent(
                 session,
@@ -202,6 +218,7 @@ def run_sdxl_sampling_pass(
                 seed=config.seed,
                 prompt_index=prompt_index,
                 on_step_end=_on_step_end,
+                on_latent=_on_latent if preview_path is not None else None,
                 log=log,
                 log_prefix=prefix,
             )
@@ -244,7 +261,8 @@ def run_sdxl_sampling_pass(
             )
             output_path = output_dir / filename
             save_started_at = time.perf_counter()
-            image.save(output_path)
+            pnginfo = pnginfo_with_parameters(png_infotext) if png_infotext else None
+            image.save(output_path, pnginfo=pnginfo)
             save_s = time.perf_counter() - save_started_at
             log.info("%s save PNG: %.3fs -> %s", prefix, save_s, output_path)
 

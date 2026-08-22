@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import Optional
 
+from fastapi.responses import FileResponse
+
 from src.api.dependencies import SamplingServiceDep
 from src.api.routers.runnable import RunnableRouterHooks, build_runnable_router
 from src.api.schemas.samplings import CreateSamplingRequest, SamplingResponse
@@ -31,7 +33,7 @@ router = build_runnable_router(
         list_entities=lambda service: service.list_samplings(),
         get_entity=lambda service, entity_id: service.get_sampling(entity_id),
         create_entity=lambda service, body: service.create_sampling(
-            name=body.name, config_yaml=body.config_yaml, lora_paths=body.lora_paths
+            name=body.name, config=body.config, lora_paths=body.lora_paths
         ),
         enqueue_entity=lambda service, entity_id: service.enqueue_sampling(entity_id),
         cancel_entity=lambda service, entity_id: service.cancel_sampling(entity_id),
@@ -48,3 +50,13 @@ router = build_runnable_router(
 async def get_sweep_manifest(entity_id: int, service: SamplingServiceDep) -> SweepManifest | None:
     sampling = await service.get_sampling(entity_id)
     return service.get_sweep_manifest(sampling)
+
+
+@router.get("/{entity_id}/live-preview", operation_id="get_samplings_live_preview")
+async def get_live_preview(entity_id: int, service: SamplingServiceDep) -> FileResponse:
+    sampling = await service.get_sampling(entity_id)
+    return FileResponse(
+        service.live_preview_path(sampling),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-store"},
+    )

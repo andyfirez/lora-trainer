@@ -33,8 +33,8 @@ async def test_run_invalid_config_writes_log_and_returns_failure_exit_code(
     session, test_session_factory, logs_dir = runner_db
     sampling = Sampling(
         name="bad config",
-        config_yaml="not_a_valid_config: [[[",
-        lora_paths_yaml="[]\n",
+        config={"parameters": "not-a-dict"},
+        lora_paths=[],
         status=RunnableStatus.RUNNING,
     )
     session.add(sampling)

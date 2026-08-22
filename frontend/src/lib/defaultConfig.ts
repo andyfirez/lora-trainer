@@ -72,50 +72,63 @@ logging:
 };
 
 export const SamplingConfig = {
-  DEFAULT_YAML: `# SDXL LoRA Sampling Configuration
-output_dir: ""
-lora_paths: []
-include_base_model_sample: false
-
-grid:
-  x_axis: null
-  y_axis: null
-
-parameters:
-  base_model_name:
-    mode: fixed
-    value: stabilityai/stable-diffusion-xl-base-1.0
-  lora_path:
-    mode: fixed
-    value:
-      path: null
-      trigger: ""
-  lora_weight:
-    mode: fixed
-    value: 1.0
-  prompt:
-    mode: fixed
-    value: ""
-  negative_prompt:
-    mode: fixed
-    value: ""
-  steps:
-    mode: fixed
-    value: 30
-  cfg_scale:
-    mode: fixed
-    value: 7.5
-  width:
-    mode: fixed
-    value: null
-  height:
-    mode: fixed
-    value: null
-  scheduler:
-    mode: fixed
-    value: euler
-  seed:
-    mode: fixed
-    value: null
-`,
+  DEFAULT: {
+    output_dir: "output",
+    lora_paths: [] as string[],
+    include_base_model_sample: false,
+    grid: {
+      x_axis: null,
+      y_axis: null,
+    },
+    parameters: {
+      base_model_name: {
+        mode: "fixed",
+        value: "stabilityai/stable-diffusion-xl-base-1.0",
+      },
+      lora_path: {
+        mode: "fixed",
+        value: {
+          path: null,
+          trigger: "",
+          weight: 1.0,
+        },
+      },
+      lora_weight: {
+        mode: "fixed",
+        value: 1.0,
+      },
+      prompt: {
+        mode: "fixed",
+        value: "",
+      },
+      negative_prompt: {
+        mode: "fixed",
+        value: "",
+      },
+      steps: {
+        mode: "fixed",
+        value: 30,
+      },
+      cfg_scale: {
+        mode: "fixed",
+        value: 7.5,
+      },
+      width: {
+        mode: "fixed",
+        value: 832,
+      },
+      height: {
+        mode: "fixed",
+        value: 1216,
+      },
+      scheduler: {
+        mode: "fixed",
+        value: "euler",
+      },
+      seed: {
+        mode: "fixed",
+        value: null,
+      },
+    },
+  },
 };

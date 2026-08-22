@@ -22,6 +22,10 @@ def _route_paths(router) -> set[str]:
     return {getattr(route, "path", "") for route in router.routes}
 
 
+def test_sampling_live_preview_route_exists() -> None:
+    assert "/samplings/{entity_id}/live-preview" in _route_paths(sampling_router)
+
+
 def test_lora_and_sampling_share_runnable_paths() -> None:
     lora_paths = _route_paths(lora_router)
     sampling_paths = _route_paths(sampling_router)

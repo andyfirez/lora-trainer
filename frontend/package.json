@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:unit": "node scripts/validate-parameter-metadata.mjs && node --experimental-strip-types --test src/lib/progressTiming.test.ts src/lib/storagePaths.test.ts src/lib/loraFolderContents.test.ts src/lib/runnableStatus.test.ts src/lib/lossUtils.test.ts src/lib/api/errors.test.ts"
+    "test:unit": "node scripts/validate-parameter-metadata.mjs && node --experimental-strip-types --test src/lib/progressTiming.test.ts src/lib/storagePaths.test.ts src/lib/loraFolderContents.test.ts src/lib/runnableStatus.test.ts src/lib/lossUtils.test.ts src/lib/api/errors.test.ts src/lib/baseModelOptions.test.ts src/lib/sweepUtils.test.ts src/lib/sweepState.test.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

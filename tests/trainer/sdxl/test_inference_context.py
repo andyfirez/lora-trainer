@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 import torch
 from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.inference_context import (
+    bake_lora_into_models,
     merge_adapters_for_inference,
+    merge_and_unload_peft,
     run_merged_adapter_sampling,
     run_sampling_pass_with_embeds,
     unmerge_adapters,
@@ -121,3 +123,44 @@ def test_run_sampling_pass_moves_text_encoders_to_device_before_embeds(
     assert precompute_kwargs["text_encoder_2"] is te2
     assert call_order.index("te1.to") < call_order.index("precompute")
     assert call_order.index("te2.to") < call_order.index("precompute")
+
+
+@patch("src.trainer.sdxl.inference_context.apply_lora_weight_to_model")
+@patch("src.trainer.sdxl.lora_io.apply_lora_state_dict")
+@patch("src.trainer.sdxl.lora_peft.attach_sdxl_lora_adapters")
+def test_bake_lora_into_models_merges_and_unloads(
+    mock_attach: MagicMock,
+    mock_apply: MagicMock,
+    mock_scale: MagicMock,
+) -> None:
+    baked_unet = MagicMock(name="baked_unet")
+    unet = _make_peft_module()
+    unet.merge_and_unload.return_value = baked_unet
+    te1 = MagicMock(name="te1")
+    te2 = MagicMock(name="te2")
+    attached = MagicMock()
+    attached.unet = unet
+    attached.text_encoder_1 = te1
+    attached.text_encoder_2 = te2
+    mock_attach.return_value = attached
+    config = SDXLInferenceConfig(text_encoder_1={"train": False}, text_encoder_2={"train": False})
+
+    result_unet, result_te1, result_te2 = bake_lora_into_models(
+        unet=MagicMock(),
+        text_encoder_1=te1,
+        text_encoder_2=te2,
+        state_dict={"w": 1},
+        lora_config=config,
+        weight=0.6,
+    )
+
+    mock_attach.assert_called_once()
+    mock_apply.assert_called_once()
+    mock_scale.assert_called_once()
+    assert mock_scale.call_args.args[1] == 0.6
+    unet.merge_and_unload.assert_called_once()
+    assert result_unet is baked_unet
+    assert result_te1 is te1
+    assert result_te2 is te2
+    plain = object()
+    assert merge_and_unload_peft(plain) is plain

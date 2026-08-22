@@ -2,9 +2,9 @@ import { forwardRef, type InputHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
 export const inputClassName =
-  "w-full rounded-lg bg-bg border border-border px-3 py-2 text-sm text-text placeholder-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors";
+  "w-full rounded-lg bg-input border border-border px-3 py-2 text-sm text-text placeholder-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors";
 
-export const labelClassName = "block text-xs font-medium text-muted mb-1";
+export const labelClassName = "block text-xs font-medium text-text-secondary mb-1";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;

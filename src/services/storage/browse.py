@@ -63,6 +63,43 @@ class StorageBrowseService:
                 result.append(entry)
         return result
 
+    def discover_base_models(self) -> list[StorageEntry]:
+        """List selectable base models under base_models_root."""
+        root = StoragePaths.base_models_root()
+        if not root.is_dir():
+            return []
+
+        discovered: list[StorageEntry] = []
+        seen: set[str] = set()
+
+        def walk(relative_path: str) -> None:
+            for entry in self.list_model_entries(relative_path):
+                if entry.relative_path in seen:
+                    continue
+                seen.add(entry.relative_path)
+                if not entry.is_dir:
+                    discovered.append(entry)
+                    continue
+                model_dir = StoragePaths.resolve(StorageKind.BASE_MODELS, entry.relative_path)
+                if self._looks_like_model_dir(model_dir):
+                    discovered.append(entry)
+                else:
+                    walk(entry.relative_path)
+
+        walk("")
+        return discovered
+
+    @staticmethod
+    def _looks_like_model_dir(path: Path) -> bool:
+        if not path.is_dir():
+            return False
+        markers = (
+            path / "model_index.json",
+            path / "unet" / "config.json",
+            path / "scheduler" / "scheduler_config.json",
+        )
+        return any(marker.exists() for marker in markers)
+
     def discover_dataset_folders(self) -> list[str]:
         root = StoragePaths.datasets_root()
         if not root.is_dir():

@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   ImageIcon,
+  LayoutGrid,
   FileImage,
   Settings,
   type LucideIcon,
@@ -21,6 +22,7 @@ import { cn } from "@/lib/cn";
 const NAV = [
   { href: "/loras", label: "LoRAs", icon: Sparkles },
   { href: "/sampling", label: "Sampling", icon: ImageIcon },
+  { href: "/sweep", label: "Sweep", icon: LayoutGrid },
   { href: "/png-info", label: "PNG Info", icon: FileImage },
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/parameters", label: "Parameters", icon: BookOpen },

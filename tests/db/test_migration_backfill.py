@@ -1,10 +1,11 @@
-"""Migration tests: legacy jobs/trained_loras schema upgraded through 016-019.
+"""Migration tests: legacy jobs/trained_loras schema upgraded through 016-020.
 
 Seeds a DB at revision 015 (pre-refactor schema) with representative rows, then
-upgrades to head and asserts the 018 backfill and 019 legacy-table drop behave
-as documented in the plan.
+upgrades to head and asserts the 018 backfill, 019 legacy-table drop, and 020
+YAML-to-JSON sampling conversion.
 """
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -132,7 +133,10 @@ def test_backfill_migrates_legacy_jobs_into_loras_and_samplings(tmp_path) -> Non
     assert set(samplings) == {"sampling-job"}
     sampling = samplings["sampling-job"]
     assert sampling["status"] == "completed"
-    assert sampling["lora_paths_yaml"] == "- completed-lora/completed-lora.safetensors\n"
+    lora_paths = sampling["lora_paths"]
+    if isinstance(lora_paths, str):
+        lora_paths = json.loads(lora_paths)
+    assert lora_paths == ["completed-lora/completed-lora.safetensors"]
 
     conn.close()
 

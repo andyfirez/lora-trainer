@@ -1,6 +1,6 @@
 """GPU discovery, resolution, validation, and runtime setup."""
 
-from src.gpu.config_mixin import YamlGpuConfigMixin
+from src.gpu.config_mixin import GpuConfigMixin, YamlGpuConfigMixin
 from src.gpu.discovery import GpuInfo, get_gpu_info
 from src.gpu.resolution import (
     FORBIDDEN_GLOBAL_GPU_KEYS,
@@ -13,6 +13,7 @@ from src.gpu.validation import validate_gpu_config
 
 __all__ = [
     "FORBIDDEN_GLOBAL_GPU_KEYS",
+    "GpuConfigMixin",
     "GpuInfo",
     "ResolvedGpuConfig",
     "YamlGpuConfigMixin",

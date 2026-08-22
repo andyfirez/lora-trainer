@@ -34,6 +34,28 @@ def test_list_runnable_samples_from_output_dir(tmp_path: Path) -> None:
     assert found[0][0].name == "preview.png"
 
 
+def test_list_runnable_samples_from_flat_date_dir(tmp_path: Path) -> None:
+    (tmp_path / "6_12345.png").write_bytes(b"png")
+    (tmp_path / "6_grid_000.png").write_bytes(b"png")
+    (tmp_path / "7_99999.png").write_bytes(b"png")
+    entity = SimpleNamespace(id=6, log_path=None, output_path=str(tmp_path))
+    found = list_runnable_samples(entity)
+    assert len(found) == 2
+    assert found[0][0].name == "6_12345.png"
+    assert found[1][0].name == "6_grid_000.png"
+    assert found[1][1] == "grid"
+
+
+def test_list_runnable_samples_from_images_dir_before_manifest(tmp_path: Path) -> None:
+    images_dir = tmp_path / "images"
+    images_dir.mkdir()
+    (images_dir / "cell_0000.png").write_bytes(b"png")
+    entity = SimpleNamespace(log_path=None, output_path=str(tmp_path))
+    found = list_runnable_samples(entity)
+    assert len(found) == 1
+    assert found[0][1] == "cell"
+
+
 def test_resolve_safe_sample_file_accepts_nested_file(tmp_path: Path) -> None:
     nested = tmp_path / "samples"
     nested.mkdir()

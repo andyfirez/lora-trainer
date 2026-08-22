@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.api.schemas.storage import StorageBrowseResponse, StorageEntryResponse
+from src.api.schemas.storage import BaseModelsListResponse, StorageBrowseResponse, StorageEntryResponse
 from src.services.storage.browse import StorageBrowseService
 from src.storage.paths import StorageKind, StoragePaths
 
@@ -39,5 +39,22 @@ async def browse_storage(
                 is_lora_work_dir=e.is_lora_work_dir,
             )
             for e in entries
+        ],
+    )
+
+
+@router.get("/base-models", response_model=BaseModelsListResponse)
+async def list_base_models() -> BaseModelsListResponse:
+    browse = StorageBrowseService()
+    models = browse.discover_base_models()
+    return BaseModelsListResponse(
+        root=str(StoragePaths.base_models_root()),
+        models=[
+            StorageEntryResponse(
+                name=m.name,
+                relative_path=m.relative_path,
+                is_dir=m.is_dir,
+            )
+            for m in models
         ],
     )

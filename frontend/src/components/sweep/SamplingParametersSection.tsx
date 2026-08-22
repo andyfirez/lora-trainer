@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ParamGroup from "@/components/sweep/ParamGroup";
 import SweepField from "@/components/sweep/SweepField";
-import SweepPathField from "@/components/sweep/SweepPathField";
 import { InheritedCheckboxField, InheritedSelectField } from "@/components/ui/InheritedGpuField";
 import FormSection, { formSectionClass, formSectionTitleClass } from "@/components/ui/FormSection";
 import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
@@ -17,6 +16,7 @@ import {
 } from "@/lib/sweepUtils";
 import type { GpuDefaultsInfo } from "@/lib/api/settings";
 import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
+import { useBaseModelOptions } from "@/hooks/useBaseModelOptions";
 
 type Config = Record<string, unknown>;
 
@@ -24,6 +24,9 @@ interface SamplingParametersSectionProps {
   config: Config;
   onChange: (config: Config) => void;
   gpuDefaults?: GpuDefaultsInfo;
+  allowVary?: boolean;
+  hidePrompts?: boolean;
+  hideSeed?: boolean;
 }
 
 function param(config: Config, key: SweepParamKey) {
@@ -47,8 +50,20 @@ export default function SamplingParametersSection({
   config,
   onChange,
   gpuDefaults,
+  allowVary = true,
+  hidePrompts = false,
+  hideSeed = false,
 }: SamplingParametersSectionProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const baseModelParam = param(config, "base_model_name");
+  const baseModelCurrentValues = useMemo(() => {
+    if (baseModelParam.mode === "vary") {
+      return (baseModelParam.values ?? []).map((value) => String(value ?? ""));
+    }
+    const fixed = baseModelParam.value;
+    return fixed == null || fixed === "" ? [] : [String(fixed)];
+  }, [baseModelParam]);
+  const { options: baseModelOptions, isLoading: baseModelsLoading } = useBaseModelOptions(baseModelCurrentValues);
 
   function set(key: string, value: unknown) {
     const next: Config = { ...config };
@@ -68,30 +83,38 @@ export default function SamplingParametersSection({
     <>
       <FormSection title="Parameters">
         <div className="space-y-6">
-          <SweepPathField
+          <SweepField
             label={SWEEP_PARAM_LABELS.base_model_name}
-            param={param(config, "base_model_name")}
+            param={baseModelParam}
             onChange={(p) => updateParam("base_model_name", p)}
-            placeholder="stabilityai/stable-diffusion-xl-base-1.0"
-            pickerTitle="Select Base Model"
-            kind="model"
+            type="select"
+            selectOptions={
+              baseModelsLoading
+                ? [{ value: String(baseModelParam.value ?? ""), label: "Loading models…" }]
+                : baseModelOptions
+            }
+            allowVary={allowVary}
           />
 
-          <ParamGroup title="Prompts">
-            <SweepField
-              label={SWEEP_PARAM_LABELS.prompt}
-              param={param(config, "prompt")}
-              onChange={(p) => updateParam("prompt", p)}
-              multiline
-              placeholder="Prompt text"
-            />
-            <SweepField
-              label={SWEEP_PARAM_LABELS.negative_prompt}
-              param={param(config, "negative_prompt")}
-              onChange={(p) => updateParam("negative_prompt", p)}
-              placeholder="low quality, blurry"
-            />
-          </ParamGroup>
+          {hidePrompts ? null : (
+            <ParamGroup title="Prompts">
+              <SweepField
+                label={SWEEP_PARAM_LABELS.prompt}
+                param={param(config, "prompt")}
+                onChange={(p) => updateParam("prompt", p)}
+                multiline
+                placeholder="Prompt text"
+                allowVary={allowVary}
+              />
+              <SweepField
+                label={SWEEP_PARAM_LABELS.negative_prompt}
+                param={param(config, "negative_prompt")}
+                onChange={(p) => updateParam("negative_prompt", p)}
+                placeholder="low quality, blurry"
+                allowVary={allowVary}
+              />
+            </ParamGroup>
+          )}
 
           <ParamGroup title="LoRA">
             <SweepField
@@ -99,6 +122,7 @@ export default function SamplingParametersSection({
               param={param(config, "lora_weight")}
               onChange={(p) => updateParam("lora_weight", p)}
               type="number"
+              allowVary={allowVary}
             />
           </ParamGroup>
 
@@ -108,25 +132,31 @@ export default function SamplingParametersSection({
               param={param(config, "steps")}
               onChange={(p) => updateParam("steps", p)}
               type="number"
+              allowVary={allowVary}
             />
             <SweepField
               label={SWEEP_PARAM_LABELS.cfg_scale}
               param={param(config, "cfg_scale")}
               onChange={(p) => updateParam("cfg_scale", p)}
               type="number"
+              allowVary={allowVary}
             />
-            <SweepField
-              label={SWEEP_PARAM_LABELS.seed}
-              param={param(config, "seed")}
-              onChange={(p) => updateParam("seed", p)}
-              type="number"
-            />
+            {hideSeed ? null : (
+              <SweepField
+                label={SWEEP_PARAM_LABELS.seed}
+                param={param(config, "seed")}
+                onChange={(p) => updateParam("seed", p)}
+                type="number"
+                allowVary={allowVary}
+              />
+            )}
             <SweepField
               label={SWEEP_PARAM_LABELS.scheduler}
               param={param(config, "scheduler")}
               onChange={(p) => updateParam("scheduler", p)}
               type="select"
               selectOptions={diffusersSchedulerOptions}
+              allowVary={allowVary}
             />
           </ParamGroup>
 
@@ -136,12 +166,14 @@ export default function SamplingParametersSection({
               param={param(config, "width")}
               onChange={(p) => updateParam("width", p)}
               type="number"
+              allowVary={allowVary}
             />
             <SweepField
               label={SWEEP_PARAM_LABELS.height}
               param={param(config, "height")}
               onChange={(p) => updateParam("height", p)}
               type="number"
+              allowVary={allowVary}
             />
           </ParamGroup>
         </div>

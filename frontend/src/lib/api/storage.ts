@@ -16,9 +16,16 @@ export interface StorageBrowseResponse {
   entries: StorageEntry[];
 }
 
+export interface BaseModelsListResponse {
+  root: string;
+  models: StorageEntry[];
+}
+
 export const storageApi = {
   browse: (kind: StorageKind, relativePath = "") =>
     api.get<StorageBrowseResponse>(
       `/storage/browse?kind=${encodeURIComponent(kind)}&relative_path=${encodeURIComponent(relativePath)}`
     ),
+
+  listBaseModels: () => api.get<BaseModelsListResponse>("/storage/base-models"),
 };

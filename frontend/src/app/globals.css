@@ -3,14 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0c0d10;
-  --surface: #14161b;
-  --surface-raised: #1a1d24;
-  --border: #2a2e38;
-  --border-subtle: #1f2229;
-  --text: #e8e6e3;
-  --text-secondary: #a8adb8;
-  --muted: #6b7280;
+  --bg: #1c1e22;
+  --surface: #25272c;
+  --surface-raised: #2d3036;
+  --input: #14161a;
+  --border: #3d4148;
+  --border-subtle: #32353b;
+  --text: #f0f1f3;
+  --text-secondary: #c9cdd3;
+  --muted: #b0b4bb;
   --accent: #d97706;
   --accent-hover: #b45309;
   --accent-muted: rgba(217, 119, 6, 0.15);
@@ -43,6 +44,37 @@
 html {
   --font-display: var(--font-inter);
   --font-body: var(--font-inter);
+  color-scheme: dark;
+  scrollbar-color: var(--border) var(--bg);
+  scrollbar-width: thin;
+}
+
+* {
+  scrollbar-color: var(--border) var(--bg);
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid var(--bg);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--bg);
 }
 
 body {
@@ -60,8 +92,8 @@ h1, h2, h3, .font-display {
   position: relative;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(217, 119, 6, 0.06), transparent),
-    radial-gradient(ellipse 60% 40% at 90% 100%, rgba(167, 139, 250, 0.04), transparent),
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(217, 119, 6, 0.03), transparent),
+    radial-gradient(ellipse 60% 40% at 90% 100%, rgba(167, 139, 250, 0.02), transparent),
     var(--bg);
 }
 
@@ -70,7 +102,7 @@ h1, h2, h3, .font-display {
   position: fixed;
   inset: 0;
   z-index: 50;
-  opacity: 0.035;
+  opacity: 0.018;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
@@ -84,6 +116,62 @@ h1, h2, h3, .font-display {
 .status-completed { background: var(--success-muted); color: var(--success); }
 .status-failed    { background: var(--error-muted); color: var(--error); }
 .status-cancelled { @apply bg-surface-raised text-muted; }
+
+/* Range slider fill + thumb (appearance-none removes native progress) */
+input[type="range"].slider-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--sampling) 0%,
+    var(--sampling) var(--slider-progress, 0%),
+    var(--border) var(--slider-progress, 0%),
+    var(--border) 100%
+  );
+  cursor: pointer;
+}
+
+input[type="range"].slider-input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: transparent;
+}
+
+input[type="range"].slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border-radius: 9999px;
+  background: var(--sampling);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+input[type="range"].slider-input::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--border);
+}
+
+input[type="range"].slider-input::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--sampling);
+}
+
+input[type="range"].slider-input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--surface);
+  border-radius: 9999px;
+  background: var(--sampling);
+  box-shadow: 0 0 0 1px var(--border);
+}
 
 /* Dashboard entrance animations */
 @keyframes fade-up {

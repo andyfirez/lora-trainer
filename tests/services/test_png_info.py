@@ -10,6 +10,7 @@ from src.services.png_info.exceptions import InvalidImageError
 from src.services.png_info.parser import parse_generation_parameters
 from src.services.png_info.reader import read_info_from_image
 from src.services.png_info.service import inspect_image_bytes
+from src.services.png_info.writer import build_a1111_infotext, pnginfo_with_parameters
 
 SAMPLE_GENINFO = """a cat in a hat
 Negative prompt: blurry, low quality
@@ -85,3 +86,69 @@ def test_inspect_image_bytes_without_metadata() -> None:
 def test_inspect_image_bytes_rejects_invalid_payload() -> None:
     with pytest.raises(InvalidImageError):
         inspect_image_bytes(b"not-an-image")
+
+
+def test_build_a1111_infotext_roundtrips_through_parser() -> None:
+    infotext = build_a1111_infotext(
+        prompt="a cat in a hat",
+        negative_prompt="blurry, low quality",
+        steps=30,
+        sampler="euler_a",
+        cfg_scale=7.5,
+        seed=42,
+        width=1024,
+        height=1024,
+        model_name="stabilityai/stable-diffusion-xl-base-1.0",
+        lora_path=r"D:\loras\character.safetensors",
+        lora_weight=0.8,
+    )
+    parsed = parse_generation_parameters(infotext)
+    assert parsed["Prompt"] == "a cat in a hat"
+    assert parsed["Negative prompt"] == "blurry, low quality"
+    assert parsed["Steps"] == "30"
+    assert parsed["Sampler"] == "Euler a"
+    assert parsed["Seed"] == "42"
+    assert parsed["Size-1"] == 1024
+    assert parsed["Size-2"] == 1024
+    assert parsed["Lora"] == "character"
+    assert parsed["Lora weight"] == "0.8"
+
+
+def test_build_a1111_infotext_formats_lora_stack() -> None:
+    infotext = build_a1111_infotext(
+        prompt="portrait",
+        steps=20,
+        sampler="euler",
+        cfg_scale=7,
+        seed=1,
+        width=1024,
+        height=1024,
+        model_name="sdxl",
+        loras=[
+            (r"D:\loras\character.safetensors", 0.8),
+            (r"D:\loras\style.safetensors", 0.4),
+        ],
+    )
+    parsed = parse_generation_parameters(infotext)
+    assert parsed["Lora"] == "character (0.8), style (0.4)"
+
+
+def test_pnginfo_with_parameters_embeds_chunk() -> None:
+    infotext = build_a1111_infotext(
+        prompt="portrait",
+        steps=20,
+        sampler="euler",
+        cfg_scale=7,
+        seed=None,
+        width=512,
+        height=768,
+        model_name="sdxl",
+    )
+    image = Image.new("RGB", (16, 16), color="white")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", pnginfo=pnginfo_with_parameters(infotext))
+    result = inspect_image_bytes(buffer.getvalue())
+    assert result.parameters["Prompt"] == "portrait"
+    assert result.parameters["Sampler"] == "Euler"
+    assert result.parameters["Seed"] == "-1"
+

@@ -4,23 +4,43 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 import torch
 
+from src.gpu.runtime import setup_cuda_runtime
 from src.storage.config_paths import resolve_config_base_model
 from src.trainer.attention import configure_unet_attention
 from src.trainer.inference_config import SDXLInferenceConfig
-from src.gpu.runtime import setup_cuda_runtime
 from src.trainer.sdxl.dtypes import weight_dtype_to_torch
+from src.trainer.sdxl.inference_context import bake_lora_into_models
 from src.trainer.sdxl.lora_export import apply_lora_metadata_to_config
 from src.trainer.sdxl.lora_io import apply_lora_state_dict, load_lora_file
 from src.trainer.sdxl.lora_peft import attach_sdxl_lora_adapters
 from src.trainer.sdxl.model_loader import load_sdxl_components, resolve_vae_dtype
 
 logger = logging.getLogger(__name__)
+
+
+def _stack_file_entries(lora_stack: list[dict[str, Any]] | None) -> list[tuple[Path, float]]:
+    entries: list[tuple[Path, float]] = []
+    for item in lora_stack or []:
+        if isinstance(item, dict):
+            raw_path = item.get("path")
+            raw_weight = item.get("weight", 1.0)
+        else:
+            raw_path = getattr(item, "path", None)
+            raw_weight = getattr(item, "weight", 1.0)
+        if raw_path is None or not str(raw_path).strip():
+            continue
+        try:
+            weight = float(raw_weight)
+        except (TypeError, ValueError):
+            weight = 1.0
+        entries.append((Path(str(raw_path)), weight))
+    return entries
 
 
 @dataclass
@@ -53,7 +73,11 @@ class SDXLPipelineLoader:
         base_model: str,
         lora_path: Path | None,
         combo_params: dict[str, Any],
+        lora_stack: list[dict[str, Any]] | None = None,
     ) -> tuple[SamplingStack, SDXLInferenceConfig, bool]:
+        file_entries = _stack_file_entries(lora_stack)
+        if len(file_entries) > 1:
+            return self._load_stacked_loras(base_model=base_model, entries=file_entries)
         config = self._base_config.model_copy(update={"base_model_name": base_model})
         if lora_path is not None:
             self._log.info("Reading LoRA file: %s", lora_path)
@@ -84,6 +108,38 @@ class SDXLPipelineLoader:
         self._log.info("Loading base model pipeline (no LoRA)")
         stack = self.load_stack(config, enable_lora=False)
         return stack, config, False
+
+    def _load_stacked_loras(
+        self,
+        *,
+        base_model: str,
+        entries: list[tuple[Path, float]],
+    ) -> tuple[SamplingStack, SDXLInferenceConfig, bool]:
+        config = self._base_config.model_copy(update={"base_model_name": base_model})
+        self._log.info("Loading base model pipeline for %d stacked LoRAs", len(entries))
+        stack = self.load_stack(config, enable_lora=False)
+        last_config = config
+        for path, weight in entries:
+            self._log.info("Baking stacked LoRA %s (weight=%.2f)", path, weight)
+            load_started = time.perf_counter()
+            state_dict = load_lora_file(path)
+            self._log.info("LoRA file read in %.1fs", time.perf_counter() - load_started)
+            last_config = apply_lora_metadata_to_config(config, state_dict)
+            unet, text_encoder_1, text_encoder_2 = bake_lora_into_models(
+                unet=stack.unet,
+                text_encoder_1=stack.text_encoder_1,
+                text_encoder_2=stack.text_encoder_2,
+                state_dict=state_dict,
+                lora_config=last_config,
+                weight=weight,
+            )
+            stack = replace(
+                stack,
+                unet=unet,
+                text_encoder_1=text_encoder_1,
+                text_encoder_2=text_encoder_2,
+            )
+        return stack, last_config, False
 
     def load_stack(self, config: SDXLInferenceConfig, *, enable_lora: bool) -> SamplingStack:
         runtime = setup_cuda_runtime(config)

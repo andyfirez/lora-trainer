@@ -7,5 +7,5 @@ export function canSaveCheckpointOnStop(runnable: RunnableResponse): boolean {
 }
 
 export function needsStopDialog(runnable: RunnableResponse): boolean {
-  return runnable.status === "running";
+  return runnable.status === "running" && "last_checkpoint_path" in runnable;
 }

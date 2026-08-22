@@ -6,12 +6,12 @@ export const modelParameterMetadata: ParameterMeta[] = [
     key: "base_model_name",
     label: "Base Model",
     section: "Model",
-    shortHint: "HuggingFace model ID or local path to the SDXL checkpoint used as the training base.",
+    shortHint: "Local SDXL checkpoint or diffusers folder from the base models directory in Settings.",
     description:
-      "Specifies the SDXL base model to fine-tune. Can be a HuggingFace repo ID (e.g. stabilityai/stable-diffusion-xl-base-1.0) or a local folder containing model weights. The model architecture must match SDXL; using a different base changes style, composition, and what the LoRA can learn.",
-    defaultValue: "stabilityai/stable-diffusion-xl-base-1.0",
+      "Specifies the SDXL base model to fine-tune. Choose a folder or checkpoint file from the base models root configured in Settings. The model architecture must match SDXL.",
+    defaultValue: "",
     showInlineHint: false,
-    recommendedValue: "stabilityai/stable-diffusion-xl-base-1.0",
+    recommendedValue: "",
   },
   {
     key: "output_dir",
