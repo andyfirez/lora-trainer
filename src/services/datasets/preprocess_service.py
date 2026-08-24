@@ -1,7 +1,10 @@
 """Dataset crop, bake, and preprocess status."""
 
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 from src.db.repositories.dataset_image_crop_repo import DatasetImageCropRepository
 from src.db.repositories.dataset_repo import DatasetRepository
@@ -84,10 +87,19 @@ class DatasetPreprocessService:
             stored=stored,
         )
 
-    def get_crop_preview_bytes(self, dataset: Dataset, filename: str) -> bytes:
+    def get_crop_preview_bytes(
+        self,
+        dataset: Dataset,
+        filename: str,
+        *,
+        max_width: int | None = None,
+    ) -> bytes:
         path = self._resolve_image_path(dataset, filename)
         bucket_config = self._require_bucket_config(dataset)
-        return build_fitted_preview_bytes(path, bucket_config)
+        data = build_fitted_preview_bytes(path, bucket_config)
+        if max_width is None:
+            return data
+        return _resize_jpeg_bytes(data, max_width=max_width)
 
     async def save_crop(
         self,
@@ -374,3 +386,15 @@ class DatasetPreprocessService:
             return
         invalidate_latent_cache_for_prepared(prepared_path)
         prepared_path.unlink(missing_ok=True)
+
+
+def _resize_jpeg_bytes(data: bytes, *, max_width: int) -> bytes:
+    with Image.open(BytesIO(data)) as img:
+        img = img.convert("RGB")
+        if img.width > max_width:
+            ratio = max_width / img.width
+            new_size = (max_width, max(int(img.height * ratio), 1))
+            img = img.resize(new_size, Image.Resampling.LANCZOS)
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG", quality=85)
+        return buffer.getvalue()

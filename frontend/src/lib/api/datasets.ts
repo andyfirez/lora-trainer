@@ -40,8 +40,8 @@ export function datasetPreparedImageUrl(
   return datasetImageUrl(datasetId, filename, { prepared: true, width, cacheKey });
 }
 
-export function datasetCropPreviewUrl(datasetId: number, filename: string): string {
-  return `${BASE_URL}/datasets/${datasetId}/images/${encodeURIComponent(filename)}/crop-preview`;
+export function datasetCropPreviewUrl(datasetId: number, filename: string, width = 256): string {
+  return `${BASE_URL}/datasets/${datasetId}/images/${encodeURIComponent(filename)}/crop-preview?w=${width}`;
 }
 
 export const datasetsApi = {

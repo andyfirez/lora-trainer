@@ -79,6 +79,20 @@ def test_apply_selection_crop_upscales_zoomed_region(tmp_path: Path) -> None:
     assert result.size == (1024, 1024)
 
 
+def test_apply_selection_crop_letterboxes_mismatched_aspect(tmp_path: Path) -> None:
+    source = tmp_path / "wide.png"
+    write_test_image(source, (2000, 1000))
+    image = Image.open(source)
+    preview, _ = build_preview_image(image, _square_bucket_config(1024))
+    selection = (128, 256, 768, 256)
+    result = apply_selection_crop(preview, selection, (1024, 1024))
+    assert result.size == (1024, 1024)
+    # Letterboxed output should preserve horizontal band, not stretch to fill height.
+    center_pixel = result.getpixel((512, 512))
+    top_pixel = result.getpixel((512, 0))
+    assert center_pixel != top_pixel
+
+
 def test_bake_image_with_selection_uses_zoomed_region(tmp_path: Path) -> None:
     source = tmp_path / "img.png"
     write_test_image(source, (1800, 1200))

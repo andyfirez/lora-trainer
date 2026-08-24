@@ -17,6 +17,37 @@ import type { ImagePreprocessState } from "@/types";
 
 const PAGE_SIZE = 24;
 
+function DatasetPagination({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (nextPage: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-center gap-2">
+      <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+        Prev
+      </Button>
+      <span className="text-sm text-muted">
+        {page} / {totalPages}
+      </span>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={page >= totalPages}
+        onClick={() => onPageChange(page + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  );
+}
+
 export default function DatasetDetailPage() {
   const params = useParams();
   const datasetId = Number(params.id);
@@ -208,22 +239,7 @@ export default function DatasetDetailPage() {
             Show only incomplete
           </label>
           {totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
-                Prev
-              </Button>
-              <span>
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                Next
-              </Button>
-            </div>
+            <DatasetPagination page={page} totalPages={totalPages} onPageChange={setPage} />
           )}
         </div>
 
@@ -252,6 +268,12 @@ export default function DatasetDetailPage() {
                 onTagsSaved={handleTagsSaved}
               />
             ))}
+          </div>
+        )}
+
+        {!itemsLoading && filteredItems.length > 0 && (
+          <div className="pt-4 border-t border-border">
+            <DatasetPagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         )}
       </div>

@@ -128,7 +128,7 @@ function DatasetsPageContent() {
   );
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Delete dataset "${name}"?`)) return;
+    if (!confirm(`Delete dataset "${name}"? All files in the dataset folder will be permanently removed.`)) return;
     await datasetsApi.delete(id);
     mutate();
   };

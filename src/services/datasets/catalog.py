@@ -13,6 +13,7 @@ from src.db.repositories.dataset_image_crop_repo import DatasetImageCropReposito
 from src.db.repositories.dataset_repo import DatasetRepository
 from src.db.tables.dataset import Dataset
 from src.services.datasets.captions import list_image_filenames
+from src.services.datasets.delete_dataset import remove_dataset_directory
 from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetNameConflictError,
@@ -236,5 +237,9 @@ class DatasetCatalogService:
             await self._preprocess.invalidate_prepared_outputs(dataset)
 
     async def delete_dataset(self, dataset_id: int) -> None:
-        dataset = await self.get_dataset(dataset_id)
+        dataset = await self._repo.get_by_id(dataset_id)
+        if dataset is None:
+            raise DatasetNotFoundError(dataset_id)
+        relative_path = dataset.relative_path
         await self._repo.delete(dataset)
+        remove_dataset_directory(relative_path)

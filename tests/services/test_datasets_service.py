@@ -9,6 +9,7 @@ from src.services.datasets.exceptions import (
     DatasetDirectoryNotFoundError,
     DatasetImageNotFoundError,
     DatasetNameConflictError,
+    DatasetNotFoundError,
 )
 from src.services.datasets.preprocess import ImagePreprocessState, prepared_dir_path
 from src.services.datasets.service import DatasetsService
@@ -29,6 +30,7 @@ async def _create_dataset_with_resolution(
     return await datasets_service.update_dataset(
         dataset.id,
         target_resolution=resolution,
+        enable_bucket=False,
     )
 
 
@@ -221,6 +223,47 @@ async def test_delete_image_removes_files_and_crop(storage_roots, datasets_servi
 
     with pytest.raises(DatasetImageNotFoundError):
         await datasets_service.delete_image(dataset, "remove.png")
+
+
+@pytest.mark.asyncio
+async def test_delete_dataset_removes_directory(storage_roots, datasets_service: DatasetsService) -> None:
+    image_dir = storage_roots["datasets"] / "remove-me"
+    write_test_image(image_dir / "img.png")
+    dataset = await _create_dataset_with_resolution(
+        datasets_service,
+        image_dir,
+        name="remove-me",
+        relative_path="remove-me",
+    )
+    await datasets_service.bake_all(dataset)
+    assert (image_dir / ".prepared").is_dir()
+
+    dataset_id = dataset.id  # type: ignore[arg-type]
+    await datasets_service.delete_dataset(dataset_id)
+
+    assert not image_dir.exists()
+    with pytest.raises(DatasetNotFoundError):
+        await datasets_service.get_dataset(dataset_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_dataset_succeeds_when_directory_missing(
+    storage_roots,
+    datasets_service: DatasetsService,
+) -> None:
+    image_dir = storage_roots["datasets"] / "gone"
+    image_dir.mkdir()
+    dataset = await datasets_service.create_dataset(name="gone", relative_path="gone")
+    dataset_id = dataset.id  # type: ignore[arg-type]
+
+    import shutil
+
+    shutil.rmtree(image_dir)
+
+    await datasets_service.delete_dataset(dataset_id)
+
+    with pytest.raises(DatasetNotFoundError):
+        await datasets_service.get_dataset(dataset_id)
 
 
 @pytest.mark.asyncio

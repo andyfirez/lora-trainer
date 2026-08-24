@@ -23,7 +23,7 @@ function clampResolution(value: number): number {
 
 export default function PreprocessPanel({ dataset, status, preparing, onUpdated }: Props) {
   const [resolution, setResolution] = useState(dataset.target_resolution ?? DEFAULT_RESOLUTION);
-  const [enableBucket, setEnableBucket] = useState(dataset.enable_bucket ?? false);
+  const [enableBucket, setEnableBucket] = useState(dataset.enable_bucket ?? true);
   const [bucketSteps, setBucketSteps] = useState(dataset.bucket_reso_steps ?? WINX_BUCKET_STEPS);
   const [bucketNoUpscale, setBucketNoUpscale] = useState(dataset.bucket_no_upscale ?? true);
   const [saving, setSaving] = useState(false);
@@ -36,7 +36,7 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
 
   useEffect(() => {
     setResolution(dataset.target_resolution ?? DEFAULT_RESOLUTION);
-    setEnableBucket(dataset.enable_bucket ?? false);
+    setEnableBucket(dataset.enable_bucket ?? true);
     setBucketSteps(dataset.bucket_reso_steps ?? WINX_BUCKET_STEPS);
     setBucketNoUpscale(dataset.bucket_no_upscale ?? true);
   }, [
@@ -67,10 +67,18 @@ export default function PreprocessPanel({ dataset, status, preparing, onUpdated 
   }, 500);
 
   useEffect(() => {
-    if (dataset.target_resolution != null || initStarted.current) return;
+    if (initStarted.current) return;
+    const needsResolution = dataset.target_resolution == null;
+    const needsBucket = !dataset.enable_bucket;
+    if (!needsResolution && !needsBucket) return;
     initStarted.current = true;
-    void saveSettings({ target_resolution: DEFAULT_RESOLUTION });
-  }, [dataset.target_resolution, saveSettings]);
+    if (needsResolution) setResolution(DEFAULT_RESOLUTION);
+    if (needsBucket) setEnableBucket(true);
+    void saveSettings({
+      ...(needsResolution ? { target_resolution: DEFAULT_RESOLUTION } : {}),
+      ...(needsBucket ? { enable_bucket: true } : {}),
+    });
+  }, [dataset.target_resolution, dataset.enable_bucket, saveSettings]);
 
   const handleResolutionChange = (value: number) => {
     const clamped = clampResolution(value);

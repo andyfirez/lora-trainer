@@ -578,7 +578,17 @@ def apply_selection_crop(
     cropped = preview.crop((x, y, x + w, y + h))
     if cropped.size == output_size:
         return cropped
-    return cropped.resize(output_size, Image.Resampling.LANCZOS)
+    out_w, out_h = output_size
+    scale = min(out_w / cropped.width, out_h / cropped.height)
+    fitted_size = (max(1, int(cropped.width * scale)), max(1, int(cropped.height * scale)))
+    resized = cropped.resize(fitted_size, Image.Resampling.LANCZOS)
+    if fitted_size == output_size:
+        return resized
+    canvas = Image.new("RGB", output_size, (0, 0, 0))
+    paste_x = (out_w - fitted_size[0]) // 2
+    paste_y = (out_h - fitted_size[1]) // 2
+    canvas.paste(resized, (paste_x, paste_y))
+    return canvas
 
 
 def bake_image_to_prepared(

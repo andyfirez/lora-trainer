@@ -1,6 +1,6 @@
 """Dataset preprocess, crop, and bake routes."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
 from src.api.dependencies import DatasetDep, DatasetsServiceDep
@@ -68,8 +68,9 @@ async def get_crop_preview(
     dataset: DatasetDep,
     filename: str,
     service: DatasetsServiceDep,
+    w: int | None = Query(default=None, ge=32, le=2048),
 ) -> Response:
-    data = service.get_crop_preview_bytes(dataset, filename)
+    data = service.get_crop_preview_bytes(dataset, filename, max_width=w)
     return Response(content=data, media_type="image/jpeg")
 
 

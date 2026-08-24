@@ -103,12 +103,12 @@ export default function DatasetImageCard({
   const thumbnailSrc = usePrepared
     ? datasetPreparedImageUrl(datasetId, filename, 256, cacheKey)
     : useCropPreview
-      ? datasetCropPreviewUrl(datasetId, filename)
+      ? datasetCropPreviewUrl(datasetId, filename, 256)
       : datasetImageUrl(datasetId, filename, { width: 256, cacheKey });
 
   return (
     <div className="bg-surface rounded-xl border border-border overflow-hidden flex flex-col">
-      <div className="aspect-square bg-bg relative w-full">
+      <div className="aspect-square bg-bg relative w-full p-1">
         <button
           type="button"
           onClick={canCrop ? onCropClick : undefined}
@@ -119,7 +119,7 @@ export default function DatasetImageCard({
           <img
             src={thumbnailSrc}
             alt={filename}
-            className="w-full h-full object-cover pointer-events-none"
+            className="w-full h-full object-contain pointer-events-none"
             loading="lazy"
             onError={() => {
               if (usePrepared) setPreparedFailed(true);

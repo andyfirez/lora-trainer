@@ -162,8 +162,14 @@ class DatasetsService:
     async def get_crop_meta(self, dataset: Dataset, filename: str) -> CropMeta:
         return await self._preprocess.get_crop_meta(dataset, filename)
 
-    def get_crop_preview_bytes(self, dataset: Dataset, filename: str) -> bytes:
-        return self._preprocess.get_crop_preview_bytes(dataset, filename)
+    def get_crop_preview_bytes(
+        self,
+        dataset: Dataset,
+        filename: str,
+        *,
+        max_width: int | None = None,
+    ) -> bytes:
+        return self._preprocess.get_crop_preview_bytes(dataset, filename, max_width=max_width)
 
     async def save_crop(
         self,
