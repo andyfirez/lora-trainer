@@ -22,7 +22,10 @@ export default function BaseModelSelect({
   hintAnchor,
   className,
 }: BaseModelSelectProps) {
-  const { options, isLoading, error } = useBaseModelOptions(value ? [value] : []);
+  const { options, isLoading, error } = useBaseModelOptions();
+  const trimmed = value.trim();
+  const knownValue = trimmed && options.some((option) => option.value === trimmed);
+  const selectValue = knownValue ? trimmed : "";
 
   return (
     <div className={className}>
@@ -32,15 +35,15 @@ export default function BaseModelSelect({
       </div>
       <select
         className={selectClassName}
-        value={value ?? ""}
+        value={isLoading ? "" : selectValue}
         disabled={isLoading}
         onChange={(event) => onChange(event.target.value)}
       >
         {isLoading ? (
-          <option value={value ?? ""}>Loading models…</option>
+          <option value="">Loading models…</option>
         ) : (
           <>
-            {!value ? <option value="">Select a base model…</option> : null}
+            <option value="">Select a base model…</option>
             {options.map((option) => (
               <option key={option.value} value={option.value} disabled={option.disabled}>
                 {option.label}
@@ -53,6 +56,9 @@ export default function BaseModelSelect({
         <p className="mt-1 text-xs text-error">
           {error instanceof Error ? error.message : "Failed to load base models"}
         </p>
+      ) : null}
+      {!isLoading && trimmed && !knownValue ? (
+        <p className="mt-1 text-xs text-warning">Not in base models folder: {trimmed}</p>
       ) : null}
     </div>
   );

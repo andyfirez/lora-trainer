@@ -12,6 +12,7 @@ class StorageKind(StrEnum):
     DATASETS = "datasets"
     BASE_MODELS = "base_models"
     LORA = "lora"
+    INFERENCE_LORA = "inference_lora"
 
 
 def _expand(path_str: str) -> Path:
@@ -33,12 +34,18 @@ class StoragePaths:
     def lora_root() -> Path:
         return _expand(settings.storage.lora_root)
 
+    @staticmethod
+    def inference_lora_root() -> Path:
+        return _expand(settings.storage.inference_lora_root)
+
     @classmethod
     def root_for(cls, kind: StorageKind) -> Path:
         if kind == StorageKind.DATASETS:
             return cls.datasets_root()
         if kind == StorageKind.BASE_MODELS:
             return cls.base_models_root()
+        if kind == StorageKind.INFERENCE_LORA:
+            return cls.inference_lora_root()
         return cls.lora_root()
 
     @classmethod
@@ -99,6 +106,10 @@ class StoragePaths:
     @classmethod
     def resolve_lora_path(cls, relative_path: str) -> Path:
         return cls.resolve(StorageKind.LORA, relative_path)
+
+    @classmethod
+    def resolve_inference_lora_path(cls, relative_path: str) -> Path:
+        return cls.resolve(StorageKind.INFERENCE_LORA, relative_path)
 
     @classmethod
     def to_relative(cls, kind: StorageKind, absolute_path: str | Path) -> str | None:

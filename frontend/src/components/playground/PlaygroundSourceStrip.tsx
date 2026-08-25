@@ -3,14 +3,10 @@
 import BaseModelSelect from "@/components/BaseModelSelect";
 import PathInput from "@/components/PathInput";
 import PlaygroundGenerateControls from "@/components/playground/PlaygroundGenerateControls";
-import LoraEntryField from "@/components/experiments/LoraEntryField";
 import type { GeneratePrimaryLabel } from "@/hooks/useSamplingJobs";
 import {
   EXPERIMENT_PARAM_LABELS,
-  applyLoraStack,
-  defaultExperimentParameter,
   getParameters,
-  parseLoraEntries,
   setParameter,
 } from "@/lib/experimentUtils";
 
@@ -36,19 +32,13 @@ export default function PlaygroundSourceStrip({
 
   return (
     <div className="border-b border-border px-3 py-2">
-      <div className="grid items-start gap-3 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)_minmax(14rem,18rem)_minmax(10rem,12rem)]">
+      <div className="grid items-start gap-3 lg:grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)_minmax(10rem,12rem)]">
         <BaseModelSelect
           label={EXPERIMENT_PARAM_LABELS.base_model_name}
           value={baseModel}
           onChange={(value) =>
             onChange(setParameter(config, "base_model_name", { mode: "fixed", value }))
           }
-        />
-        <LoraEntryField
-          label="LoRA"
-          param={parameters.lora_path ?? defaultExperimentParameter("string")}
-          onChange={(param) => onChange(applyLoraStack(config, parseLoraEntries(param.value)))}
-          variant="stack"
         />
         <PathInput
           label="Output Folder"

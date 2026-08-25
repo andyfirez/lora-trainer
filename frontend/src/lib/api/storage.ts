@@ -21,6 +21,16 @@ export interface BaseModelsListResponse {
   models: StorageEntry[];
 }
 
+export interface InferenceLoraEntry {
+  name: string;
+  relative_path: string;
+}
+
+export interface InferenceLorasListResponse {
+  root: string;
+  loras: InferenceLoraEntry[];
+}
+
 export const storageApi = {
   browse: (kind: StorageKind, relativePath = "") =>
     api.get<StorageBrowseResponse>(
@@ -28,4 +38,6 @@ export const storageApi = {
     ),
 
   listBaseModels: () => api.get<BaseModelsListResponse>("/storage/base-models"),
+
+  listInferenceLoras: () => api.get<InferenceLorasListResponse>("/storage/inference-loras"),
 };

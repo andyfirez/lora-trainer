@@ -29,3 +29,10 @@ def resolve_config_lora_file(lora_path: str) -> Path:
     if path.is_absolute():
         return path.expanduser().resolve()
     return StoragePaths.resolve_lora_path(lora_path)
+
+
+def resolve_sampling_lora_file(lora_path: str) -> Path:
+    path = Path(lora_path)
+    if path.is_absolute():
+        return path.expanduser().resolve()
+    return StoragePaths.resolve_inference_lora_path(lora_path)

@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import PlaygroundPromptBar from "@/components/playground/PlaygroundPromptBar";
 import PlaygroundCompactSettings from "@/components/playground/PlaygroundCompactSettings";
 import PlaygroundGallery from "@/components/playground/PlaygroundGallery";
+import PlaygroundLogsPanel from "@/components/playground/PlaygroundLogsPanel";
 import PlaygroundProgressBar from "@/components/playground/PlaygroundProgressBar";
 import PlaygroundQueue from "@/components/playground/PlaygroundQueue";
 import PlaygroundSourceStrip from "@/components/playground/PlaygroundSourceStrip";
 import ResizeSplit from "@/components/playground/ResizeSplit";
+import ErrorAlert from "@/components/ui/ErrorAlert";
 import type { GalleryEntry } from "@/components/playground/galleryTypes";
 import { useSamplingJobs } from "@/hooks/useSamplingJobs";
 import { samplingsApi } from "@/lib/api/samplings";
@@ -79,8 +81,18 @@ export default function SamplingPlayground() {
       ? Math.round((myRunning.progress_step / myRunning.progress_total) * 100)
       : null;
 
+  const logJob = useMemo(() => {
+    const session = (samplings ?? []).filter((item) => sessionIds.includes(item.id));
+    return (
+      myRunning ??
+      session.find((item) => item.status === "queued" || item.status === "running") ??
+      session.at(-1)
+    );
+  }, [samplings, sessionIds, myRunning]);
+
+  const jobError = logJob?.status === "failed" ? logJob.error_message : null;
   const showProgress = Boolean(myRunning?.progress_status || progressPct != null);
-  const showStatusStrip = showProgress || queueItems.length > 0;
+  const showStatusStrip = showProgress || queueItems.length > 0 || Boolean(jobError);
 
   useEffect(() => {
     if (!myRunning || (myRunning.progress_step ?? 0) <= 0) return;
@@ -168,6 +180,13 @@ export default function SamplingPlayground() {
           {showProgress ? (
             <PlaygroundProgressBar label={myRunning?.progress_status ?? null} pct={progressPct} />
           ) : null}
+          {jobError ? (
+            <div className="px-3 pb-2">
+              <ErrorAlert compact>
+                <strong>Sampling failed:</strong> {jobError}
+              </ErrorAlert>
+            </div>
+          ) : null}
           <PlaygroundQueue items={queueItems} onCancel={(item) => void cancelQueueItem(item)} />
         </div>
       ) : null}
@@ -183,6 +202,7 @@ export default function SamplingPlayground() {
               gpuDefaults={settingsData?.gpu_defaults}
               lastSeed={lastSeed}
             />
+            <PlaygroundLogsPanel job={logJob} />
           </div>
         }
         right={<PlaygroundGallery item={currentImage} />}

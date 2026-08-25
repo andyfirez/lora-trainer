@@ -26,6 +26,7 @@ export interface StorageInfo {
   datasets_root: string;
   base_models_root: string;
   lora_root: string;
+  inference_lora_root: string;
 }
 
 export interface GpuDefaultsInfo {
@@ -55,6 +56,7 @@ export interface SettingsPatch {
   datasets_root?: string;
   base_models_root?: string;
   lora_root?: string;
+  inference_lora_root?: string;
   tf32?: boolean;
   attention_mechanism?: GpuDefaultsInfo["attention_mechanism"];
   mixed_precision?: GpuDefaultsInfo["mixed_precision"];

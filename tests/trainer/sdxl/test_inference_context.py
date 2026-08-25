@@ -22,6 +22,27 @@ def _make_peft_module(base_model: MagicMock | None = None) -> MagicMock:
     return module
 
 
+def test_merge_adapters_skips_plain_text_encoders_after_bake() -> None:
+    unet = _make_peft_module()
+    te1 = object()
+    te2 = object()
+    config = SDXLInferenceConfig(text_encoder_1={"train": True}, text_encoder_2={"train": True})
+
+    state = merge_adapters_for_inference(
+        unet=unet,
+        text_encoder_1=te1,
+        text_encoder_2=te2,
+        lora_config=config,
+        merge_unet=False,
+    )
+
+    unet.merge_adapter.assert_not_called()
+    assert state.models.text_encoder_1 is te1
+    assert state.models.text_encoder_2 is te2
+    assert not state.te1_merged
+    assert not state.te2_merged
+
+
 def test_merge_and_unmerge_adapters_for_inference() -> None:
     unet = _make_peft_module()
     te1 = _make_peft_module()

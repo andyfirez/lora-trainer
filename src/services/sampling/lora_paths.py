@@ -16,12 +16,16 @@ from src.sampler.experiment.models import (
     parse_lora_entries,
     parse_lora_entry,
 )
+from src.sampler.lora_prompt import (
+    collect_lora_tags_from_prompts,
+    validate_lora_tag_names,
+)
 from src.sampler.output_paths import resolve_sampling_output_path
 from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
 )
-from src.storage.config_paths import resolve_config_lora_file
+from src.storage.config_paths import resolve_sampling_lora_file
 
 
 def lora_path_experiment_values(param: ExperimentParameter) -> list[LoraEntry]:
@@ -41,9 +45,18 @@ def validate_sample_prompts(config: SamplingConfig) -> None:
 
 def validate_lora_paths(lora_paths: list[str]) -> None:
     for lora_path in lora_paths:
-        path = resolve_config_lora_file(lora_path)
+        path = resolve_sampling_lora_file(lora_path)
         if not path.is_file():
             raise SamplingLoRAPathNotFoundError(lora_path)
+
+
+def validate_prompt_lora_tags(config: SamplingConfig) -> None:
+    tags = collect_lora_tags_from_prompts(config.effective_prompts())
+    for tag in tags:
+        try:
+            validate_lora_tag_names([tag])
+        except ValueError as exc:
+            raise SamplingLoRAPathNotFoundError(str(exc)) from exc
 
 
 def resolve_lora_paths_from_sampling_config(sampling_config: SamplingConfig) -> list[str]:

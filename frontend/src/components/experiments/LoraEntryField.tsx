@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CircleSlash, Plus, X } from "lucide-react";
-import PathInput from "@/components/PathInput";
+import InferenceLoraSelect from "@/components/lora/InferenceLoraSelect";
 import ModeToggle from "@/components/experiments/ModeToggle";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import type { LoraEntry, ExperimentMode, ExperimentParameter } from "@/lib/experimentUtils";
@@ -246,14 +246,7 @@ function LoraEntryRow({
     <div className="min-w-0 space-y-2">
       <div className="flex min-w-0 items-center gap-2">
         <div className="min-w-0 flex-1">
-          <PathInput
-            label=""
-            value={entry.path ?? ""}
-            onChange={updatePath}
-            placeholder="Leave empty for base model only"
-            pickerTitle="Select LoRA"
-            kind="file"
-          />
+          <InferenceLoraSelect value={entry.path ?? ""} onChange={updatePath} />
         </div>
         {showWeight ? (
           <input

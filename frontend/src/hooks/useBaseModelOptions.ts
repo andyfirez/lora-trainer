@@ -6,10 +6,10 @@ import { storageApi } from "@/lib/api/storage";
 
 export { buildBaseModelSelectOptions } from "@/lib/baseModelOptions";
 
-export function useBaseModelOptions(currentValues: string[] = []) {
+export function useBaseModelOptions() {
   const { data, error, isLoading } = useSWR("/storage/base-models", () => storageApi.listBaseModels());
 
-  const options = buildBaseModelSelectOptions(data?.models ?? [], currentValues);
+  const options = buildBaseModelSelectOptions(data?.models ?? []);
 
   if (!isLoading && options.length === 0) {
     return {

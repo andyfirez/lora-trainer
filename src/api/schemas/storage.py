@@ -22,3 +22,13 @@ class StorageBrowseResponse(BaseModel):
 class BaseModelsListResponse(BaseModel):
     root: str
     models: list[StorageEntryResponse]
+
+
+class InferenceLoraEntryResponse(BaseModel):
+    name: str
+    relative_path: str
+
+
+class InferenceLorasListResponse(BaseModel):
+    root: str
+    loras: list[InferenceLoraEntryResponse]

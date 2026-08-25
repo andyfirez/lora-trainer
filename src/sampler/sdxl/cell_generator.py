@@ -27,6 +27,7 @@ def generate_sampling_cell(
     sampling_config: SDXLInferenceConfig,
     merge_unet: bool,
     prompt: str,
+    infotext_prompt: str | None = None,
     lora_weight: float,
     output_dir: Path,
     output_filename: str,
@@ -65,7 +66,7 @@ def generate_sampling_cell(
             on_progress(image_offset + completed, total_steps)
 
     infotext = build_a1111_infotext(
-        prompt=expanded_prompt,
+        prompt=infotext_prompt if infotext_prompt is not None else expanded_prompt,
         negative_prompt=expanded_negative,
         steps=config.sample_steps,
         sampler=config.sample_scheduler,

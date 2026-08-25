@@ -107,6 +107,7 @@ def persist_storage_settings(
     datasets_root: str | None = None,
     base_models_root: str | None = None,
     lora_root: str | None = None,
+    inference_lora_root: str | None = None,
 ) -> None:
     data = _ensure_all_sections(_current_config_data())
     storage = dict(data.get("storage", settings.storage.model_dump()))
@@ -116,6 +117,8 @@ def persist_storage_settings(
         storage["base_models_root"] = base_models_root
     if lora_root is not None:
         storage["lora_root"] = lora_root
+    if inference_lora_root is not None:
+        storage["inference_lora_root"] = inference_lora_root
     data["storage"] = storage
     _write_toml(get_config_path(), data)
 
@@ -125,6 +128,7 @@ def apply_storage_settings(
     datasets_root: str | None = None,
     base_models_root: str | None = None,
     lora_root: str | None = None,
+    inference_lora_root: str | None = None,
 ) -> StorageSettings:
     updates: dict[str, str] = {}
     if datasets_root is not None:
@@ -133,6 +137,8 @@ def apply_storage_settings(
         updates["base_models_root"] = base_models_root
     if lora_root is not None:
         updates["lora_root"] = lora_root
+    if inference_lora_root is not None:
+        updates["inference_lora_root"] = inference_lora_root
     if updates:
         settings.storage = settings.storage.model_copy(update=updates)
     return settings.storage

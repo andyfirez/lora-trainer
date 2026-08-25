@@ -1,13 +1,16 @@
 "use client";
 
 import { useRef } from "react";
-import { Copy, ImageUp, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Copy, ImageUp, Loader2, Send } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Alert from "@/components/ui/Alert";
 import { usePngInspect } from "@/hooks/usePngInspect";
 import { cn } from "@/lib/cn";
+import { applyPngInfoToPlayground } from "@/lib/pngInfoToPlayground";
+import { savePlaygroundState } from "@/lib/playgroundState";
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
@@ -64,6 +67,7 @@ function orderedMetadataEntries(items: Record<string, string>) {
 }
 
 export default function PngInfoPage() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const {
     dragActive,
@@ -81,6 +85,17 @@ export default function PngInfoPage() {
   const previewSrc = result?.preview_base64 ?? localPreviewUrl;
   const metadataEntries = result ? orderedMetadataEntries(result.items) : [];
   const parameterEntries = result ? orderedParameterEntries(result.parameters) : [];
+  const canSendToSampler = Boolean(result && (result.info || parameterEntries.length > 0));
+
+  function sendToSampler() {
+    if (!result) return;
+    const next = applyPngInfoToPlayground(result.parameters, {
+      width: result.width,
+      height: result.height,
+    });
+    savePlaygroundState(next);
+    router.push("/sampling");
+  }
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -88,11 +103,19 @@ export default function PngInfoPage() {
         title="PNG Info"
         description="Inspect generation metadata embedded in images"
         actions={
-          result?.info ? (
-            <Button variant="secondary" size="sm" onClick={() => void copyRawInfo()}>
-              <Copy size={14} />
-              {copied ? "Copied" : "Copy raw info"}
-            </Button>
+          canSendToSampler ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {result?.info ? (
+                <Button variant="secondary" size="sm" onClick={() => void copyRawInfo()}>
+                  <Copy size={14} />
+                  {copied ? "Copied" : "Copy raw info"}
+                </Button>
+              ) : null}
+              <Button variant="sampling" size="sm" onClick={sendToSampler}>
+                <Send size={14} />
+                Send to sampler
+              </Button>
+            </div>
           ) : undefined
         }
       />

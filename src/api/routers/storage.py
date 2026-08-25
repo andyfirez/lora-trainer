@@ -2,8 +2,15 @@
 
 from fastapi import APIRouter, HTTPException, Query
 
-from src.api.schemas.storage import BaseModelsListResponse, StorageBrowseResponse, StorageEntryResponse
+from src.api.schemas.storage import (
+    BaseModelsListResponse,
+    InferenceLoraEntryResponse,
+    InferenceLorasListResponse,
+    StorageBrowseResponse,
+    StorageEntryResponse,
+)
 from src.services.storage.browse import StorageBrowseService
+from src.services.storage.inference_loras import discover_inference_loras
 from src.storage.paths import StorageKind, StoragePaths
 
 router = APIRouter(prefix="/storage", tags=["storage"])
@@ -56,5 +63,17 @@ async def list_base_models() -> BaseModelsListResponse:
                 is_dir=m.is_dir,
             )
             for m in models
+        ],
+    )
+
+
+@router.get("/inference-loras", response_model=InferenceLorasListResponse)
+async def list_inference_loras() -> InferenceLorasListResponse:
+    loras = discover_inference_loras()
+    return InferenceLorasListResponse(
+        root=str(StoragePaths.inference_lora_root()),
+        loras=[
+            InferenceLoraEntryResponse(name=entry.name, relative_path=entry.relative_path)
+            for entry in loras
         ],
     )

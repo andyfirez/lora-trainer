@@ -11,7 +11,7 @@ from typing import Any
 import torch
 
 from src.gpu.runtime import setup_cuda_runtime
-from src.storage.config_paths import resolve_config_base_model
+from src.storage.config_paths import resolve_config_base_model, resolve_sampling_lora_file
 from src.trainer.attention import configure_unet_attention
 from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.dtypes import weight_dtype_to_torch
@@ -43,7 +43,7 @@ def _stack_file_entries(lora_stack: list[dict[str, Any]] | None) -> list[tuple[P
             weight = float(raw_weight)
         except (TypeError, ValueError):
             weight = 1.0
-        entries.append((Path(str(raw_path)), weight))
+        entries.append((resolve_sampling_lora_file(str(raw_path)), weight))
     return entries
 
 

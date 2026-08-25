@@ -37,6 +37,7 @@ export default function PlaygroundCompactSettings({
   gpuDefaults,
   lastSeed,
 }: PlaygroundCompactSettingsProps) {
+  const [samplerOpen, setSamplerOpen] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const parameters = getParameters(config);
   const seedParam = parameters.seed ?? { mode: "fixed" as const, value: null };
@@ -61,97 +62,107 @@ export default function PlaygroundCompactSettings({
   }
 
   return (
-    <div className="space-y-3 p-3">
-      <div>
-        <label className={labelClassName}>Sampling method</label>
-        <select
-          className={selectClassName}
-          value={scheduler}
-          onChange={(event) => setFixed("scheduler", event.target.value)}
-        >
-          {diffusersSchedulerOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <Slider label="Sampling steps" value={steps} min={1} max={150} step={1} onChange={(value) => setFixed("steps", value)} />
-
-      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-        <Slider label="Width" value={width} min={64} max={2048} step={8} onChange={(value) => setFixed("width", value)} />
+    <div className="p-3">
+      <section>
         <button
           type="button"
-          title="Swap width/height"
-          onClick={() => {
-            let next = setParameter(config, "width", { mode: "fixed", value: height });
-            next = setParameter(next, "height", { mode: "fixed", value: width });
-            onChange(next);
-          }}
-          className="mb-1 rounded-lg border border-border p-2 text-muted hover:bg-white/5 hover:text-text"
+          onClick={() => setSamplerOpen(!samplerOpen)}
+          className={`${formSectionTitleClass} mb-0 w-full text-left flex items-center justify-between`}
         >
-          <ArrowLeftRight size={14} />
+          Sampler
+          <span className="text-muted text-xs">{samplerOpen ? "▲" : "▼"}</span>
         </button>
-        <Slider label="Height" value={height} min={64} max={2048} step={8} onChange={(value) => setFixed("height", value)} />
-      </div>
+        {samplerOpen && (
+          <div className="mt-3 space-y-3">
+            <div>
+              <label className={labelClassName}>Sampling method</label>
+              <select
+                className={selectClassName}
+                value={scheduler}
+                onChange={(event) => setFixed("scheduler", event.target.value)}
+              >
+                {diffusersSchedulerOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Slider
-          label="Batch count"
-          value={batchCount}
-          min={1}
-          max={32}
-          step={1}
-          onChange={onBatchCountChange}
-        />
-        <Slider
-          label="CFG Scale"
-          value={cfg}
-          min={0}
-          max={30}
-          step={0.1}
-          onChange={(value) => setFixed("cfg_scale", value)}
-        />
-      </div>
+            <Slider label="Sampling steps" value={steps} min={1} max={150} step={1} onChange={(value) => setFixed("steps", value)} />
 
-      <div className="space-y-1">
-        <label className={labelClassName}>Seed</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            className={inputClassName}
-            value={seedParam.value == null ? "" : String(seedParam.value)}
-            placeholder="random"
-            onChange={(event) =>
-              setFixed("seed", event.target.value === "" ? null : Number(event.target.value))
-            }
-          />
-          <button
-            type="button"
-            title="Random seed"
-            onClick={() => setFixed("seed", null)}
-            className="rounded-lg border border-border p-2 text-muted hover:bg-white/5 hover:text-text"
-          >
-            <Dices size={15} />
-          </button>
-          <button
-            type="button"
-            title="Reuse last seed"
-            disabled={lastSeed == null}
-            onClick={() => lastSeed != null && setFixed("seed", lastSeed)}
-            className="rounded-lg border border-border p-2 text-muted hover:bg-white/5 hover:text-text disabled:opacity-40"
-          >
-            <Undo2 size={15} />
-          </button>
-        </div>
-      </div>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+              <Slider label="Width" value={width} min={64} max={2048} step={8} onChange={(value) => setFixed("width", value)} />
+              <button
+                type="button"
+                title="Swap width/height"
+                onClick={() => {
+                  let next = setParameter(config, "width", { mode: "fixed", value: height });
+                  next = setParameter(next, "height", { mode: "fixed", value: width });
+                  onChange(next);
+                }}
+                className="mb-1 rounded-lg border border-border p-2 text-muted hover:bg-white/5 hover:text-text"
+              >
+                <ArrowLeftRight size={14} />
+              </button>
+              <Slider label="Height" value={height} min={64} max={2048} step={8} onChange={(value) => setFixed("height", value)} />
+            </div>
 
-      <p className="text-xs text-muted">
-        {Math.max(1, batchCount)} image{batchCount === 1 ? "" : "s"} this Generate
-      </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Slider
+                label="Batch count"
+                value={batchCount}
+                min={1}
+                max={32}
+                step={1}
+                onChange={onBatchCountChange}
+              />
+              <Slider
+                label="CFG Scale"
+                value={cfg}
+                min={0}
+                max={30}
+                step={0.1}
+                onChange={(value) => setFixed("cfg_scale", value)}
+              />
+            </div>
 
-      <section className="border-t border-border pt-3">
+            <div className="space-y-1">
+              <label className={labelClassName}>Seed</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  className={inputClassName}
+                  value={seedParam.value == null ? "" : String(seedParam.value)}
+                  placeholder="random"
+                  onChange={(event) =>
+                    setFixed("seed", event.target.value === "" ? null : Number(event.target.value))
+                  }
+                />
+                <button
+                  type="button"
+                  title="Random seed"
+                  onClick={() => setFixed("seed", null)}
+                  className="rounded-lg border border-border p-2 text-muted hover:bg-white/5 hover:text-text"
+                >
+                  <Dices size={15} />
+                </button>
+                <button
+                  type="button"
+                  title="Reuse last seed"
+                  disabled={lastSeed == null}
+                  onClick={() => lastSeed != null && setFixed("seed", lastSeed)}
+                  className="rounded-lg border border-border p-2 text-muted hover:bg-white/5 hover:text-text disabled:opacity-40"
+                >
+                  <Undo2 size={15} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="border-t border-border pt-3 mt-3">
         <button
           type="button"
           onClick={() => setAdvancedOpen(!advancedOpen)}
@@ -161,7 +172,7 @@ export default function PlaygroundCompactSettings({
           <span className="text-muted text-xs">{advancedOpen ? "▲" : "▼"}</span>
         </button>
         {advancedOpen && (
-          <div className="space-y-4">
+          <div className="mt-3 space-y-4">
             {gpuDefaults ? (
               <>
                 <InheritedSelectField

@@ -24,6 +24,7 @@ from src.services.sampling.lora_paths import (
     prepare_sampling_config_lora_paths,
     resolve_lora_paths_from_sampling_config,
     resolve_sampling_output_dir,
+    validate_prompt_lora_tags,
     validate_lora_paths,
     validate_sample_prompts,
 )
@@ -69,6 +70,7 @@ class SamplingService:
         parsed, paths = prepare_sampling_config_lora_paths(parsed, entity_lora_paths or None)
         if paths:
             validate_lora_paths(paths)
+        validate_prompt_lora_tags(parsed)
         validate_sample_prompts(parsed)
         snapshot = parsed.with_resolved_gpu(settings.gpu_defaults)
         snapshot.validate_gpu()

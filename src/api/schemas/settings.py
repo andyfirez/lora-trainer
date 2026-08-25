@@ -33,6 +33,7 @@ class SettingsPatch(BaseModel):
     datasets_root: str | None = None
     base_models_root: str | None = None
     lora_root: str | None = None
+    inference_lora_root: str | None = None
     tf32: bool | None = None
     attention_mechanism: Literal["default", "sdpa", "xformers"] | None = None
     mixed_precision: WeightDtype | None = None

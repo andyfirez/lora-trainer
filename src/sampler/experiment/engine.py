@@ -32,6 +32,7 @@ from src.sampler.progress_callbacks import (
     ProgressStatusCallback,
 )
 from src.sampler.sdxl.cell_generator import generate_sampling_cell
+from src.storage.config_paths import resolve_sampling_lora_file
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.config import SampleScheduler
 from src.trainer.inference_config import SDXLInferenceConfig
@@ -144,7 +145,7 @@ class ExperimentEngine(ProgressCallbackMixin):
         for group_index, ((base_model, lora_key), group_combos) in enumerate(sorted_groups, start=1):
             first = group_combos[0]
             raw_path = first.params.get("lora_path")
-            lora_path = Path(str(raw_path)) if raw_path else None
+            lora_path = resolve_sampling_lora_file(str(raw_path)) if raw_path else None
             lora_stack = first.params.get("lora_stack")
             stack_items = lora_stack if isinstance(lora_stack, list) else None
             status = f"Sampling {lora_path.name if lora_path else 'base model'}"
@@ -232,6 +233,7 @@ class ExperimentEngine(ProgressCallbackMixin):
             sampling_config=sampling_config,
             merge_unet=merge_unet,
             prompt=prompt,
+            infotext_prompt=str(params.get("infotext_prompt") or raw_prompt),
             lora_weight=lora_weight,
             output_dir=images_dir,
             output_filename=filename,

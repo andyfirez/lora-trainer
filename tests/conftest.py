@@ -36,7 +36,8 @@ def storage_roots(tmp_path):
     datasets = tmp_path / "datasets"
     base_models = tmp_path / "base-models"
     lora = tmp_path / "lora"
-    for path in (datasets, base_models, lora):
+    inference = tmp_path / "inference-lora"
+    for path in (datasets, base_models, lora, inference):
         path.mkdir()
     (base_models / "test-model").mkdir()
     for name in ("alt-model", "changed"):
@@ -46,9 +47,10 @@ def storage_roots(tmp_path):
             "datasets_root": str(datasets),
             "base_models_root": str(base_models),
             "lora_root": str(lora),
+            "inference_lora_root": str(inference),
         }
     )
-    return {"datasets": datasets, "base_models": base_models, "lora": lora}
+    return {"datasets": datasets, "base_models": base_models, "lora": lora, "inference_lora": inference}
 
 
 async def _prepare_dataset(

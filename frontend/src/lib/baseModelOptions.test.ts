@@ -15,12 +15,8 @@ describe("buildBaseModelSelectOptions", () => {
     ]);
   });
 
-  it("keeps current config value when it is missing from the folder", () => {
-    const options = buildBaseModelSelectOptions(
-      [{ relative_path: "sdxl-base", is_dir: true }],
-      ["stabilityai/stable-diffusion-xl-base-1.0"],
-    );
-    assert.equal(options[0]?.value, "stabilityai/stable-diffusion-xl-base-1.0");
-    assert.match(String(options[0]?.label), /not in base models folder/);
+  it("does not inject config values missing from the folder", () => {
+    const options = buildBaseModelSelectOptions([{ relative_path: "sdxl-base", is_dir: true }]);
+    assert.deepEqual(options, [{ value: "sdxl-base", label: "sdxl-base" }]);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import ParamGroup from "@/components/experiments/ParamGroup";
 import ExperimentField from "@/components/experiments/ExperimentField";
 import { InheritedCheckboxField, InheritedSelectField } from "@/components/ui/InheritedGpuField";
@@ -56,14 +56,7 @@ export default function SamplingParametersSection({
 }: SamplingParametersSectionProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const baseModelParam = param(config, "base_model_name");
-  const baseModelCurrentValues = useMemo(() => {
-    if (baseModelParam.mode === "vary") {
-      return (baseModelParam.values ?? []).map((value) => String(value ?? ""));
-    }
-    const fixed = baseModelParam.value;
-    return fixed == null || fixed === "" ? [] : [String(fixed)];
-  }, [baseModelParam]);
-  const { options: baseModelOptions, isLoading: baseModelsLoading } = useBaseModelOptions(baseModelCurrentValues);
+  const { options: baseModelOptions, isLoading: baseModelsLoading } = useBaseModelOptions();
 
   function set(key: string, value: unknown) {
     const next: Config = { ...config };

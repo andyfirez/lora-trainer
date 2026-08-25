@@ -43,6 +43,11 @@ def merge_and_unload_peft(model: Any) -> Any:
     return model
 
 
+def _model_has_mergeable_adapters(model: Any) -> bool:
+    """True when the module still has active PEFT adapters to merge for inference."""
+    return callable(getattr(model, "merge_adapter", None)) and hasattr(model, "base_model")
+
+
 def bake_lora_into_models(
     *,
     unet: Any,
@@ -121,21 +126,21 @@ def merge_adapters_for_inference(
     te1_merged = False
     te2_merged = False
 
-    if merge_unet:
+    if merge_unet and _model_has_mergeable_adapters(unet):
         unet.merge_adapter()
         unet_merged = True
         inference_unet = unet.base_model.model
     else:
         inference_unet = unet
 
-    if lora_config.text_encoder_1.train:
+    if lora_config.text_encoder_1.train and _model_has_mergeable_adapters(text_encoder_1):
         text_encoder_1.merge_adapter()
         te1_merged = True
         inference_te1 = text_encoder_1.base_model.model
     else:
         inference_te1 = text_encoder_1
 
-    if lora_config.text_encoder_2.train:
+    if lora_config.text_encoder_2.train and _model_has_mergeable_adapters(text_encoder_2):
         text_encoder_2.merge_adapter()
         te2_merged = True
         inference_te2 = text_encoder_2.base_model.model

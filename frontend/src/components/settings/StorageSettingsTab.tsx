@@ -12,6 +12,7 @@ export default function StorageSettingsTab() {
   const [datasetsRoot, setDatasetsRoot] = useState("");
   const [baseModelsRoot, setBaseModelsRoot] = useState("");
   const [loraRoot, setLoraRoot] = useState("");
+  const [inferenceLoraRoot, setInferenceLoraRoot] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -21,6 +22,7 @@ export default function StorageSettingsTab() {
     setDatasetsRoot(data.storage.datasets_root);
     setBaseModelsRoot(data.storage.base_models_root);
     setLoraRoot(data.storage.lora_root);
+    setInferenceLoraRoot(data.storage.inference_lora_root);
   }, [data]);
 
   const handleSave = async (event: React.FormEvent) => {
@@ -33,6 +35,7 @@ export default function StorageSettingsTab() {
         datasets_root: datasetsRoot,
         base_models_root: baseModelsRoot,
         lora_root: loraRoot,
+        inference_lora_root: inferenceLoraRoot,
       });
       await mutate();
       setSuccess(true);
@@ -69,10 +72,17 @@ export default function StorageSettingsTab() {
           kind="directory"
         />
         <PathInput
-          label="LoRA root"
+          label="LoRA root (training)"
           value={loraRoot}
           onChange={setLoraRoot}
-          pickerTitle="Select LoRA root folder"
+          pickerTitle="Select LoRA training root folder"
+          kind="directory"
+        />
+        <PathInput
+          label="LoRA root (inference)"
+          value={inferenceLoraRoot}
+          onChange={setInferenceLoraRoot}
+          pickerTitle="Select LoRA inference root folder"
           kind="directory"
         />
         {error && <p className="text-sm text-error">{error}</p>}

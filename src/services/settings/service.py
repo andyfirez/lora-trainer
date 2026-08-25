@@ -23,7 +23,7 @@ from src.settings.config_persist import (
 from src.gpu import get_gpu_info, validate_gpu_config
 
 _TRAINING_FIELDS = ("max_concurrent_jobs", "worker_poll_interval_seconds")
-_STORAGE_FIELDS = ("datasets_root", "base_models_root", "lora_root")
+_STORAGE_FIELDS = ("datasets_root", "base_models_root", "lora_root", "inference_lora_root")
 _GPU_FIELDS = ("tf32", "attention_mechanism", "mixed_precision", "vae_dtype", "sample_vae_tiling")
 
 

@@ -32,6 +32,7 @@ class StorageSettings(BaseModel):
     datasets_root: str = "~/lora-trainer/datasets"
     base_models_root: str = "~/lora-trainer/base-models"
     lora_root: str = "~/lora-trainer/lora"
+    inference_lora_root: str = "~/lora-trainer/lora"
 
 
 class GpuDefaultsSettings(BaseModel):
