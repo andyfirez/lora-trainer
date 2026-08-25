@@ -3,13 +3,13 @@
 import { selectClassName } from "@/components/ui/Select";
 import FormSection from "@/components/ui/FormSection";
 import {
-  SWEEP_PARAM_LABELS,
-  type SweepParamKey,
+  EXPERIMENT_PARAM_LABELS,
+  type ExperimentParamKey,
   getParameters,
   planGrids,
   setGridLayout,
   varyKeysWithValues,
-} from "@/lib/sweepUtils";
+} from "@/lib/experimentUtils";
 
 type Config = Record<string, unknown>;
 
@@ -44,7 +44,7 @@ export default function GridLayoutSection({ config, onChange }: GridLayoutSectio
           >
             {varyKeys.map((k) => (
               <option key={k} value={k}>
-                {SWEEP_PARAM_LABELS[k as SweepParamKey]}
+                {EXPERIMENT_PARAM_LABELS[k as ExperimentParamKey]}
               </option>
             ))}
           </select>
@@ -58,7 +58,7 @@ export default function GridLayoutSection({ config, onChange }: GridLayoutSectio
           >
             {varyKeys.map((k) => (
               <option key={k} value={k}>
-                {SWEEP_PARAM_LABELS[k as SweepParamKey]}
+                {EXPERIMENT_PARAM_LABELS[k as ExperimentParamKey]}
               </option>
             ))}
           </select>

@@ -1,55 +1,66 @@
 import { SamplingConfig } from "./defaultConfig.ts";
-import { collapseStackToSingleLora } from "./sweepUtils.ts";
+import { collapseStackToSingleLora } from "./experimentUtils.ts";
 
 const LEGACY_PLAYGROUND_STORAGE_KEY = "sampling-playground";
+const LEGACY_SWEEP_STORAGE_KEY = "sampling-sweep";
 
-export const SWEEP_STORAGE_KEY = "sampling-sweep";
+export const EXPERIMENT_DRAFT_KEY = "experiment-draft";
 
-export interface SweepPersistedState {
+export interface ExperimentDraftState {
   config: Record<string, unknown>;
 }
 
-export function defaultSweepConfig(): Record<string, unknown> {
+export function defaultExperimentConfig(): Record<string, unknown> {
   return structuredClone(SamplingConfig.DEFAULT) as Record<string, unknown>;
 }
 
-export function defaultSweepState(): SweepPersistedState {
-  return { config: defaultSweepConfig() };
+export function defaultExperimentDraft(): ExperimentDraftState {
+  return { config: defaultExperimentConfig() };
 }
 
-export function migrateLegacySweepFromPlayground(): void {
+function migrateLegacySweepStorageKey(): void {
   if (typeof globalThis.localStorage === "undefined") return;
-  if (globalThis.localStorage.getItem(SWEEP_STORAGE_KEY)) return;
+  if (globalThis.localStorage.getItem(EXPERIMENT_DRAFT_KEY)) return;
+  const legacy = globalThis.localStorage.getItem(LEGACY_SWEEP_STORAGE_KEY);
+  if (legacy) {
+    globalThis.localStorage.setItem(EXPERIMENT_DRAFT_KEY, legacy);
+  }
+}
+
+export function migrateLegacyExperimentFromPlayground(): void {
+  if (typeof globalThis.localStorage === "undefined") return;
+  migrateLegacySweepStorageKey();
+  if (globalThis.localStorage.getItem(EXPERIMENT_DRAFT_KEY)) return;
   try {
     const raw = globalThis.localStorage.getItem(LEGACY_PLAYGROUND_STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as { mode?: unknown; config?: unknown };
-    if (parsed.mode !== "sweep") return;
+    if (parsed.mode !== "sweep" && parsed.mode !== "experiment") return;
     if (!parsed.config || typeof parsed.config !== "object") return;
-    globalThis.localStorage.setItem(SWEEP_STORAGE_KEY, JSON.stringify({ config: parsed.config }));
+    globalThis.localStorage.setItem(EXPERIMENT_DRAFT_KEY, JSON.stringify({ config: parsed.config }));
   } catch {
-    // Ignore corrupt playground blobs; sweep falls back to defaults.
+    // Ignore corrupt playground blobs; experiments fall back to defaults.
   }
 }
 
-export function loadSweepState(): SweepPersistedState {
-  if (typeof globalThis.localStorage === "undefined") return defaultSweepState();
-  migrateLegacySweepFromPlayground();
+export function loadExperimentDraft(): ExperimentDraftState {
+  if (typeof globalThis.localStorage === "undefined") return defaultExperimentDraft();
+  migrateLegacyExperimentFromPlayground();
   try {
-    const raw = globalThis.localStorage.getItem(SWEEP_STORAGE_KEY);
-    if (!raw) return defaultSweepState();
-    const parsed = JSON.parse(raw) as Partial<SweepPersistedState>;
-    const defaults = defaultSweepState();
+    const raw = globalThis.localStorage.getItem(EXPERIMENT_DRAFT_KEY);
+    if (!raw) return defaultExperimentDraft();
+    const parsed = JSON.parse(raw) as Partial<ExperimentDraftState>;
+    const defaults = defaultExperimentDraft();
     const config =
       parsed.config && typeof parsed.config === "object"
         ? { ...defaults.config, ...parsed.config }
         : defaults.config;
     return { config: collapseStackToSingleLora(config) };
   } catch {
-    return defaultSweepState();
+    return defaultExperimentDraft();
   }
 }
 
-export function saveSweepState(state: SweepPersistedState): void {
-  globalThis.localStorage.setItem(SWEEP_STORAGE_KEY, JSON.stringify(state));
+export function saveExperimentDraft(state: ExperimentDraftState): void {
+  globalThis.localStorage.setItem(EXPERIMENT_DRAFT_KEY, JSON.stringify(state));
 }

@@ -3,16 +3,16 @@
 from pathlib import Path
 
 from src.sampler.config import SamplingConfig
-from src.sampler.sweep.models import (
+from src.sampler.experiment.models import (
     LoraEntry,
-    SweepMode,
-    SweepParameter,
-    SweepParameters,
+    ExperimentMode,
+    ExperimentParameter,
+    ExperimentParameters,
     parse_lora_entry,
     parse_trigger_words,
 )
 from src.services.sampling.lora_paths import (
-    lora_path_sweep_values,
+    lora_path_experiment_values,
     prepare_sampling_config_lora_paths,
     resolve_lora_paths_from_sampling_config,
 )
@@ -29,9 +29,9 @@ def test_resolve_lora_paths_from_flat_list() -> None:
 
 def test_resolve_lora_paths_from_parameters() -> None:
     config = SamplingConfig(
-        parameters=SweepParameters(
-            lora_path=SweepParameter(
-                mode=SweepMode.VARY,
+        parameters=ExperimentParameters(
+            lora_path=ExperimentParameter(
+                mode=ExperimentMode.VARY,
                 values=[
                     {"path": r"D:\loras\a.safetensors", "trigger": "a"},
                     {"path": r"D:\loras\b.safetensors", "trigger": "b"},
@@ -44,9 +44,9 @@ def test_resolve_lora_paths_from_parameters() -> None:
 
 def test_resolve_lora_paths_skips_null_entries() -> None:
     config = SamplingConfig(
-        parameters=SweepParameters(
-            lora_path=SweepParameter(
-                mode=SweepMode.VARY,
+        parameters=ExperimentParameters(
+            lora_path=ExperimentParameter(
+                mode=ExperimentMode.VARY,
                 values=[
                     {"path": None, "trigger": ""},
                     {"path": r"D:\loras\a.safetensors", "trigger": "a"},
@@ -57,12 +57,12 @@ def test_resolve_lora_paths_skips_null_entries() -> None:
     assert resolve_lora_paths_from_sampling_config(config) == [r"D:\loras\a.safetensors"]
 
 
-def test_lora_path_sweep_values_parses_entries() -> None:
-    param = SweepParameter(
-        mode=SweepMode.VARY,
+def test_lora_path_experiment_values_parses_entries() -> None:
+    param = ExperimentParameter(
+        mode=ExperimentMode.VARY,
         values=[{"path": None, "trigger": "x"}, {"path": "pathA", "trigger": "ohwx"}],
     )
-    entries = lora_path_sweep_values(param)
+    entries = lora_path_experiment_values(param)
     assert len(entries) == 2
     assert entries[0].path is None
     assert entries[1].trigger == "ohwx"
@@ -75,16 +75,16 @@ def test_prepare_merges_job_and_config_paths(tmp_path: Path) -> None:
     b.write_bytes(b"x")
     config = SamplingConfig(
         lora_paths=[str(a)],
-        parameters=SweepParameters(
-            lora_path=SweepParameter(
-                mode=SweepMode.FIXED,
+        parameters=ExperimentParameters(
+            lora_path=ExperimentParameter(
+                mode=ExperimentMode.FIXED,
                 value={"path": str(a), "trigger": ""},
             )
         ),
     )
     updated, paths = prepare_sampling_config_lora_paths(config, [str(b)])
     assert paths == [str(a), str(b)]
-    assert updated.parameters.lora_path.mode == SweepMode.VARY
+    assert updated.parameters.lora_path.mode == ExperimentMode.VARY
     values = updated.parameters.lora_path.values
     assert values[0]["path"] == str(a)
     assert values[1]["path"] == str(b)
@@ -96,9 +96,9 @@ def test_prepare_preserves_triggers_when_merging_job_paths(tmp_path: Path) -> No
     a.write_bytes(b"x")
     b.write_bytes(b"x")
     config = SamplingConfig(
-        parameters=SweepParameters(
-            lora_path=SweepParameter(
-                mode=SweepMode.VARY,
+        parameters=ExperimentParameters(
+            lora_path=ExperimentParameter(
+                mode=ExperimentMode.VARY,
                 values=[
                     {"path": None, "trigger": ""},
                     {"path": str(a), "trigger": "custom"},
@@ -137,9 +137,9 @@ def test_prepare_keeps_fixed_lora_stack(tmp_path: Path) -> None:
     a.write_bytes(b"x")
     b.write_bytes(b"x")
     config = SamplingConfig(
-        parameters=SweepParameters(
-            lora_path=SweepParameter(
-                mode=SweepMode.FIXED,
+        parameters=ExperimentParameters(
+            lora_path=ExperimentParameter(
+                mode=ExperimentMode.FIXED,
                 value=[
                     {"path": str(a), "trigger": "a", "weight": 0.8},
                     {"path": str(b), "trigger": "b", "weight": 0.4},
@@ -149,7 +149,7 @@ def test_prepare_keeps_fixed_lora_stack(tmp_path: Path) -> None:
     )
     updated, paths = prepare_sampling_config_lora_paths(config, [str(a), str(b)])
     assert paths == [str(a), str(b)]
-    assert updated.parameters.lora_path.mode == SweepMode.FIXED
+    assert updated.parameters.lora_path.mode == ExperimentMode.FIXED
     values = updated.parameters.lora_path.value
     assert isinstance(values, list)
     assert values[0]["weight"] == 0.8

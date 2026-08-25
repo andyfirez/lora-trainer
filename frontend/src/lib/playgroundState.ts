@@ -1,12 +1,12 @@
 import { SamplingConfig } from "./defaultConfig.ts";
-import { migrateLegacySweepFromPlayground } from "./sweepState.ts";
+import { migrateLegacyExperimentFromPlayground } from "./experimentState.ts";
 import {
-  SWEEP_PARAM_ORDER,
+  EXPERIMENT_PARAM_ORDER,
   getParameters,
   setParameter,
   syncLoraPathsToParameters,
-  type SweepParamKey,
-} from "./sweepUtils.ts";
+  type ExperimentParamKey,
+} from "./experimentUtils.ts";
 
 export const PLAYGROUND_STORAGE_KEY = "sampling-playground";
 
@@ -28,7 +28,7 @@ export function defaultPlaygroundState(): PlaygroundPersistedState {
 
 export function loadPlaygroundState(): PlaygroundPersistedState {
   if (typeof globalThis.localStorage === "undefined") return defaultPlaygroundState();
-  migrateLegacySweepFromPlayground();
+  migrateLegacyExperimentFromPlayground();
   try {
     const raw = globalThis.localStorage.getItem(PLAYGROUND_STORAGE_KEY);
     if (!raw) return defaultPlaygroundState();
@@ -39,7 +39,7 @@ export function loadPlaygroundState(): PlaygroundPersistedState {
         ? { ...defaults.config, ...parsed.config }
         : defaults.config;
     return {
-      config: applySamplingSizeDefaults(collapseSweepToFixed(merged)),
+      config: applySamplingSizeDefaults(collapseExperimentToFixed(merged)),
       batchCount:
         typeof parsed.batchCount === "number" && Number.isFinite(parsed.batchCount) && parsed.batchCount >= 1
           ? Math.min(32, Math.floor(parsed.batchCount))
@@ -64,10 +64,10 @@ export function applyPromptsToPlayground(
   return { ...state, config };
 }
 
-export function collapseSweepToFixed(config: Record<string, unknown>): Record<string, unknown> {
+export function collapseExperimentToFixed(config: Record<string, unknown>): Record<string, unknown> {
   let next = { ...config };
-  for (const key of SWEEP_PARAM_ORDER) {
-    const param = getParameters(next)[key as SweepParamKey];
+  for (const key of EXPERIMENT_PARAM_ORDER) {
+    const param = getParameters(next)[key as ExperimentParamKey];
     if (param?.mode !== "vary") continue;
     next = setParameter(next, key, {
       mode: "fixed",

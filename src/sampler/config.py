@@ -13,12 +13,12 @@ from src.gpu import (
     strip_global_gpu_keys,
     strip_gpu_overrides_matching_defaults,
 )
-from src.sampler.sweep.models import (
-    SWEEP_PARAM_ORDER,
+from src.sampler.experiment.models import (
+    EXPERIMENT_PARAM_ORDER,
     GridLayout,
     LoraEntry,
-    SweepMode,
-    SweepParameters,
+    ExperimentMode,
+    ExperimentParameters,
 )
 from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
 
@@ -75,10 +75,10 @@ class SamplingConfig(GpuConfigMixin, BaseModel):
     include_base_model_sample: bool = False
     compose_grids: bool = False
     grid: GridLayout = Field(default_factory=GridLayout)
-    parameters: SweepParameters = Field(default_factory=SweepParameters)
+    parameters: ExperimentParameters = Field(default_factory=ExperimentParameters)
 
     @staticmethod
-    def _prompts_from_parameters(params: SweepParameters) -> list[str]:
+    def _prompts_from_parameters(params: ExperimentParameters) -> list[str]:
         prompts = params.prompt.effective_values()
         return [str(p) for p in prompts if p is not None and str(p).strip()]
 
@@ -157,11 +157,11 @@ class SamplingConfig(GpuConfigMixin, BaseModel):
         return SampleScheduler(str(scheduler))
 
     def has_varying_params_except_prompt(self) -> bool:
-        for key in SWEEP_PARAM_ORDER:
+        for key in EXPERIMENT_PARAM_ORDER:
             if key == "prompt":
                 continue
             param = self.parameters.get_param(key)
-            if param.mode == SweepMode.VARY and len(param.values) > 1:
+            if param.mode == ExperimentMode.VARY and len(param.values) > 1:
                 return True
         return False
 
@@ -202,22 +202,22 @@ class SamplingConfig(GpuConfigMixin, BaseModel):
             **self.inference_config_field_updates(),
         )
 
-    def with_resolved_lora_sweep(
+    def with_resolved_lora_experiment(
         self,
         entries: list[LoraEntry],
         file_paths: list[str],
         *,
-        mode: SweepMode | None = None,
+        mode: ExperimentMode | None = None,
     ) -> "SamplingConfig":
         if not entries:
             return self
-        updated_params = self.parameters.set_resolved_lora_sweep_values(entries, mode=mode)
+        updated_params = self.parameters.set_resolved_lora_experiment_values(entries, mode=mode)
         return self.model_copy(update={"parameters": updated_params, "lora_paths": file_paths})
 
     def with_resolved_lora_paths(self, paths: list[str]) -> "SamplingConfig":
         if not paths:
             return self
-        return self.with_resolved_lora_sweep(
+        return self.with_resolved_lora_experiment(
             [LoraEntry(path=path, trigger="") for path in paths],
             paths,
         )

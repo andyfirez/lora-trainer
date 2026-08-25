@@ -10,10 +10,10 @@ from src.sampler.config import (
     LEGACY_FLAT_SAMPLING_KEYS,
     SamplingConfig,
 )
-from src.sampler.sweep.models import (
-    SweepMode,
-    SweepParameter,
-    SweepParameters,
+from src.sampler.experiment.models import (
+    ExperimentMode,
+    ExperimentParameter,
+    ExperimentParameters,
     lora_entry_to_param_value,
     parse_lora_entry,
 )
@@ -104,13 +104,13 @@ def _has_parameters_block(data: dict[str, Any]) -> bool:
     return isinstance(parameters, dict) and bool(parameters)
 
 
-def _normalize_lora_path_parameter(params: SweepParameters) -> SweepParameters:
+def _normalize_lora_path_parameter(params: ExperimentParameters) -> ExperimentParameters:
     lora_param = params.lora_path
-    if lora_param.mode == SweepMode.VARY and lora_param.values:
+    if lora_param.mode == ExperimentMode.VARY and lora_param.values:
         return params.model_copy(
             update={
-                "lora_path": SweepParameter(
-                    mode=SweepMode.VARY,
+                "lora_path": ExperimentParameter(
+                    mode=ExperimentMode.VARY,
                     values=[lora_entry_to_param_value(parse_lora_entry(value)) for value in lora_param.values],
                 )
             }
@@ -118,8 +118,8 @@ def _normalize_lora_path_parameter(params: SweepParameters) -> SweepParameters:
     if lora_param.value is not None:
         return params.model_copy(
             update={
-                "lora_path": SweepParameter(
-                    mode=SweepMode.FIXED,
+                "lora_path": ExperimentParameter(
+                    mode=ExperimentMode.FIXED,
                     value=lora_entry_to_param_value(parse_lora_entry(lora_param.value)),
                 )
             }
@@ -127,24 +127,24 @@ def _normalize_lora_path_parameter(params: SweepParameters) -> SweepParameters:
     return params
 
 
-def _migrate_legacy_into_parameters(data: dict[str, Any], params: SweepParameters) -> SweepParameters:
+def _migrate_legacy_into_parameters(data: dict[str, Any], params: ExperimentParameters) -> ExperimentParameters:
     migrated = params
     prompts = data.get("sample_prompts") or []
     if isinstance(prompts, list) and prompts:
         if len(prompts) > 1:
             migrated = migrated.model_copy(
-                update={"prompt": SweepParameter(mode=SweepMode.VARY, values=list(prompts))}
+                update={"prompt": ExperimentParameter(mode=ExperimentMode.VARY, values=list(prompts))}
             )
         else:
             migrated = migrated.model_copy(
-                update={"prompt": SweepParameter(mode=SweepMode.FIXED, value=prompts[0])}
+                update={"prompt": ExperimentParameter(mode=ExperimentMode.FIXED, value=prompts[0])}
             )
 
     for legacy_key, param_key in _LEGACY_TO_PARAM.items():
         if legacy_key not in data:
             continue
         migrated = migrated.model_copy(
-            update={param_key: SweepParameter(mode=SweepMode.FIXED, value=data[legacy_key])}
+            update={param_key: ExperimentParameter(mode=ExperimentMode.FIXED, value=data[legacy_key])}
         )
 
     lora_paths = data.get("lora_paths")
@@ -152,17 +152,17 @@ def _migrate_legacy_into_parameters(data: dict[str, Any], params: SweepParameter
         entries = [lora_entry_to_param_value(parse_lora_entry(path)) for path in lora_paths]
         if len(entries) == 1:
             migrated = migrated.model_copy(
-                update={"lora_path": SweepParameter(mode=SweepMode.FIXED, value=entries[0])}
+                update={"lora_path": ExperimentParameter(mode=ExperimentMode.FIXED, value=entries[0])}
             )
         else:
             migrated = migrated.model_copy(
-                update={"lora_path": SweepParameter(mode=SweepMode.VARY, values=entries)}
+                update={"lora_path": ExperimentParameter(mode=ExperimentMode.VARY, values=entries)}
             )
 
     return _normalize_lora_path_parameter(migrated)
 
 
-def _lora_paths_from_parameters(params: SweepParameters) -> list[str]:
+def _lora_paths_from_parameters(params: ExperimentParameters) -> list[str]:
     paths: list[str] = []
     seen: set[str] = set()
     for value in params.lora_path.effective_values():
@@ -183,10 +183,10 @@ def _migrate_sampling_yaml_raw(data: dict[str, Any]) -> dict[str, Any]:
         migrated.pop(key, None)
 
     if _has_parameters_block(migrated):
-        params = SweepParameters.model_validate(migrated["parameters"])
+        params = ExperimentParameters.model_validate(migrated["parameters"])
         params = _normalize_lora_path_parameter(params)
     else:
-        params = _migrate_legacy_into_parameters(migrated, SweepParameters())
+        params = _migrate_legacy_into_parameters(migrated, ExperimentParameters())
 
     for key in LEGACY_FLAT_SAMPLING_KEYS:
         migrated.pop(key, None)

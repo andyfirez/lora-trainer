@@ -1,6 +1,6 @@
 """Tests for sweep pipeline group ordering."""
 
-from src.sampler.sweep.engine import sort_pipeline_groups
+from src.sampler.experiment.engine import sort_pipeline_groups
 
 
 def test_sort_pipeline_groups_batches_by_base_model_first() -> None:

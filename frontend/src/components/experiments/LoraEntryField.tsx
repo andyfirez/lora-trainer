@@ -3,23 +3,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { CircleSlash, Plus, X } from "lucide-react";
 import PathInput from "@/components/PathInput";
-import ModeToggle from "@/components/sweep/ModeToggle";
+import ModeToggle from "@/components/experiments/ModeToggle";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
-import type { LoraEntry, SweepMode, SweepParameter } from "@/lib/sweepUtils";
+import type { LoraEntry, ExperimentMode, ExperimentParameter } from "@/lib/experimentUtils";
 import { cn } from "@/lib/cn";
 import {
   emptyLoraEntry,
   normalizeLoraEntry,
   parseLoraEntries,
   parseLoraEntry,
-} from "@/lib/sweepUtils";
+} from "@/lib/experimentUtils";
 
 interface LoraEntryFieldProps {
   label: string;
-  param: SweepParameter;
-  onChange: (param: SweepParameter) => void;
+  param: ExperimentParameter;
+  onChange: (param: ExperimentParameter) => void;
   allowVary?: boolean;
-  variant?: "sweep" | "stack";
+  variant?: "experiment" | "stack";
 }
 
 export default function LoraEntryField({
@@ -27,7 +27,7 @@ export default function LoraEntryField({
   param,
   onChange,
   allowVary = true,
-  variant = "sweep",
+  variant = "experiment",
 }: LoraEntryFieldProps) {
   if (variant === "stack") {
     return <LoraStackField label={label} param={param} onChange={onChange} />;
@@ -35,7 +35,7 @@ export default function LoraEntryField({
 
   const mode = allowVary ? (param.mode ?? "fixed") : "fixed";
 
-  function setMode(next: SweepMode) {
+  function setMode(next: ExperimentMode) {
     if (next === "vary") {
       const existing = param.values?.length
         ? param.values.map((v) => normalizeLoraEntry(parseLoraEntry(v)))
@@ -122,8 +122,8 @@ function LoraStackField({
   onChange,
 }: {
   label: string;
-  param: SweepParameter;
-  onChange: (param: SweepParameter) => void;
+  param: ExperimentParameter;
+  onChange: (param: ExperimentParameter) => void;
 }) {
   const rowsFromParam = useMemo(
     () =>

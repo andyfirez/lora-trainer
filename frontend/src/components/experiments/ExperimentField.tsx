@@ -1,17 +1,17 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import ModeToggle from "@/components/sweep/ModeToggle";
+import ModeToggle from "@/components/experiments/ModeToggle";
 import AutoGrowTextarea from "@/components/ui/AutoGrowTextarea";
 import { inputClassName, labelClassName } from "@/components/ui/Input";
 import { selectClassName } from "@/components/ui/Select";
 import type { SelectOption } from "@/lib/sampleSamplerOptions";
-import type { SweepMode, SweepParameter } from "@/lib/sweepUtils";
+import type { ExperimentMode, ExperimentParameter } from "@/lib/experimentUtils";
 
-interface SweepFieldProps {
+interface ExperimentFieldProps {
   label: string;
-  param: SweepParameter;
-  onChange: (param: SweepParameter) => void;
+  param: ExperimentParameter;
+  onChange: (param: ExperimentParameter) => void;
   type?: "text" | "number" | "select";
   placeholder?: string;
   multiline?: boolean;
@@ -22,7 +22,7 @@ interface SweepFieldProps {
 const numberInputClass = `${inputClassName} max-w-[10rem]`;
 const selectInputClass = `${selectClassName} max-w-[14rem]`;
 
-export default function SweepField({
+export default function ExperimentField({
   label,
   param,
   onChange,
@@ -31,7 +31,7 @@ export default function SweepField({
   multiline = false,
   selectOptions = [],
   allowVary = true,
-}: SweepFieldProps) {
+}: ExperimentFieldProps) {
   const mode = allowVary ? (param.mode ?? "fixed") : "fixed";
   const defaultSelectValue = selectOptions[0]?.value ?? "";
 
@@ -48,7 +48,7 @@ export default function SweepField({
     );
   }
 
-  function setMode(next: SweepMode) {
+  function setMode(next: ExperimentMode) {
     if (next === "vary") {
       onChange({
         mode: "vary",

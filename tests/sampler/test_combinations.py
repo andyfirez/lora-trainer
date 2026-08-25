@@ -1,17 +1,17 @@
 """Tests for sweep combination builder."""
 
-from src.sampler.sweep.combinations import build_combinations, count_combinations
-from src.sampler.sweep.models import SweepMode, SweepParameter, SweepParameters
+from src.sampler.experiment.combinations import build_combinations, count_combinations
+from src.sampler.experiment.models import ExperimentMode, ExperimentParameter, ExperimentParameters
 
 
-def _params(**kwargs: SweepParameter) -> SweepParameters:
-    base = SweepParameters()
+def _params(**kwargs: ExperimentParameter) -> ExperimentParameters:
+    base = ExperimentParameters()
     return base.model_copy(update=kwargs)
 
 
 def test_single_fixed_prompt() -> None:
     params = _params(
-        prompt=SweepParameter(mode=SweepMode.FIXED, value="hello"),
+        prompt=ExperimentParameter(mode=ExperimentMode.FIXED, value="hello"),
     )
     combos = build_combinations(params)
     assert len(combos) == 1
@@ -22,8 +22,8 @@ def test_single_fixed_prompt() -> None:
 
 def test_vary_prompt_and_weight() -> None:
     params = _params(
-        prompt=SweepParameter(mode=SweepMode.VARY, values=["a", "b"]),
-        lora_weight=SweepParameter(mode=SweepMode.VARY, values=[0.5, 1.0]),
+        prompt=ExperimentParameter(mode=ExperimentMode.VARY, values=["a", "b"]),
+        lora_weight=ExperimentParameter(mode=ExperimentMode.VARY, values=[0.5, 1.0]),
     )
     assert count_combinations(params) == 4
     combos = build_combinations(params)
@@ -33,9 +33,9 @@ def test_vary_prompt_and_weight() -> None:
 def test_vary_lora_path_dedupes_multiple_empty(tmp_path) -> None:
     lora_path = tmp_path / "demo.safetensors"
     params = _params(
-        prompt=SweepParameter(mode=SweepMode.FIXED, value="hello"),
-        lora_path=SweepParameter(
-            mode=SweepMode.VARY,
+        prompt=ExperimentParameter(mode=ExperimentMode.FIXED, value="hello"),
+        lora_path=ExperimentParameter(
+            mode=ExperimentMode.VARY,
             values=[
                 {"path": "", "trigger": ""},
                 {"path": None, "trigger": ""},
@@ -53,9 +53,9 @@ def test_vary_lora_path_pairs_triggers(tmp_path) -> None:
     lora_a = tmp_path / "a.safetensors"
     lora_b = tmp_path / "b.safetensors"
     params = _params(
-        prompt=SweepParameter(mode=SweepMode.FIXED, value="portrait"),
-        lora_path=SweepParameter(
-            mode=SweepMode.VARY,
+        prompt=ExperimentParameter(mode=ExperimentMode.FIXED, value="portrait"),
+        lora_path=ExperimentParameter(
+            mode=ExperimentMode.VARY,
             values=[
                 {"path": str(lora_a), "trigger": "ohwx"},
                 {"path": str(lora_b), "trigger": "sks"},
@@ -70,7 +70,7 @@ def test_vary_lora_path_pairs_triggers(tmp_path) -> None:
 
 
 def test_empty_prompt_returns_no_combinations() -> None:
-    params = _params(prompt=SweepParameter(mode=SweepMode.FIXED, value=""))
+    params = _params(prompt=ExperimentParameter(mode=ExperimentMode.FIXED, value=""))
     assert build_combinations(params) == []
 
 
@@ -78,9 +78,9 @@ def test_fixed_lora_stack_is_one_combo(tmp_path) -> None:
     lora_a = tmp_path / "a.safetensors"
     lora_b = tmp_path / "b.safetensors"
     params = _params(
-        prompt=SweepParameter(mode=SweepMode.FIXED, value="hello"),
-        lora_path=SweepParameter(
-            mode=SweepMode.FIXED,
+        prompt=ExperimentParameter(mode=ExperimentMode.FIXED, value="hello"),
+        lora_path=ExperimentParameter(
+            mode=ExperimentMode.FIXED,
             value=[
                 {"path": str(lora_a), "trigger": "ohwx", "weight": 0.8},
                 {"path": str(lora_b), "trigger": "sks", "weight": 0.4},
@@ -101,9 +101,9 @@ def test_fixed_lora_stack_skips_bypassed_entries(tmp_path) -> None:
     lora_a = tmp_path / "a.safetensors"
     lora_b = tmp_path / "b.safetensors"
     params = _params(
-        prompt=SweepParameter(mode=SweepMode.FIXED, value="hello"),
-        lora_path=SweepParameter(
-            mode=SweepMode.FIXED,
+        prompt=ExperimentParameter(mode=ExperimentMode.FIXED, value="hello"),
+        lora_path=ExperimentParameter(
+            mode=ExperimentMode.FIXED,
             value=[
                 {"path": str(lora_a), "trigger": "ohwx", "weight": 0.8, "bypassed": True},
                 {"path": str(lora_b), "trigger": "sks", "weight": 0.4},
@@ -118,12 +118,12 @@ def test_fixed_lora_stack_skips_bypassed_entries(tmp_path) -> None:
 
 
 def test_combinations_with_varying_base_model() -> None:
-    params = SweepParameters(
-        base_model_name=SweepParameter(
-            mode=SweepMode.VARY,
+    params = ExperimentParameters(
+        base_model_name=ExperimentParameter(
+            mode=ExperimentMode.VARY,
             values=["modelA", "modelB"],
         ),
-        prompt=SweepParameter(mode=SweepMode.FIXED, value="hello"),
+        prompt=ExperimentParameter(mode=ExperimentMode.FIXED, value="hello"),
     )
     combos = build_combinations(params)
     assert len(combos) == 2

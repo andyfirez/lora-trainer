@@ -1,15 +1,15 @@
 "use client";
 
 import PathInput from "@/components/PathInput";
-import LoraEntryField from "@/components/sweep/LoraEntryField";
+import LoraEntryField from "@/components/experiments/LoraEntryField";
 import FormSection from "@/components/ui/FormSection";
 import {
-  SWEEP_PARAM_LABELS,
-  defaultSweepParameter,
+  EXPERIMENT_PARAM_LABELS,
+  defaultExperimentParameter,
   getParameters,
   setParameter,
   syncLoraPathsToParameters,
-} from "@/lib/sweepUtils";
+} from "@/lib/experimentUtils";
 
 type Config = Record<string, unknown>;
 
@@ -22,7 +22,7 @@ interface SamplingSourceSectionProps {
 
 function loraPathParam(config: Config) {
   const parameters = getParameters(config);
-  return parameters.lora_path ?? defaultSweepParameter("string");
+  return parameters.lora_path ?? defaultExperimentParameter("string");
 }
 
 export default function SamplingSourceSection({
@@ -42,7 +42,7 @@ export default function SamplingSourceSection({
   return (
     <FormSection title="Source">
       <LoraEntryField
-        label={SWEEP_PARAM_LABELS.lora_path}
+        label={EXPERIMENT_PARAM_LABELS.lora_path}
         param={loraPathParam(config)}
         onChange={updateLoraPathParam}
         allowVary={allowVary}
@@ -54,7 +54,7 @@ export default function SamplingSourceSection({
             checked={(config.include_base_model_sample as boolean) ?? false}
             onChange={(e) => set("include_base_model_sample", e.target.checked)}
           />
-          Include base model (no LoRA) in sweep
+          Include base model (no LoRA) in experiment
         </label>
       ) : null}
       <PathInput

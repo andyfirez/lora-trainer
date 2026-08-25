@@ -1,7 +1,7 @@
 "use client";
 
-import SweepPage from "@/components/sweep/SweepPage";
+import ExperimentsPage from "@/components/experiments/ExperimentsPage";
 
-export default function SweepRoutePage() {
-  return <SweepPage />;
+export default function ExperimentsRoutePage() {
+  return <ExperimentsPage />;
 }

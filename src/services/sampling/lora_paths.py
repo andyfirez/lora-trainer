@@ -5,11 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.sampler.config import SamplingConfig
-from src.sampler.output_paths import resolve_sampling_output_path
-from src.sampler.sweep.models import (
+from src.sampler.experiment.models import (
+    ExperimentMode,
+    ExperimentParameter,
     LoraEntry,
-    SweepMode,
-    SweepParameter,
     dedupe_lora_entries,
     is_lora_entry_list,
     lora_entry_path,
@@ -17,6 +16,7 @@ from src.sampler.sweep.models import (
     parse_lora_entries,
     parse_lora_entry,
 )
+from src.sampler.output_paths import resolve_sampling_output_path
 from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
@@ -24,9 +24,9 @@ from src.services.sampling.exceptions import (
 from src.storage.config_paths import resolve_config_lora_file
 
 
-def lora_path_sweep_values(param: SweepParameter) -> list[LoraEntry]:
+def lora_path_experiment_values(param: ExperimentParameter) -> list[LoraEntry]:
     """Explicit sweep LoRA entries including empty paths."""
-    if param.mode == SweepMode.VARY and param.values:
+    if param.mode == ExperimentMode.VARY and param.values:
         entries = [parse_lora_entry(value) for value in param.values]
         return dedupe_lora_entries(entries)
     if param.value is not None:
@@ -61,7 +61,7 @@ def resolve_lora_paths_from_sampling_config(sampling_config: SamplingConfig) -> 
     for path in sampling_config.lora_paths:
         add(path)
 
-    for entry in lora_path_sweep_values(sampling_config.parameters.lora_path):
+    for entry in lora_path_experiment_values(sampling_config.parameters.lora_path):
         if entry.bypassed:
             continue
         add(lora_entry_path(entry))
@@ -103,8 +103,8 @@ def prepare_sampling_config_lora_paths(
 ) -> tuple[SamplingConfig, list[str]]:
     """Merge entity-level and config-level LoRA paths; preserve triggers and empty entries."""
     original = sampling_config.parameters.lora_path
-    keep_stack = original.mode == SweepMode.FIXED and is_lora_entry_list(original.value)
-    explicit = lora_path_sweep_values(original)
+    keep_stack = original.mode == ExperimentMode.FIXED and is_lora_entry_list(original.value)
+    explicit = lora_path_experiment_values(original)
     extra_file_paths: list[str] = []
     seen: set[str] = set()
     for candidate in (entity_lora_paths or []) + resolve_lora_paths_from_sampling_config(sampling_config):
@@ -131,10 +131,10 @@ def prepare_sampling_config_lora_paths(
 
     if keep_stack:
         return (
-            sampling_config.with_resolved_lora_sweep(sweep_entries, file_paths, mode=SweepMode.FIXED),
+            sampling_config.with_resolved_lora_experiment(sweep_entries, file_paths, mode=ExperimentMode.FIXED),
             file_paths,
         )
-    return sampling_config.with_resolved_lora_sweep(sweep_entries, file_paths), file_paths
+    return sampling_config.with_resolved_lora_experiment(sweep_entries, file_paths), file_paths
 
 
 def resolve_sampling_output_dir(sampling_config: SamplingConfig, sampling_id: int) -> Path:

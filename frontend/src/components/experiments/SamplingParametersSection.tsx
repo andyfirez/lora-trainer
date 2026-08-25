@@ -1,19 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import ParamGroup from "@/components/sweep/ParamGroup";
-import SweepField from "@/components/sweep/SweepField";
+import ParamGroup from "@/components/experiments/ParamGroup";
+import ExperimentField from "@/components/experiments/ExperimentField";
 import { InheritedCheckboxField, InheritedSelectField } from "@/components/ui/InheritedGpuField";
 import FormSection, { formSectionClass, formSectionTitleClass } from "@/components/ui/FormSection";
 import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
 import { labelClassName } from "@/components/ui/Input";
 import {
-  SWEEP_PARAM_LABELS,
-  type SweepParamKey,
-  defaultSweepParameter,
+  EXPERIMENT_PARAM_LABELS,
+  type ExperimentParamKey,
+  defaultExperimentParameter,
   getParameters,
   setParameter,
-} from "@/lib/sweepUtils";
+} from "@/lib/experimentUtils";
 import type { GpuDefaultsInfo } from "@/lib/api/settings";
 import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
 import { useBaseModelOptions } from "@/hooks/useBaseModelOptions";
@@ -29,11 +29,11 @@ interface SamplingParametersSectionProps {
   hideSeed?: boolean;
 }
 
-function param(config: Config, key: SweepParamKey) {
+function param(config: Config, key: ExperimentParamKey) {
   const parameters = getParameters(config);
   return (
     parameters[key] ??
-    defaultSweepParameter(
+    defaultExperimentParameter(
       key === "steps" ||
         key === "cfg_scale" ||
         key === "lora_weight" ||
@@ -75,7 +75,7 @@ export default function SamplingParametersSection({
     onChange(next);
   }
 
-  function updateParam(key: SweepParamKey, value: ReturnType<typeof param>) {
+  function updateParam(key: ExperimentParamKey, value: ReturnType<typeof param>) {
     onChange(setParameter(config, key, value));
   }
 
@@ -83,8 +83,8 @@ export default function SamplingParametersSection({
     <>
       <FormSection title="Parameters">
         <div className="space-y-6">
-          <SweepField
-            label={SWEEP_PARAM_LABELS.base_model_name}
+          <ExperimentField
+            label={EXPERIMENT_PARAM_LABELS.base_model_name}
             param={baseModelParam}
             onChange={(p) => updateParam("base_model_name", p)}
             type="select"
@@ -98,16 +98,16 @@ export default function SamplingParametersSection({
 
           {hidePrompts ? null : (
             <ParamGroup title="Prompts">
-              <SweepField
-                label={SWEEP_PARAM_LABELS.prompt}
+              <ExperimentField
+                label={EXPERIMENT_PARAM_LABELS.prompt}
                 param={param(config, "prompt")}
                 onChange={(p) => updateParam("prompt", p)}
                 multiline
                 placeholder="Prompt text"
                 allowVary={allowVary}
               />
-              <SweepField
-                label={SWEEP_PARAM_LABELS.negative_prompt}
+              <ExperimentField
+                label={EXPERIMENT_PARAM_LABELS.negative_prompt}
                 param={param(config, "negative_prompt")}
                 onChange={(p) => updateParam("negative_prompt", p)}
                 placeholder="low quality, blurry"
@@ -117,8 +117,8 @@ export default function SamplingParametersSection({
           )}
 
           <ParamGroup title="LoRA">
-            <SweepField
-              label={SWEEP_PARAM_LABELS.lora_weight}
+            <ExperimentField
+              label={EXPERIMENT_PARAM_LABELS.lora_weight}
               param={param(config, "lora_weight")}
               onChange={(p) => updateParam("lora_weight", p)}
               type="number"
@@ -127,31 +127,31 @@ export default function SamplingParametersSection({
           </ParamGroup>
 
           <ParamGroup title="Sampler">
-            <SweepField
-              label={SWEEP_PARAM_LABELS.steps}
+            <ExperimentField
+              label={EXPERIMENT_PARAM_LABELS.steps}
               param={param(config, "steps")}
               onChange={(p) => updateParam("steps", p)}
               type="number"
               allowVary={allowVary}
             />
-            <SweepField
-              label={SWEEP_PARAM_LABELS.cfg_scale}
+            <ExperimentField
+              label={EXPERIMENT_PARAM_LABELS.cfg_scale}
               param={param(config, "cfg_scale")}
               onChange={(p) => updateParam("cfg_scale", p)}
               type="number"
               allowVary={allowVary}
             />
             {hideSeed ? null : (
-              <SweepField
-                label={SWEEP_PARAM_LABELS.seed}
+              <ExperimentField
+                label={EXPERIMENT_PARAM_LABELS.seed}
                 param={param(config, "seed")}
                 onChange={(p) => updateParam("seed", p)}
                 type="number"
                 allowVary={allowVary}
               />
             )}
-            <SweepField
-              label={SWEEP_PARAM_LABELS.scheduler}
+            <ExperimentField
+              label={EXPERIMENT_PARAM_LABELS.scheduler}
               param={param(config, "scheduler")}
               onChange={(p) => updateParam("scheduler", p)}
               type="select"
@@ -161,15 +161,15 @@ export default function SamplingParametersSection({
           </ParamGroup>
 
           <ParamGroup title="Resolution">
-            <SweepField
-              label={SWEEP_PARAM_LABELS.width}
+            <ExperimentField
+              label={EXPERIMENT_PARAM_LABELS.width}
               param={param(config, "width")}
               onChange={(p) => updateParam("width", p)}
               type="number"
               allowVary={allowVary}
             />
-            <SweepField
-              label={SWEEP_PARAM_LABELS.height}
+            <ExperimentField
+              label={EXPERIMENT_PARAM_LABELS.height}
               param={param(config, "height")}
               onChange={(p) => updateParam("height", p)}
               type="number"

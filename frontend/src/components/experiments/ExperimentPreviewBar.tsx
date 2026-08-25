@@ -1,14 +1,14 @@
 "use client";
 
-import { countCombinations, getParameters, planGrids } from "@/lib/sweepUtils";
+import { countCombinations, getParameters, planGrids } from "@/lib/experimentUtils";
 
 type Config = Record<string, unknown>;
 
-interface SweepPreviewBarProps {
+interface ExperimentPreviewBarProps {
   config: Config;
 }
 
-export default function SweepPreviewBar({ config }: SweepPreviewBarProps) {
+export default function ExperimentPreviewBar({ config }: ExperimentPreviewBarProps) {
   const parameters = getParameters(config);
   const total = countCombinations(parameters);
   const grid = (config.grid as { x_axis?: string | null; y_axis?: string | null }) ?? {};

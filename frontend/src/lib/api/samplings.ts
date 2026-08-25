@@ -1,20 +1,31 @@
 import { api, BASE_URL } from "@/lib/api/client";
 import { createRunnableApi } from "@/lib/api/runnableApi";
-import type { CreateSamplingRequest, SamplingResponse, SweepManifestResponse } from "@/types";
+import type { CreateSamplingRequest, ExperimentManifestResponse, SamplingResponse } from "@/types";
 
 const runnableApi = createRunnableApi<SamplingResponse>("/samplings");
 
 export const samplingsApi = {
   ...runnableApi,
+  listExperiments: () => api.get<SamplingResponse[]>("/samplings/?kind=experiment"),
   create: (body: CreateSamplingRequest) => api.post<SamplingResponse>("/samplings/", body),
-  getSweepManifest: (id: number) => api.get<SweepManifestResponse | null>(`/samplings/${id}/sweep-manifest`),
+  getExperimentManifest: (id: number) =>
+    api.get<ExperimentManifestResponse | null>(`/samplings/${id}/experiment-manifest`),
   livePreviewUrl: (id: number, cacheBust: number) =>
     `${BASE_URL}/samplings/${id}/live-preview?t=${cacheBust}`,
-  generate: async (config: Record<string, unknown>, loraPaths?: string[]) => {
+  generate: async (
+    config: Record<string, unknown>,
+    loraPaths?: string[],
+    options: { kind?: CreateSamplingRequest["kind"]; name?: string; composeGrids?: boolean } = {},
+  ) => {
+    const withFlags = {
+      ...config,
+      compose_grids: options.composeGrids ?? config.compose_grids ?? false,
+    };
     const created = await api.post<SamplingResponse>("/samplings/", {
-      name: "Playground",
-      config,
+      name: options.name ?? "Playground",
+      config: withFlags,
       lora_paths: loraPaths,
+      kind: options.kind ?? "playground",
     } satisfies CreateSamplingRequest);
     return runnableApi.enqueue(created.id);
   },

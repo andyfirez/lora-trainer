@@ -10,7 +10,7 @@ import { formSectionTitleClass } from "@/components/ui/FormSection";
 import type { GpuDefaultsInfo } from "@/lib/api/settings";
 import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
 import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
-import { getParameters, setParameter } from "@/lib/sweepUtils";
+import { getParameters, setParameter } from "@/lib/experimentUtils";
 
 const DEFAULT_WIDTH = 832;
 const DEFAULT_HEIGHT = 1216;

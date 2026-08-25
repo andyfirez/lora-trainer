@@ -23,7 +23,7 @@ import {
   seedFromParams,
   validatePlaygroundConfig,
 } from "@/lib/playgroundState";
-import { syncLoraPathsToParameters } from "@/lib/sweepUtils";
+import { syncLoraPathsToParameters } from "@/lib/experimentUtils";
 import type { RunnableSample } from "@/types";
 
 function sampleEntry(samplingId: number, sample: RunnableSample): GalleryEntry {

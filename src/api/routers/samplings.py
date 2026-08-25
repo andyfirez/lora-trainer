@@ -8,8 +8,8 @@ from fastapi.responses import FileResponse
 from src.api.dependencies import SamplingServiceDep
 from src.api.routers.runnable import RunnableRouterHooks, build_runnable_router
 from src.api.schemas.samplings import CreateSamplingRequest, SamplingResponse
-from src.db.tables.sampling import Sampling
-from src.sampler.sweep.manifest import SweepManifest
+from src.db.tables.sampling import Sampling, SamplingKind
+from src.sampler.experiment.manifest import ExperimentManifest
 from src.services.sampling.service import SamplingService
 
 
@@ -31,9 +31,13 @@ router = build_runnable_router(
     create_cls=CreateSamplingRequest,
     hooks=RunnableRouterHooks(
         list_entities=lambda service: service.list_samplings(),
+        list_entities_for_kind=lambda service, kind: service.list_samplings(kind=SamplingKind(kind)),
         get_entity=lambda service, entity_id: service.get_sampling(entity_id),
         create_entity=lambda service, body: service.create_sampling(
-            name=body.name, config=body.config, lora_paths=body.lora_paths
+            name=body.name,
+            config=body.config,
+            lora_paths=body.lora_paths,
+            kind=body.kind,
         ),
         enqueue_entity=lambda service, entity_id: service.enqueue_sampling(entity_id),
         cancel_entity=lambda service, entity_id: service.cancel_sampling(entity_id),
@@ -46,10 +50,10 @@ router = build_runnable_router(
 )
 
 
-@router.get("/{entity_id}/sweep-manifest", response_model=Optional[SweepManifest])
-async def get_sweep_manifest(entity_id: int, service: SamplingServiceDep) -> SweepManifest | None:
+@router.get("/{entity_id}/experiment-manifest", response_model=Optional[ExperimentManifest])
+async def get_experiment_manifest(entity_id: int, service: SamplingServiceDep) -> ExperimentManifest | None:
     sampling = await service.get_sampling(entity_id)
-    return service.get_sweep_manifest(sampling)
+    return service.get_experiment_manifest(sampling)
 
 
 @router.get("/{entity_id}/live-preview", operation_id="get_samplings_live_preview")

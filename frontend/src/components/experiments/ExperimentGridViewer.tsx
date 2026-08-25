@@ -5,18 +5,18 @@ import useSWR from "swr";
 import { samplingsApi } from "@/lib/api/samplings";
 import { mediaUrl } from "@/lib/media";
 
-interface SweepGridViewerProps {
+interface ExperimentGridViewerProps {
   samplingId: number;
   status: string;
 }
 
-export default function SweepGridViewer({ samplingId, status }: SweepGridViewerProps) {
+export default function ExperimentGridViewer({ samplingId, status }: ExperimentGridViewerProps) {
   const [gridIndex, setGridIndex] = useState(0);
   const [selectedCell, setSelectedCell] = useState<number | null>(null);
 
   const { data: manifest } = useSWR(
-    status === "completed" ? `/samplings/${samplingId}/sweep-manifest` : null,
-    () => samplingsApi.getSweepManifest(samplingId),
+    status === "completed" ? `/samplings/${samplingId}/experiment-manifest` : null,
+    () => samplingsApi.getExperimentManifest(samplingId),
   );
 
   if (!manifest?.grids.length && !manifest?.images.length) {

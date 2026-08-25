@@ -1,4 +1,4 @@
-export type SweepMode = "fixed" | "vary";
+export type ExperimentMode = "fixed" | "vary";
 
 export interface LoraEntry {
   path?: string | null;
@@ -7,24 +7,24 @@ export interface LoraEntry {
   bypassed?: boolean;
 }
 
-export interface SweepParameter {
-  mode: SweepMode;
+export interface ExperimentParameter {
+  mode: ExperimentMode;
   value?: unknown;
   values?: unknown[];
 }
 
-export interface SweepParameters {
-  base_model_name?: SweepParameter;
-  lora_path?: SweepParameter;
-  lora_weight?: SweepParameter;
-  prompt?: SweepParameter;
-  negative_prompt?: SweepParameter;
-  steps?: SweepParameter;
-  cfg_scale?: SweepParameter;
-  width?: SweepParameter;
-  height?: SweepParameter;
-  scheduler?: SweepParameter;
-  seed?: SweepParameter;
+export interface ExperimentParameters {
+  base_model_name?: ExperimentParameter;
+  lora_path?: ExperimentParameter;
+  lora_weight?: ExperimentParameter;
+  prompt?: ExperimentParameter;
+  negative_prompt?: ExperimentParameter;
+  steps?: ExperimentParameter;
+  cfg_scale?: ExperimentParameter;
+  width?: ExperimentParameter;
+  height?: ExperimentParameter;
+  scheduler?: ExperimentParameter;
+  seed?: ExperimentParameter;
 }
 
 export interface GridLayout {
@@ -32,7 +32,7 @@ export interface GridLayout {
   y_axis?: string | null;
 }
 
-export const SWEEP_PARAM_ORDER = [
+export const EXPERIMENT_PARAM_ORDER = [
   "lora_path",
   "lora_weight",
   "prompt",
@@ -46,9 +46,9 @@ export const SWEEP_PARAM_ORDER = [
   "scheduler",
 ] as const;
 
-export type SweepParamKey = (typeof SWEEP_PARAM_ORDER)[number];
+export type ExperimentParamKey = (typeof EXPERIMENT_PARAM_ORDER)[number];
 
-export const SWEEP_PARAM_LABELS: Record<SweepParamKey, string> = {
+export const EXPERIMENT_PARAM_LABELS: Record<ExperimentParamKey, string> = {
   base_model_name: "Base Model",
   lora_path: "LoRA Path",
   lora_weight: "LoRA Weight",
@@ -62,16 +62,16 @@ export const SWEEP_PARAM_LABELS: Record<SweepParamKey, string> = {
   seed: "Seed",
 };
 
-function effectiveValues(param: SweepParameter | undefined): unknown[] {
+function effectiveValues(param: ExperimentParameter | undefined): unknown[] {
   if (!param) return [];
   if (param.mode === "vary" && param.values?.length) return param.values;
   if (param.value !== undefined && param.value !== null && param.value !== "") return [param.value];
   return [];
 }
 
-export function getParameters(config: Record<string, unknown>): SweepParameters {
+export function getParameters(config: Record<string, unknown>): ExperimentParameters {
   const raw = config.parameters;
-  if (raw && typeof raw === "object") return raw as SweepParameters;
+  if (raw && typeof raw === "object") return raw as ExperimentParameters;
   return {};
 }
 
@@ -145,7 +145,7 @@ function dedupeLoraEntries(entries: LoraEntry[]): LoraEntry[] {
   return result;
 }
 
-export function loraEntriesFromParameter(param: SweepParameter | undefined): LoraEntry[] {
+export function loraEntriesFromParameter(param: ExperimentParameter | undefined): LoraEntry[] {
   if (!param) return [emptyLoraEntry()];
   if (param.mode === "vary" && param.values?.length) {
     return dedupeLoraEntries(param.values.map((v) => parseLoraEntry(v)));
@@ -156,7 +156,7 @@ export function loraEntriesFromParameter(param: SweepParameter | undefined): Lor
   return [emptyLoraEntry()];
 }
 
-export function loraParameterFromStack(entries: LoraEntry[]): SweepParameter {
+export function loraParameterFromStack(entries: LoraEntry[]): ExperimentParameter {
   const withPath = entries.map(normalizeLoraEntry).filter((entry) => loraEntryPath(entry));
   if (withPath.length === 0) {
     return { mode: "fixed", value: emptyLoraEntry() };
@@ -167,7 +167,7 @@ export function loraParameterFromStack(entries: LoraEntry[]): SweepParameter {
   return { mode: "fixed", value: withPath };
 }
 
-function effectiveValuesForKey(parameters: SweepParameters, key: SweepParamKey): unknown[] {
+function effectiveValuesForKey(parameters: ExperimentParameters, key: ExperimentParamKey): unknown[] {
   const param = parameters[key];
   if (!param) return [];
   if (param.mode === "vary" && param.values?.length) {
@@ -186,7 +186,7 @@ function effectiveValuesForKey(parameters: SweepParameters, key: SweepParamKey):
   return effectiveValues(param);
 }
 
-export function loraPathsFromParameter(param: SweepParameter | undefined): string[] {
+export function loraPathsFromParameter(param: ExperimentParameter | undefined): string[] {
   return loraEntriesFromParameter(param)
     .filter((entry) => !entry.bypassed)
     .map((entry) => loraEntryPath(entry))
@@ -199,14 +199,14 @@ export function syncLoraPathsToParameters(config: Record<string, unknown>): Reco
   return { ...config, parameters, lora_paths: loraPaths };
 }
 
-export function varyKeysWithValues(parameters: SweepParameters): SweepParamKey[] {
-  return SWEEP_PARAM_ORDER.filter((key) => {
+export function varyKeysWithValues(parameters: ExperimentParameters): ExperimentParamKey[] {
+  return EXPERIMENT_PARAM_ORDER.filter((key) => {
     const param = parameters[key];
     return param?.mode === "vary" && (param.values?.length ?? 0) > 0;
   });
 }
 
-export function countCombinations(parameters: SweepParameters): number {
+export function countCombinations(parameters: ExperimentParameters): number {
   const keys = varyKeysWithValues(parameters);
   if (!keys.length) {
     const prompts = effectiveValues(parameters.prompt);
@@ -225,7 +225,7 @@ export interface GridPlanPreview {
   sliceKeys: string[];
 }
 
-export function planGrids(parameters: SweepParameters, grid: GridLayout): GridPlanPreview {
+export function planGrids(parameters: ExperimentParameters, grid: GridLayout): GridPlanPreview {
   const varyKeys = varyKeysWithValues(parameters);
   if (varyKeys.length === 0) {
     const n = countCombinations(parameters);
@@ -235,13 +235,13 @@ export function planGrids(parameters: SweepParameters, grid: GridLayout): GridPl
     const n = effectiveValues(parameters[varyKeys[0]]).length;
     return { gridCount: 1, rows: n, cols: 1, sliceKeys: [] };
   }
-  const xAxis = grid.x_axis && varyKeys.includes(grid.x_axis as SweepParamKey) ? grid.x_axis : varyKeys[0];
+  const xAxis = grid.x_axis && varyKeys.includes(grid.x_axis as ExperimentParamKey) ? grid.x_axis : varyKeys[0];
   let yAxis =
-    grid.y_axis && varyKeys.includes(grid.y_axis as SweepParamKey) ? grid.y_axis : varyKeys[1];
+    grid.y_axis && varyKeys.includes(grid.y_axis as ExperimentParamKey) ? grid.y_axis : varyKeys[1];
   if (xAxis === yAxis) yAxis = varyKeys.find((k) => k !== xAxis) ?? yAxis;
   const sliceKeys = varyKeys.filter((k) => k !== xAxis && k !== yAxis);
-  const cols = effectiveValues(parameters[xAxis as SweepParamKey]).length || 1;
-  const rows = effectiveValues(parameters[yAxis as SweepParamKey]).length || 1;
+  const cols = effectiveValues(parameters[xAxis as ExperimentParamKey]).length || 1;
+  const rows = effectiveValues(parameters[yAxis as ExperimentParamKey]).length || 1;
   let gridCount = 1;
   for (const key of sliceKeys) {
     gridCount *= effectiveValues(parameters[key]).length || 1;
@@ -249,33 +249,33 @@ export function planGrids(parameters: SweepParameters, grid: GridLayout): GridPl
   return { gridCount, rows, cols, sliceKeys };
 }
 
-export function hasVaryingParamsExceptPrompt(parameters: SweepParameters): boolean {
-  return SWEEP_PARAM_ORDER.some((key) => {
+export function hasVaryingParamsExceptPrompt(parameters: ExperimentParameters): boolean {
+  return EXPERIMENT_PARAM_ORDER.some((key) => {
     if (key === "prompt") return false;
     const param = parameters[key];
     return param?.mode === "vary" && (param.values?.length ?? 0) > 1;
   });
 }
 
-export function sweepSummary(parameters: SweepParameters): string {
+export function experimentSummary(parameters: ExperimentParameters): string {
   const parts: string[] = [];
-  for (const key of SWEEP_PARAM_ORDER) {
+  for (const key of EXPERIMENT_PARAM_ORDER) {
     const param = parameters[key];
     if (param?.mode === "vary" && (param.values?.length ?? 0) > 0) {
-      parts.push(`${SWEEP_PARAM_LABELS[key]} (${param.values!.length})`);
+      parts.push(`${EXPERIMENT_PARAM_LABELS[key]} (${param.values!.length})`);
     }
   }
   return parts.length ? parts.join(", ") : "all fixed";
 }
 
-export function defaultSweepParameter(type: "string" | "number" = "string"): SweepParameter {
+export function defaultExperimentParameter(type: "string" | "number" = "string"): ExperimentParameter {
   return { mode: "fixed", value: type === "number" ? 0 : "" };
 }
 
 export function setParameter(
   config: Record<string, unknown>,
-  key: SweepParamKey,
-  param: SweepParameter,
+  key: ExperimentParamKey,
+  param: ExperimentParameter,
 ): Record<string, unknown> {
   const parameters = { ...getParameters(config), [key]: param };
   return { ...config, parameters };

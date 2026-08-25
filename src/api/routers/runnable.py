@@ -56,6 +56,7 @@ class RunnableRouterHooks(Generic[TEntity, TService, TResponse, TCreate]):
     output_dir: Callable[[TEntity], Path | None]
     to_response: Callable[[TEntity, TService], TResponse]
     cancel_entity: Callable[[TService, int], Awaitable[TEntity]] | None = None
+    list_entities_for_kind: Callable[[TService, str], Awaitable[Sequence[TEntity]]] | None = None
 
 
 def build_runnable_router(
@@ -72,8 +73,11 @@ def build_runnable_router(
     slug = prefix.strip("/")
 
     @router.get("/", response_model=list[response_cls], operation_id=f"list_{slug}")
-    async def list_items(service: service_dep) -> list[TResponse]:
-        entities = await hooks.list_entities(service)
+    async def list_items(service: service_dep, kind: str | None = None) -> list[TResponse]:
+        if kind is not None and hooks.list_entities_for_kind is not None:
+            entities = await hooks.list_entities_for_kind(service, kind)
+        else:
+            entities = await hooks.list_entities(service)
         return [hooks.to_response(entity, service) for entity in entities]
 
     @router.post("/", response_model=response_cls, status_code=201, operation_id=f"create_{slug}")

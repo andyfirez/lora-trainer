@@ -1,4 +1,4 @@
-"""Unified sweep sampling engine."""
+"""Unified experiment sampling engine."""
 
 from __future__ import annotations
 
@@ -10,28 +10,28 @@ from typing import Any
 
 import torch
 from src.sampler.config import SamplingConfig
+from src.sampler.experiment.combinations import build_combinations
+from src.sampler.experiment.grid_compositor import compose_grid
+from src.sampler.experiment.grid_planner import plan_grids
+from src.sampler.experiment.manifest import (
+    GRIDS_SUBDIR,
+    IMAGES_SUBDIR,
+    ExperimentManifest,
+    ManifestGridAxis,
+    ManifestGridEntry,
+    ManifestImageEntry,
+    cell_image_path,
+    grid_image_path,
+    write_manifest,
+)
+from src.sampler.experiment.models import parse_trigger_words
+from src.sampler.output_paths import flat_grid_filename, flat_sample_filename
 from src.sampler.progress_callbacks import (
     ProgressCallback,
     ProgressCallbackMixin,
     ProgressStatusCallback,
 )
 from src.sampler.sdxl.cell_generator import generate_sampling_cell
-from src.sampler.output_paths import flat_grid_filename, flat_sample_filename
-from src.sampler.sweep.combinations import build_combinations
-from src.sampler.sweep.grid_compositor import compose_grid
-from src.sampler.sweep.grid_planner import plan_grids
-from src.sampler.sweep.manifest import (
-    GRIDS_SUBDIR,
-    IMAGES_SUBDIR,
-    ManifestGridAxis,
-    ManifestGridEntry,
-    ManifestImageEntry,
-    SweepManifest,
-    cell_image_path,
-    grid_image_path,
-    write_manifest,
-)
-from src.sampler.sweep.models import parse_trigger_words
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.config import SampleScheduler
 from src.trainer.inference_config import SDXLInferenceConfig
@@ -63,7 +63,7 @@ def sort_pipeline_groups(
     return sorted(groups.items(), key=lambda item: (item[0][0], item[0][1] or ""))
 
 
-class SweepEngine(ProgressCallbackMixin):
+class ExperimentEngine(ProgressCallbackMixin):
     def __init__(
         self,
         sampling_config: SamplingConfig,
@@ -91,14 +91,14 @@ class SweepEngine(ProgressCallbackMixin):
         self._pipeline_loader = SDXLPipelineLoader(base_inference_config, log=self._log)
         self._prompt_embed_cache = PromptEmbedCache()
 
-    def run(self) -> SweepManifest | None:
+    def run(self) -> ExperimentManifest | None:
         parameters = self._sampling_config.parameters
         combinations = build_combinations(parameters)
         if not combinations:
             raise ValueError("No sample prompts configured")
 
         self._log.info(
-            "Sweep engine: %d image(s) to generate, output -> %s",
+            "Experiment engine: %d image(s) to generate, output -> %s",
             len(combinations),
             self._output_dir,
         )
@@ -126,7 +126,7 @@ class SweepEngine(ProgressCallbackMixin):
 
         sorted_groups = sort_pipeline_groups(groups)
         self._log.info(
-            "Sweep load plan: %d pipeline group(s) (%d with LoRA, %d base-only)",
+            "Experiment load plan: %d pipeline group(s) (%d with LoRA, %d base-only)",
             len(sorted_groups),
             sum(1 for (key, _) in sorted_groups if key[1]),
             sum(1 for (key, _) in sorted_groups if not key[1]),
@@ -184,19 +184,19 @@ class SweepEngine(ProgressCallbackMixin):
                 self._log.info("Composing grid images...")
                 grid_count = self._compose_flat_grids(combinations, images_dir)
                 self._log.info(
-                    "Sweep complete: %d image(s), %d grid(s)",
+                    "Experiment complete: %d image(s), %d grid(s)",
                     len(combinations),
                     grid_count,
                 )
             else:
-                self._log.info("Sweep complete: %d image(s)", len(combinations))
+                self._log.info("Experiment complete: %d image(s)", len(combinations))
             self._set_status(None)
             return None
 
         self._log.info("Composing grid images...")
         manifest = self._build_manifest(combinations, images_dir, grids_dir)
         write_manifest(self._output_dir, manifest)
-        self._log.info("Sweep complete: %d image(s), %d grid(s)", manifest.total_images, len(manifest.grids))
+        self._log.info("Experiment complete: %d image(s), %d grid(s)", manifest.total_images, len(manifest.grids))
         self._set_status(None)
         return manifest
 
@@ -301,7 +301,7 @@ class SweepEngine(ProgressCallbackMixin):
             )
         return len(plans)
 
-    def _build_manifest(self, combinations: list, images_dir: Path, grids_dir: Path) -> SweepManifest:
+    def _build_manifest(self, combinations: list, images_dir: Path, grids_dir: Path) -> ExperimentManifest:
         image_entries = [
             ManifestImageEntry(
                 index=combo.index,
@@ -343,7 +343,7 @@ class SweepEngine(ProgressCallbackMixin):
                         title=plan.title,
                     )
                 )
-        return SweepManifest(
+        return ExperimentManifest(
             sampling_id=self._sampling_id,
             total_images=len(combinations),
             images=image_entries,

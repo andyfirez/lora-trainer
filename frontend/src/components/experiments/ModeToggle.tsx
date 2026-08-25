@@ -1,10 +1,10 @@
 "use client";
 
-import type { SweepMode } from "@/lib/sweepUtils";
+import type { ExperimentMode } from "@/lib/experimentUtils";
 
 interface ModeToggleProps {
-  mode: SweepMode;
-  onChange: (mode: SweepMode) => void;
+  mode: ExperimentMode;
+  onChange: (mode: ExperimentMode) => void;
 }
 
 export default function ModeToggle({ mode, onChange }: ModeToggleProps) {

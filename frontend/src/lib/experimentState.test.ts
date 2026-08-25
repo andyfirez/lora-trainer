@@ -1,9 +1,12 @@
 import { strict as assert } from "node:assert";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
-import { PLAYGROUND_STORAGE_KEY, collapseSweepToFixed, loadPlaygroundState } from "./playgroundState.ts";
-import { setParameter } from "./sweepUtils.ts";
-import { SWEEP_STORAGE_KEY, loadSweepState } from "./sweepState.ts";
+import {
+  EXPERIMENT_DRAFT_KEY,
+  loadExperimentDraft,
+} from "./experimentState.ts";
+import { PLAYGROUND_STORAGE_KEY, collapseExperimentToFixed, loadPlaygroundState } from "./playgroundState.ts";
+import { setParameter } from "./experimentUtils.ts";
 
 function installLocalStorage() {
   const store = new Map<string, string>();
@@ -24,7 +27,7 @@ function installLocalStorage() {
   return store;
 }
 
-describe("playground and sweep persisted state", () => {
+describe("playground and experiment persisted state", () => {
   beforeEach(() => {
     installLocalStorage();
   });
@@ -46,14 +49,14 @@ describe("playground and sweep persisted state", () => {
     assert.equal(steps?.value, 20);
   });
 
-  it("migrates legacy playground sweep mode into sweep storage once", () => {
+  it("migrates legacy playground experiment mode into experiment draft storage once", () => {
     const config = setParameter({}, "prompt", { mode: "vary", values: ["a", "b"] });
     globalThis.localStorage.setItem(
       PLAYGROUND_STORAGE_KEY,
       JSON.stringify({ config, mode: "sweep", batchCount: 1 }),
     );
 
-    const migrated = loadSweepState();
+    const migrated = loadExperimentDraft();
     const prompt = (migrated.config.parameters as { prompt?: { mode?: string; values?: unknown[] } }).prompt;
     assert.equal(prompt?.mode, "vary");
     assert.deepEqual(prompt?.values, ["a", "b"]);
@@ -62,14 +65,14 @@ describe("playground and sweep persisted state", () => {
       PLAYGROUND_STORAGE_KEY,
       JSON.stringify({ config: {}, mode: "sweep" }),
     );
-    const again = loadSweepState();
+    const again = loadExperimentDraft();
     const promptAgain = (again.config.parameters as { prompt?: { values?: unknown[] } }).prompt;
     assert.deepEqual(promptAgain?.values, ["a", "b"]);
   });
 
-  it("does not overwrite an existing sweep blob during playground load", () => {
+  it("does not overwrite an existing experiment draft during playground load", () => {
     globalThis.localStorage.setItem(
-      SWEEP_STORAGE_KEY,
+      EXPERIMENT_DRAFT_KEY,
       JSON.stringify({ config: setParameter({}, "prompt", { mode: "fixed", value: "keep me" }) }),
     );
     globalThis.localStorage.setItem(
@@ -81,15 +84,15 @@ describe("playground and sweep persisted state", () => {
     );
 
     loadPlaygroundState();
-    const sweep = loadSweepState();
-    const prompt = (sweep.config.parameters as { prompt?: { value?: unknown } }).prompt;
+    const draft = loadExperimentDraft();
+    const prompt = (draft.config.parameters as { prompt?: { value?: unknown } }).prompt;
     assert.equal(prompt?.value, "keep me");
   });
 });
 
-describe("collapseSweepToFixed", () => {
+describe("collapseExperimentToFixed", () => {
   it("keeps the first vary value as the fixed value", () => {
-    const collapsed = collapseSweepToFixed(
+    const collapsed = collapseExperimentToFixed(
       setParameter({}, "cfg_scale", { mode: "vary", values: [5, 7.5] }),
     );
     const cfg = (collapsed.parameters as { cfg_scale?: { mode?: string; value?: unknown } }).cfg_scale;

@@ -5,8 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.sampler.sweep.combinations import build_combinations
-from src.sampler.sweep.models import SWEEP_PARAM_ORDER, GridLayout, SweepCombination, SweepParameters, lora_axis_display
+from src.sampler.experiment.combinations import build_combinations
+from src.sampler.experiment.models import (
+    EXPERIMENT_PARAM_ORDER,
+    ExperimentCombination,
+    ExperimentParameters,
+    GridLayout,
+    lora_axis_display,
+)
 
 
 @dataclass
@@ -22,7 +28,7 @@ class GridPlan:
 
 
 def _resolve_axes(
-    parameters: SweepParameters,
+    parameters: ExperimentParameters,
     grid: GridLayout,
     vary_keys: list[str],
 ) -> tuple[str, str, list[str]]:
@@ -66,7 +72,7 @@ def _format_axis_value(key: str, value: Any) -> str:
     return text
 
 
-def plan_grids(parameters: SweepParameters, grid: GridLayout) -> list[GridPlan]:
+def plan_grids(parameters: ExperimentParameters, grid: GridLayout) -> list[GridPlan]:
     combinations = build_combinations(parameters)
     if not combinations:
         return []
@@ -106,7 +112,7 @@ def plan_grids(parameters: SweepParameters, grid: GridLayout) -> list[GridPlan]:
         return [_build_single_grid(combinations, parameters, grid, 0, {}, x_axis, y_axis)]
 
     slice_axes: list[tuple[str, list[Any]]] = []
-    for key in SWEEP_PARAM_ORDER:
+    for key in EXPERIMENT_PARAM_ORDER:
         if key not in slice_keys:
             continue
         param = parameters.get_param(key)
@@ -131,8 +137,8 @@ def plan_grids(parameters: SweepParameters, grid: GridLayout) -> list[GridPlan]:
 
 
 def _build_single_grid(
-    combinations: list[SweepCombination],
-    parameters: SweepParameters,
+    combinations: list[ExperimentCombination],
+    parameters: ExperimentParameters,
     grid: GridLayout,
     index: int,
     slice_params: dict[str, Any],

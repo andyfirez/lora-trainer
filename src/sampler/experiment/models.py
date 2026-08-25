@@ -1,4 +1,4 @@
-"""Sweep parameter models and helpers."""
+"""Experiment parameter models and helpers."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-SWEEP_PARAM_ORDER: tuple[str, ...] = (
+EXPERIMENT_PARAM_ORDER: tuple[str, ...] = (
     "lora_path",
     "lora_weight",
     "prompt",
@@ -22,7 +22,7 @@ SWEEP_PARAM_ORDER: tuple[str, ...] = (
 )
 
 
-class SweepMode(str, Enum):
+class ExperimentMode(str, Enum):
     FIXED = "fixed"
     VARY = "vary"
 
@@ -126,7 +126,7 @@ def dedupe_lora_entries(entries: list[LoraEntry]) -> list[LoraEntry]:
     return result
 
 
-def lora_axis_display(param: SweepParameter) -> tuple[list[str | None], list[str]]:
+def lora_axis_display(param: ExperimentParameter) -> tuple[list[str | None], list[str]]:
     """Return axis keys (paths) and human-readable labels for grid headers."""
     entries = dedupe_lora_entries([parse_lora_entry(value) for value in param.effective_values()])
     if not entries:
@@ -136,20 +136,20 @@ def lora_axis_display(param: SweepParameter) -> tuple[list[str | None], list[str
     return paths, labels
 
 
-class SweepParameter(BaseModel):
-    mode: SweepMode = SweepMode.FIXED
+class ExperimentParameter(BaseModel):
+    mode: ExperimentMode = ExperimentMode.FIXED
     value: Any = None
     values: list[Any] = Field(default_factory=list)
 
     def effective_values(self) -> list[Any]:
-        if self.mode == SweepMode.VARY and self.values:
+        if self.mode == ExperimentMode.VARY and self.values:
             return list(self.values)
         if self.value is not None:
             return [self.value]
         return []
 
     def is_varying(self) -> bool:
-        return self.mode == SweepMode.VARY and len(self.values) > 1
+        return self.mode == ExperimentMode.VARY and len(self.values) > 1
 
     def first_value(self) -> Any:
         values = self.effective_values()
@@ -163,59 +163,59 @@ class GridLayout(BaseModel):
     y_axis: Optional[str] = None
 
 
-class SweepParameters(BaseModel):
-    base_model_name: SweepParameter = Field(
-        default_factory=lambda: SweepParameter(value="stabilityai/stable-diffusion-xl-base-1.0")
+class ExperimentParameters(BaseModel):
+    base_model_name: ExperimentParameter = Field(
+        default_factory=lambda: ExperimentParameter(value="stabilityai/stable-diffusion-xl-base-1.0")
     )
-    lora_path: SweepParameter = Field(default_factory=SweepParameter)
-    lora_weight: SweepParameter = Field(default_factory=lambda: SweepParameter(value=1.0))
-    prompt: SweepParameter = Field(default_factory=SweepParameter)
-    negative_prompt: SweepParameter = Field(default_factory=lambda: SweepParameter(value=""))
-    steps: SweepParameter = Field(default_factory=lambda: SweepParameter(value=30))
-    cfg_scale: SweepParameter = Field(default_factory=lambda: SweepParameter(value=7.5))
-    width: SweepParameter = Field(default_factory=lambda: SweepParameter(value=None))
-    height: SweepParameter = Field(default_factory=lambda: SweepParameter(value=None))
-    scheduler: SweepParameter = Field(default_factory=lambda: SweepParameter(value="euler"))
-    seed: SweepParameter = Field(default_factory=lambda: SweepParameter(value=None))
+    lora_path: ExperimentParameter = Field(default_factory=ExperimentParameter)
+    lora_weight: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=1.0))
+    prompt: ExperimentParameter = Field(default_factory=ExperimentParameter)
+    negative_prompt: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=""))
+    steps: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=30))
+    cfg_scale: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=7.5))
+    width: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=None))
+    height: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=None))
+    scheduler: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value="euler"))
+    seed: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=None))
 
     def vary_keys_with_values(self) -> list[str]:
         result: list[str] = []
-        for key in SWEEP_PARAM_ORDER:
+        for key in EXPERIMENT_PARAM_ORDER:
             param = getattr(self, key)
-            if param.mode == SweepMode.VARY and len(param.values) > 0:
+            if param.mode == ExperimentMode.VARY and len(param.values) > 0:
                 result.append(key)
         return result
 
-    def get_param(self, key: str) -> SweepParameter:
+    def get_param(self, key: str) -> ExperimentParameter:
         return getattr(self, key)
 
-    def set_resolved_lora_sweep_values(
+    def set_resolved_lora_experiment_values(
         self,
         entries: list[LoraEntry],
         *,
-        mode: SweepMode | None = None,
-    ) -> SweepParameters:
+        mode: ExperimentMode | None = None,
+    ) -> ExperimentParameters:
         if not entries:
             return self
         payload = [lora_entry_to_param_value(entry) for entry in entries]
         updated = self.model_copy(deep=True)
         resolved_mode = mode
         if resolved_mode is None:
-            resolved_mode = SweepMode.FIXED if len(payload) == 1 else SweepMode.VARY
-        if resolved_mode == SweepMode.FIXED:
-            updated.lora_path = SweepParameter(
-                mode=SweepMode.FIXED,
+            resolved_mode = ExperimentMode.FIXED if len(payload) == 1 else ExperimentMode.VARY
+        if resolved_mode == ExperimentMode.FIXED:
+            updated.lora_path = ExperimentParameter(
+                mode=ExperimentMode.FIXED,
                 value=payload[0] if len(payload) == 1 else payload,
             )
         else:
-            updated.lora_path = SweepParameter(mode=SweepMode.VARY, values=payload)
+            updated.lora_path = ExperimentParameter(mode=ExperimentMode.VARY, values=payload)
         return updated
 
-    def set_resolved_lora_paths(self, paths: list[str]) -> SweepParameters:
+    def set_resolved_lora_paths(self, paths: list[str]) -> ExperimentParameters:
         entries = [LoraEntry(path=path, trigger="") for path in paths]
-        return self.set_resolved_lora_sweep_values(entries)
+        return self.set_resolved_lora_experiment_values(entries)
 
 
-class SweepCombination(BaseModel):
+class ExperimentCombination(BaseModel):
     index: int
     params: dict[str, Any]

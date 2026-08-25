@@ -5,7 +5,7 @@ from typing import Any, Sequence
 
 from src.db.repositories.sampling_repo import SamplingRepository
 from src.db.tables.runnable_mixin import RunnableStatus
-from src.db.tables.sampling import Sampling
+from src.db.tables.sampling import Sampling, SamplingKind
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import (
     effective_sampling_output_dir,
@@ -35,8 +35,10 @@ class SamplingService:
     def __init__(self, sampling_repo: SamplingRepository) -> None:
         self._repo = sampling_repo
 
-    async def list_samplings(self) -> Sequence[Sampling]:
-        return await self._repo.list_ordered(Sampling.created_at.desc())
+    async def list_samplings(self, *, kind: SamplingKind | None = None) -> Sequence[Sampling]:
+        if kind is None:
+            return await self._repo.list_ordered(Sampling.created_at.desc())
+        return await self._repo.list_by_kind(kind)
 
     async def get_sampling(self, sampling_id: int) -> Sampling:
         sampling = await self._repo.get_by_id(sampling_id)
@@ -57,6 +59,7 @@ class SamplingService:
         name: str,
         config: dict[str, Any],
         lora_paths: list[str] | None = None,
+        kind: SamplingKind = SamplingKind.PLAYGROUND,
     ) -> Sampling:
         parsed = SamplingConfig.from_dict(config)
         self._validate_output_dir(parsed)
@@ -71,6 +74,7 @@ class SamplingService:
         snapshot.validate_gpu()
         sampling = Sampling(
             name=name,
+            kind=kind,
             config=snapshot.to_snapshot(),
             lora_paths=paths,
             status=RunnableStatus.DRAFT,
@@ -86,6 +90,9 @@ class SamplingService:
 
         async def before_enqueue() -> None:
             get_runnable_handler("sampling").validate_config(sampling.config or {})
+            parsed = SamplingConfig.from_dict(sampling.config or {})
+            output_dir = resolve_sampling_output_dir(parsed, sampling.id)  # type: ignore[arg-type]
+            sampling.output_path = str(output_dir)
             sampling.progress_step = None
             sampling.progress_total = None
             sampling.progress_status = None
@@ -116,10 +123,10 @@ class SamplingService:
     def list_samples(self, sampling: Sampling) -> list[tuple[Path, str, dict]]:
         return list_runnable_samples(sampling)
 
-    def get_sweep_manifest(self, sampling: Sampling):
+    def get_experiment_manifest(self, sampling: Sampling):
         if not sampling.output_path:
             return None
-        from src.sampler.sweep.manifest import read_manifest
+        from src.sampler.experiment.manifest import read_manifest
 
         return read_manifest(Path(sampling.output_path))
 

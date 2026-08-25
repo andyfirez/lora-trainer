@@ -119,3 +119,55 @@ def test_live_preview_path_requires_file(tmp_path) -> None:
     preview = tmp_path / "live_preview.jpg"
     preview.write_bytes(b"jpeg")
     assert service.live_preview_path(sampling) == preview.resolve()
+
+
+@pytest.mark.asyncio
+async def test_create_sampling_sets_kind(
+    sampling_service: SamplingService,
+    minimal_sampling_config: dict,
+) -> None:
+    from src.db.tables.sampling import SamplingKind
+
+    sampling = await sampling_service.create_sampling(
+        name="exp",
+        config=minimal_sampling_config,
+        kind=SamplingKind.EXPERIMENT,
+    )
+    assert sampling.kind == SamplingKind.EXPERIMENT
+
+
+@pytest.mark.asyncio
+async def test_list_samplings_filters_by_kind(
+    sampling_service: SamplingService,
+    minimal_sampling_config: dict,
+) -> None:
+    from src.db.tables.sampling import SamplingKind
+
+    await sampling_service.create_sampling(
+        name="playground",
+        config=minimal_sampling_config,
+        kind=SamplingKind.PLAYGROUND,
+    )
+    experiment = await sampling_service.create_sampling(
+        name="experiment",
+        config={**minimal_sampling_config, "compose_grids": True},
+        kind=SamplingKind.EXPERIMENT,
+    )
+    experiments = await sampling_service.list_samplings(kind=SamplingKind.EXPERIMENT)
+    assert [item.id for item in experiments] == [experiment.id]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_sampling_refreshes_output_path(
+    sampling_service: SamplingService,
+    minimal_sampling_config: dict,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    sampling = await sampling_service.create_sampling(name="rerun", config=minimal_sampling_config)
+    first_path = sampling.output_path
+    queued = await sampling_service.enqueue_sampling(sampling.id)
+    assert queued.output_path is not None
+    assert queued.output_path.endswith(date.today().isoformat())
+    assert queued.output_path == first_path

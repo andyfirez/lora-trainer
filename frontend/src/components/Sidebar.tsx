@@ -24,7 +24,7 @@ const NAV = [
   { href: "/loras", label: "LoRAs", icon: Sparkles },
   { href: "/sampling", label: "Sampling", icon: ImageIcon },
   { href: "/prompt-builder", label: "Prompt Builder", icon: Wand2 },
-  { href: "/sweep", label: "Sweep", icon: LayoutGrid },
+  { href: "/experiments", label: "Experiments", icon: LayoutGrid },
   { href: "/png-info", label: "PNG Info", icon: FileImage },
   { href: "/datasets", label: "Datasets", icon: Database },
   { href: "/parameters", label: "Parameters", icon: BookOpen },

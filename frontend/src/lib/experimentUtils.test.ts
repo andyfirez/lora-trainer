@@ -8,7 +8,7 @@ import {
   loraPathsFromParameter,
   parseLoraEntries,
   parseLoraEntry,
-} from "./sweepUtils.ts";
+} from "./experimentUtils.ts";
 
 describe("lora stack helpers", () => {
   it("parses weight from an entry object", () => {

@@ -5,9 +5,11 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from src.api.schemas.runnable import RunnableResponse
+from src.db.tables.sampling import SamplingKind
 
 
 class SamplingResponse(RunnableResponse):
+    kind: SamplingKind
     config: dict[str, Any]
     lora_paths: list[str] = Field(default_factory=list)
     progress_step: Optional[int] = None
@@ -19,3 +21,4 @@ class CreateSamplingRequest(BaseModel):
     name: str
     config: dict[str, Any]
     lora_paths: Optional[list[str]] = None
+    kind: SamplingKind = SamplingKind.PLAYGROUND

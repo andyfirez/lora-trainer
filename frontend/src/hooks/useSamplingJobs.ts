@@ -5,7 +5,7 @@ import useSWR from "swr";
 import type { QueueEntry } from "@/components/playground/queueTypes";
 import { lorasApi } from "@/lib/api/loras";
 import { samplingsApi } from "@/lib/api/samplings";
-import { getParameters, loraPathsFromParameter, syncLoraPathsToParameters } from "@/lib/sweepUtils";
+import { getParameters, loraPathsFromParameter, syncLoraPathsToParameters } from "@/lib/experimentUtils";
 import type { SamplingResponse } from "@/types";
 
 const ACTIVE = new Set(["queued", "running"]);
@@ -80,7 +80,10 @@ export function useSamplingJobs() {
       const synced = syncLoraPathsToParameters(config);
       const withFlags = { ...synced, compose_grids: options.composeGrids };
       const loraPaths = loraPathsFromParameter(getParameters(synced).lora_path);
-      const created = await samplingsApi.generate(withFlags, loraPaths);
+      const created = await samplingsApi.generate(withFlags, loraPaths, {
+        kind: "playground",
+        composeGrids: options.composeGrids,
+      });
       setSessionIds((ids) => [...ids, created.id]);
       await mutateSamplings();
       return created;

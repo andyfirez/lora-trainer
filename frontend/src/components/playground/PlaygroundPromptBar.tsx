@@ -1,7 +1,7 @@
 "use client";
 
-import SweepField from "@/components/sweep/SweepField";
-import { getParameters, setParameter } from "@/lib/sweepUtils";
+import ExperimentField from "@/components/experiments/ExperimentField";
+import { getParameters, setParameter } from "@/lib/experimentUtils";
 
 interface PlaygroundPromptBarProps {
   config: Record<string, unknown>;
@@ -13,7 +13,7 @@ export default function PlaygroundPromptBar({ config, onChange }: PlaygroundProm
 
   return (
     <div className="space-y-2 px-3 py-2">
-      <SweepField
+      <ExperimentField
         label="Prompt"
         param={parameters.prompt ?? { mode: "fixed", value: "" }}
         onChange={(param) => onChange(setParameter(config, "prompt", param))}
@@ -21,7 +21,7 @@ export default function PlaygroundPromptBar({ config, onChange }: PlaygroundProm
         placeholder="subject, style, quality tags"
         allowVary={false}
       />
-      <SweepField
+      <ExperimentField
         label="Negative prompt"
         param={parameters.negative_prompt ?? { mode: "fixed", value: "" }}
         onChange={(param) => onChange(setParameter(config, "negative_prompt", param))}

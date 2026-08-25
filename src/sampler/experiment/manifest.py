@@ -1,4 +1,4 @@
-"""Sweep manifest read/write."""
+"""Experiment manifest read/write."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class ManifestGridEntry(BaseModel):
     title: str = ""
 
 
-class SweepManifest(BaseModel):
+class ExperimentManifest(BaseModel):
     version: int = 1
     sampling_id: int | None = None
     total_images: int = 0
@@ -51,19 +51,19 @@ def manifest_path(output_dir: Path) -> Path:
     return output_dir / MANIFEST_FILENAME
 
 
-def write_manifest(output_dir: Path, manifest: SweepManifest) -> Path:
+def write_manifest(output_dir: Path, manifest: ExperimentManifest) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     path = manifest_path(output_dir)
     path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
     return path
 
 
-def read_manifest(output_dir: Path) -> SweepManifest | None:
+def read_manifest(output_dir: Path) -> ExperimentManifest | None:
     path = manifest_path(output_dir)
     if not path.is_file():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))
-    return SweepManifest.model_validate(data)
+    return ExperimentManifest.model_validate(data)
 
 
 def cell_image_path(output_dir: Path, index: int) -> Path:

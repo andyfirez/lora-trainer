@@ -34,7 +34,7 @@ def list_samples_for_output_dir(
             results.extend((path, "grid", {}) for path in flat_grids)
             return results
 
-    from src.sampler.sweep.manifest import GRIDS_SUBDIR, IMAGES_SUBDIR, read_manifest
+    from src.sampler.experiment.manifest import GRIDS_SUBDIR, IMAGES_SUBDIR, read_manifest
 
     manifest = read_manifest(output_dir)
     if manifest is not None:

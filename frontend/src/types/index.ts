@@ -33,6 +33,7 @@ export interface CreateSamplingRequest {
   name: string;
   config: Record<string, unknown>;
   lora_paths?: string[];
+  kind?: "experiment" | "playground";
 }
 
 export type PickKind = "file" | "directory" | "model";
@@ -97,6 +98,7 @@ export interface LoraResponse extends RunnableResponse {
 }
 
 export interface SamplingResponse extends RunnableResponse {
+  kind: "experiment" | "playground";
   config: Record<string, unknown>;
   lora_paths: string[];
   progress_step: number | null;
@@ -135,7 +137,7 @@ export interface ManifestGridEntry {
   title: string;
 }
 
-export interface SweepManifestResponse {
+export interface ExperimentManifestResponse {
   version: number;
   sampling_id: number | null;
   total_images: number;

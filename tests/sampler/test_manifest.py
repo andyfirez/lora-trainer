@@ -2,18 +2,18 @@
 
 from pathlib import Path
 
-from src.sampler.sweep.manifest import (
+from src.sampler.experiment.manifest import (
     ManifestGridAxis,
     ManifestGridEntry,
     ManifestImageEntry,
-    SweepManifest,
+    ExperimentManifest,
     read_manifest,
     write_manifest,
 )
 
 
 def test_manifest_roundtrip(tmp_path: Path) -> None:
-    manifest = SweepManifest(
+    manifest = ExperimentManifest(
         job_id=1,
         total_images=2,
         images=[

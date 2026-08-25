@@ -10,12 +10,12 @@ from src.sampler.progress_callbacks import (
     ProgressCallback,
     ProgressStatusCallback,
 )
-from src.sampler.sweep.engine import SweepEngine
+from src.sampler.experiment.engine import ExperimentEngine
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.inference_config import SDXLInferenceConfig
 
 
-def run_sweep_sampling(
+def run_experiment_sampling(
     *,
     sampling_config: SamplingConfig,
     base_inference_config: SDXLInferenceConfig,
@@ -29,7 +29,7 @@ def run_sweep_sampling(
     flat_output: bool = True,
 ) -> None:
     """Run a parameter sweep sampling job."""
-    engine = SweepEngine(
+    engine = ExperimentEngine(
         sampling_config,
         base_inference_config=base_inference_config,
         output_dir=output_dir,

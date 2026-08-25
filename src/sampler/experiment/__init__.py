@@ -1,9 +1,13 @@
-"""Parameter sweep engine for unified sampling."""
+"""Parameter experiment engine for unified sampling."""
 
-from src.sampler.sweep.models import GridLayout, SweepParameter, SweepParameters
+from src.sampler.experiment.models import (
+    ExperimentParameter,
+    ExperimentParameters,
+    GridLayout,
+)
 
 __all__ = [
     "GridLayout",
-    "SweepParameter",
-    "SweepParameters",
+    "ExperimentParameter",
+    "ExperimentParameters",
 ]

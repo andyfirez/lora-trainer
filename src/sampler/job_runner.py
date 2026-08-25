@@ -10,7 +10,7 @@ from src.db.tables.runnable_mixin import RunnableStatus
 from src.db.tables.sampling import Sampling
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
-from src.sampler.sdxl.service import run_sweep_sampling
+from src.sampler.sdxl.service import run_experiment_sampling
 from src.services.runnable.db_updates import get_runnable_entity, update_runnable_entity
 from src.services.runnable.logging import build_runnable_log_path, build_runnable_logger
 from src.services.sampling.lora_paths import prepare_sampling_config_lora_paths
@@ -104,7 +104,7 @@ async def run_sampling(sampling_id: int) -> int:
             output_path = str(resolve_sampling_output_path(sampling_config, sampling_id))
             await _set_output_path(sampling_id, output_path)
 
-        from src.sampler.sweep.combinations import count_combinations
+        from src.sampler.experiment.combinations import count_combinations
 
         combo_count = count_combinations(sampling_config.parameters)
         run_logger.info(
@@ -119,7 +119,7 @@ async def run_sampling(sampling_id: int) -> int:
         vary_keys = sampling_config.parameters.vary_keys_with_values()
         if vary_keys:
             run_logger.info("  Varying parameters: %s", ", ".join(vary_keys))
-        run_sweep_sampling(
+        run_experiment_sampling(
             sampling_config=sampling_config,
             base_inference_config=inference_config,
             output_dir=Path(output_path),
