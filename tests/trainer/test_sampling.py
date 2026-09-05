@@ -4,7 +4,7 @@ import torch
 from src.trainer.sdxl.sampling import precompute_all_sample_embeds
 
 
-@patch("src.trainer.sdxl.sampling.encode_sdxl_prompt")
+@patch("src.trainer.sdxl.sampling.encode_sdxl_prompt_chunked")
 def test_precompute_all_sample_embeds_encodes_negative_once(mock_encode: MagicMock) -> None:
     mock_encode.side_effect = [
         (torch.ones(1, 2, 3), torch.ones(1, 4)),

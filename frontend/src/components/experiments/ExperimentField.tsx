@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import ModeToggle from "@/components/experiments/ModeToggle";
 import AutoGrowTextarea from "@/components/ui/AutoGrowTextarea";
@@ -17,6 +18,7 @@ interface ExperimentFieldProps {
   multiline?: boolean;
   selectOptions?: SelectOption[];
   allowVary?: boolean;
+  accessory?: ReactNode;
 }
 
 const numberInputClass = `${inputClassName} max-w-[10rem]`;
@@ -31,6 +33,7 @@ export default function ExperimentField({
   multiline = false,
   selectOptions = [],
   allowVary = true,
+  accessory,
 }: ExperimentFieldProps) {
   const mode = allowVary ? (param.mode ?? "fixed") : "fixed";
   const defaultSelectValue = selectOptions[0]?.value ?? "";
@@ -182,12 +185,19 @@ export default function ExperimentField({
     );
   }
 
+  const showHeader = Boolean(label) || Boolean(accessory) || allowVary;
+
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <label className={labelClassName}>{label}</label>
-        {allowVary ? <ModeToggle mode={mode} onChange={setMode} /> : null}
-      </div>
+      {showHeader ? (
+        <div className="flex items-center justify-between gap-3">
+          <label className={labelClassName}>{label}</label>
+          <div className="flex items-center gap-2">
+            {accessory}
+            {allowVary ? <ModeToggle mode={mode} onChange={setMode} /> : null}
+          </div>
+        </div>
+      ) : null}
       {mode === "fixed" ? renderFixedInput() : renderVaryContent()}
     </div>
   );

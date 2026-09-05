@@ -3,13 +3,15 @@
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from src.api.dependencies import SamplingServiceDep
 from src.api.routers.runnable import RunnableRouterHooks, build_runnable_router
 from src.api.schemas.samplings import (
     CreateSamplingRequest,
+    PromptTokenCountRequest,
+    PromptTokenCountResponse,
     SamplerOption,
     SamplingOptionsResponse,
     SamplingResponse,
@@ -25,6 +27,8 @@ from src.sampler.registry.profiles import (
     schedulers_for_profile,
 )
 from src.services.sampling.service import SamplingService
+from src.trainer.sdxl.prompt_chunking import CLIP_CONTENT_LENGTH, count_prompt_chunks
+from src.trainer.sdxl.tokenizer_loader import load_sdxl_tokenizers
 
 options_router = APIRouter(prefix="/samplings", tags=["samplings"])
 
@@ -46,6 +50,16 @@ async def get_sampling_options(
         for spec in schedulers_for_profile(profile)
     ]
     return SamplingOptionsResponse(profile=profile, samplers=samplers, schedulers=schedulers)
+
+
+@options_router.post("/token-count", response_model=PromptTokenCountResponse, operation_id="count_sampling_prompt_tokens")
+async def count_sampling_prompt_tokens(body: PromptTokenCountRequest) -> PromptTokenCountResponse:
+    try:
+        tokenizer_1, tokenizer_2 = load_sdxl_tokenizers(body.base_model_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    counts = count_prompt_chunks(body.prompt, tokenizer_1, tokenizer_2)
+    return PromptTokenCountResponse(tokens=counts.tokens, chunks=counts.chunks, window=CLIP_CONTENT_LENGTH)
 
 
 def _to_response(sampling: Sampling, service: SamplingService) -> SamplingResponse:

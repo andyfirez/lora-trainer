@@ -24,9 +24,13 @@ from src.services.sampling.lora_paths import (
     prepare_sampling_config_lora_paths,
     resolve_lora_paths_from_sampling_config,
     resolve_sampling_output_dir,
-    validate_prompt_lora_tags,
     validate_lora_paths,
+    validate_prompt_lora_tags,
     validate_sample_prompts,
+)
+from src.services.sampling.validation import (
+    parse_sampling_config,
+    validate_sampling_gpu,
 )
 from src.settings.app_settings import settings
 from src.trainer.sdxl.latent_sampling.preview import LIVE_PREVIEW_FILENAME
@@ -62,18 +66,18 @@ class SamplingService:
         lora_paths: list[str] | None = None,
         kind: SamplingKind = SamplingKind.PLAYGROUND,
     ) -> Sampling:
-        parsed = SamplingConfig.from_dict(config)
+        parsed = parse_sampling_config(config)
         self._validate_output_dir(parsed)
         entity_lora_paths = (
             lora_paths if lora_paths is not None else resolve_lora_paths_from_sampling_config(parsed)
         )
-        parsed, paths = prepare_sampling_config_lora_paths(parsed, entity_lora_paths or None)
+        parsed, paths = prepare_sampling_config_lora_paths(parsed, entity_lora_paths)
         if paths:
             validate_lora_paths(paths)
         validate_prompt_lora_tags(parsed)
         validate_sample_prompts(parsed)
         snapshot = parsed.with_resolved_gpu(settings.gpu_defaults)
-        snapshot.validate_gpu()
+        validate_sampling_gpu(snapshot)
         sampling = Sampling(
             name=name,
             kind=kind,
@@ -92,7 +96,7 @@ class SamplingService:
 
         async def before_enqueue() -> None:
             get_runnable_handler("sampling").validate_config(sampling.config or {})
-            parsed = SamplingConfig.from_dict(sampling.config or {})
+            parsed = parse_sampling_config(sampling.config or {})
             output_dir = resolve_sampling_output_dir(parsed, sampling.id)  # type: ignore[arg-type]
             sampling.output_path = str(output_dir)
             sampling.progress_step = None

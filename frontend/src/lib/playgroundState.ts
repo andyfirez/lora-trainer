@@ -3,6 +3,7 @@ import { migrateLegacyExperimentFromPlayground } from "./experimentState.ts";
 import {
   EXPERIMENT_PARAM_ORDER,
   getParameters,
+  clearPlaygroundLoraState,
   normalizeLegacySamplingParameters,
   setParameter,
   syncLoraPathsToParameters,
@@ -40,7 +41,9 @@ export function loadPlaygroundState(): PlaygroundPersistedState {
         ? { ...defaults.config, ...parsed.config }
         : defaults.config;
     return {
-      config: normalizeLegacySamplingParameters(applySamplingSizeDefaults(collapseExperimentToFixed(merged))),
+      config: clearPlaygroundLoraState(
+        normalizeLegacySamplingParameters(applySamplingSizeDefaults(collapseExperimentToFixed(merged))),
+      ),
       batchCount:
         typeof parsed.batchCount === "number" && Number.isFinite(parsed.batchCount) && parsed.batchCount >= 1
           ? Math.min(32, Math.floor(parsed.batchCount))

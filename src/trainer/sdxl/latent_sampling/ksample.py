@@ -7,8 +7,10 @@ from collections.abc import Callable
 import torch
 from torch import Tensor
 
+from src.sampler.registry.profiles import SamplingProfile
 from src.trainer.sdxl.latent_sampling.kdiffusion import get_sample_function
 from src.trainer.sdxl.latent_sampling.model_wrapper import SDXLKDiffusionModel
+from src.trainer.sdxl.latent_sampling.noise import create_initial_noise
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 from src.trainer.sdxl.sampling import SamplePromptEmbeds
 
@@ -33,20 +35,22 @@ def ksample_sdxl_latent(
     device = session.device
     prep_started_at = time.perf_counter()
 
-    generator = torch.Generator(device=device)
     noise_seed = None if seed is None else seed + prompt_index
-    if noise_seed is not None:
-        generator.manual_seed(noise_seed)
 
     latent_channels = session.unet.config.in_channels
-    noise = torch.randn(
-        size=(1, latent_channels, height // session.vae_scale_factor, width // session.vae_scale_factor),
-        generator=generator,
-        device=device,
-        dtype=session.autocast_dtype,
+    noise = create_initial_noise(
+        session.generation_profile,
+        noise_seed,
+        (1, latent_channels, height // session.vae_scale_factor, width // session.vae_scale_factor),
+        device,
+        session.autocast_dtype,
     )
     sigma_max = session.sigmas[0]
-    latent = session.model_sampling.noise_scaling(sigma_max, noise, max_denoise=True)
+    latent = session.model_sampling.noise_scaling(
+        sigma_max,
+        noise,
+        max_denoise=session.generation_profile == SamplingProfile.COMFY,
+    )
 
     model = SDXLKDiffusionModel(
         unet=session.unet,

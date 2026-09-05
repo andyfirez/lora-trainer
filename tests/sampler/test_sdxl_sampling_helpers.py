@@ -27,7 +27,7 @@ def test_resolve_vae_dtype_explicit_values() -> None:
     assert resolve_vae_dtype(VaeDtype.FLOAT_32) == torch.float32
 
 
-@patch("src.trainer.sdxl.sampling.encode_sdxl_prompt")
+@patch("src.trainer.sdxl.sampling.encode_sdxl_prompt_chunked")
 def test_prompt_embed_cache_reuses_positive_encoding(mock_encode: MagicMock) -> None:
     mock_encode.return_value = (torch.zeros(1, 2, 3), torch.zeros(1, 4))
     cache = PromptEmbedCache()
@@ -58,7 +58,7 @@ def test_prompt_embed_cache_reuses_positive_encoding(mock_encode: MagicMock) -> 
     assert mock_encode.call_count == 1
 
 
-@patch("src.trainer.sdxl.sampling.encode_sdxl_prompt")
+@patch("src.trainer.sdxl.sampling.encode_sdxl_prompt_chunked")
 def test_prompt_embed_cache_reuses_negative_encoding(mock_encode: MagicMock) -> None:
     mock_encode.return_value = (torch.ones(1, 2, 3), torch.ones(1, 4))
     cache = PromptEmbedCache()

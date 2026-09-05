@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import torch
+from src.sampler.registry.profiles import SamplingProfile
 from src.trainer.sdxl.latent_sampling.ksample import ksample_sdxl_latent
 from src.trainer.sdxl.latent_sampling.model_sampling import DiscreteEpsSampling
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
@@ -12,7 +13,11 @@ def _model_sampling() -> DiscreteEpsSampling:
     return DiscreteEpsSampling.from_alphas_cumprod(torch.cumprod(1.0 - betas, dim=0))
 
 
-def _build_session(*, sample_steps: int = 3) -> SDXLSamplingSession:
+def _build_session(
+    *,
+    sample_steps: int = 3,
+    generation_profile: SamplingProfile = SamplingProfile.COMFY,
+) -> SDXLSamplingSession:
     sigmas = torch.tensor([14.0, 7.0, 1.0, 0.0][: sample_steps + 1], dtype=torch.float32)
     unet = MagicMock()
     unet.config.in_channels = 4
@@ -30,6 +35,7 @@ def _build_session(*, sample_steps: int = 3) -> SDXLSamplingSession:
         autocast_dtype=torch.float32,
         sample_steps=sample_steps,
         sample_vae_fp32=True,
+        generation_profile=generation_profile,
     )
 
 
@@ -122,3 +128,59 @@ def test_ksample_builds_cfg_batch_inputs() -> None:
         embeds.prompt_embeds[0],
     )
     assert call_kwargs["added_cond_kwargs"]["time_ids"].shape[0] == 2
+
+
+def test_ksample_passes_max_denoise_matching_generation_profile() -> None:
+    """Comfy profile scales initial noise by sqrt(1+sigma^2); reForge scales by sigma."""
+    observed_max_denoise: list[bool] = []
+
+    for profile, expected_max_denoise in (
+        (SamplingProfile.COMFY, True),
+        (SamplingProfile.REFORGE, False),
+    ):
+        session = _build_session(sample_steps=1, generation_profile=profile)
+        original_noise_scaling = session.model_sampling.noise_scaling
+
+        def spy_noise_scaling(sigma, noise, *, max_denoise=True):
+            observed_max_denoise.append(max_denoise)
+            return original_noise_scaling(sigma, noise, max_denoise=max_denoise)
+
+        session.model_sampling.noise_scaling = spy_noise_scaling  # type: ignore[method-assign]
+
+        ksample_sdxl_latent(
+            session,
+            _build_embeds(),
+            width=64,
+            height=64,
+            guidance_scale=7.5,
+            seed=1,
+            prompt_index=0,
+        )
+
+        assert observed_max_denoise[-1] == expected_max_denoise
+
+
+def test_ksample_creates_noise_using_the_session_generation_profile(monkeypatch) -> None:
+    from src.trainer.sdxl.latent_sampling import ksample as ksample_module
+
+    captured_profiles: list[SamplingProfile] = []
+    original_create_initial_noise = ksample_module.create_initial_noise
+
+    def spy_create_initial_noise(profile, seed, shape, device, dtype):
+        captured_profiles.append(profile)
+        return original_create_initial_noise(profile, seed, shape, device, dtype)
+
+    monkeypatch.setattr(ksample_module, "create_initial_noise", spy_create_initial_noise)
+
+    session = _build_session(sample_steps=1, generation_profile=SamplingProfile.REFORGE)
+    ksample_sdxl_latent(
+        session,
+        _build_embeds(),
+        width=64,
+        height=64,
+        guidance_scale=7.5,
+        seed=3,
+        prompt_index=0,
+    )
+
+    assert captured_profiles == [SamplingProfile.REFORGE]

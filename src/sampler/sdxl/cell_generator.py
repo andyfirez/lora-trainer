@@ -15,6 +15,7 @@ from src.trainer.concept_training_metadata import (
 from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.inference_context import run_merged_adapter_sampling
 from src.trainer.sdxl.pipeline_loader import SamplingStack
+from src.trainer.sdxl.prompt_chunking import format_prompt_chunk_summary
 from src.trainer.sdxl.sampling import PromptEmbedCache
 
 ProgressStepCallback = Callable[[int, int], None]
@@ -47,10 +48,11 @@ def generate_sampling_cell(
     width = config.sample_width or config.resolution
     height = config.sample_height or config.resolution
     log.info(
-        "Generating image: %dx%d, %d steps, prompt=%r",
+        "Generating image: %dx%d, %d steps, %s, prompt=%r",
         width,
         height,
         config.sample_steps,
+        format_prompt_chunk_summary(expanded_prompt, stack.tokenizer_1, stack.tokenizer_2),
         expanded_prompt[:120],
     )
     reference_add_time_ids = resolve_reference_add_time_ids(
@@ -79,6 +81,7 @@ def generate_sampling_cell(
         lora_path=lora_path,
         lora_weight=lora_weight if lora_path else None,
         loras=_loras_for_infotext(lora_stack),
+        sampling_profile=config.generation_profile,
     )
 
     run_merged_adapter_sampling(

@@ -34,3 +34,13 @@ export function parseApiError(body: unknown, status: number): ApiError {
     `HTTP ${status}`;
   return new ApiError(message, status, detail);
 }
+
+const UNREACHABLE_API_MESSAGE = "Cannot reach the API. Is the backend running?";
+
+export function parseNetworkError(err: unknown): ApiError {
+  const message = err instanceof Error ? err.message : "Network error";
+  if (err instanceof TypeError && (message === "Failed to fetch" || message === "NetworkError when attempting to fetch resource.")) {
+    return new ApiError(UNREACHABLE_API_MESSAGE, 0, err);
+  }
+  return new ApiError(message, 0, err);
+}

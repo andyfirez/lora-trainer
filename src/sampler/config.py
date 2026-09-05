@@ -20,6 +20,7 @@ from src.sampler.experiment.models import (
     GridLayout,
     LoraEntry,
 )
+from src.sampler.registry.profiles import SamplingProfile
 from src.trainer.config import VaeDtype, WeightDtype
 
 if TYPE_CHECKING:
@@ -59,6 +60,7 @@ class SamplingConfig(GpuConfigMixin, BaseModel):
     """SDXL LoRA sampling configuration with unified parameter sweep support."""
 
     output_dir: str = ""
+    generation_profile: SamplingProfile = SamplingProfile.COMFY
     sample_vae_tiling: bool | None = None
     sample_vae_fp32: bool = False
     sample_offload_unet_before_decode: bool = True
@@ -187,6 +189,7 @@ class SamplingConfig(GpuConfigMixin, BaseModel):
             "sample_height": params.height.first_value(),
             "sample_sampler": self.effective_sampler(),
             "sample_scheduler": self.effective_scheduler(),
+            "generation_profile": self.generation_profile,
             "sample_vae_tiling": resolved.sample_vae_tiling,
             "sample_vae_fp32": self.sample_vae_fp32,
             "sample_offload_unet_before_decode": self.sample_offload_unet_before_decode,

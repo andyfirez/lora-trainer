@@ -11,9 +11,15 @@ import type { GpuDefaultsInfo } from "@/lib/api/settings";
 import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
 import { useSamplingOptions } from "@/hooks/useSamplingOptions";
 import { getParameters, setParameter } from "@/lib/experimentUtils";
+import type { SamplingProfile } from "@/types";
 
 const DEFAULT_WIDTH = 832;
 const DEFAULT_HEIGHT = 1216;
+
+const GENERATION_PROFILE_OPTIONS: { value: SamplingProfile; label: string }[] = [
+  { value: "comfy", label: "ComfyUI" },
+  { value: "reforge", label: "reForge" },
+];
 
 interface PlaygroundCompactSettingsProps {
   config: Record<string, unknown>;
@@ -37,7 +43,8 @@ export default function PlaygroundCompactSettings({
   gpuDefaults,
   lastSeed,
 }: PlaygroundCompactSettingsProps) {
-  const { samplers, schedulers } = useSamplingOptions();
+  const generationProfile = (config.generation_profile as SamplingProfile | undefined) ?? "comfy";
+  const { samplers, schedulers } = useSamplingOptions(generationProfile);
   const [samplerOpen, setSamplerOpen] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const parameters = getParameters(config);
@@ -79,6 +86,21 @@ export default function PlaygroundCompactSettings({
         </button>
         {samplerOpen && (
           <div className="mt-3 space-y-3">
+            <div>
+              <label className={labelClassName}>Generation profile</label>
+              <select
+                className={selectClassName}
+                value={generationProfile}
+                onChange={(event) => set("generation_profile", event.target.value)}
+              >
+                {GENERATION_PROFILE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className={labelClassName}>Sampling method</label>
               <select

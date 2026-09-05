@@ -7,6 +7,7 @@ import { InheritedCheckboxField, InheritedSelectField } from "@/components/ui/In
 import FormSection, { formSectionClass, formSectionTitleClass } from "@/components/ui/FormSection";
 import { useSamplingOptions } from "@/hooks/useSamplingOptions";
 import { labelClassName } from "@/components/ui/Input";
+import { selectClassName } from "@/components/ui/Select";
 import {
   EXPERIMENT_PARAM_LABELS,
   type ExperimentParamKey,
@@ -15,10 +16,17 @@ import {
   setParameter,
 } from "@/lib/experimentUtils";
 import type { GpuDefaultsInfo } from "@/lib/api/settings";
+import type { SamplingProfile } from "@/types";
 import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
+import PromptTokenCount from "@/components/sampling/PromptTokenCount";
 import { useBaseModelOptions } from "@/hooks/useBaseModelOptions";
 
 type Config = Record<string, unknown>;
+
+const GENERATION_PROFILE_OPTIONS: { value: SamplingProfile; label: string }[] = [
+  { value: "comfy", label: "ComfyUI" },
+  { value: "reforge", label: "reForge" },
+];
 
 interface SamplingParametersSectionProps {
   config: Config;
@@ -27,6 +35,11 @@ interface SamplingParametersSectionProps {
   allowVary?: boolean;
   hidePrompts?: boolean;
   hideSeed?: boolean;
+}
+
+function parameterText(value: ReturnType<typeof param>): string {
+  if (value.mode === "vary") return String(value.values?.[0] ?? "");
+  return String(value.value ?? "");
 }
 
 function param(config: Config, key: ExperimentParamKey) {
@@ -55,7 +68,8 @@ export default function SamplingParametersSection({
   hideSeed = false,
 }: SamplingParametersSectionProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const { samplers, schedulers } = useSamplingOptions();
+  const generationProfile = (config.generation_profile as SamplingProfile | undefined) ?? "comfy";
+  const { samplers, schedulers } = useSamplingOptions(generationProfile);
   const baseModelParam = param(config, "base_model_name");
   const { options: baseModelOptions, isLoading: baseModelsLoading } = useBaseModelOptions();
 
@@ -99,13 +113,26 @@ export default function SamplingParametersSection({
                 multiline
                 placeholder="Prompt text"
                 allowVary={allowVary}
+                accessory={
+                  <PromptTokenCount
+                    text={parameterText(param(config, "prompt"))}
+                    baseModelName={parameterText(baseModelParam)}
+                  />
+                }
               />
               <ExperimentField
                 label={EXPERIMENT_PARAM_LABELS.negative_prompt}
                 param={param(config, "negative_prompt")}
                 onChange={(p) => updateParam("negative_prompt", p)}
+                multiline
                 placeholder="low quality, blurry"
                 allowVary={allowVary}
+                accessory={
+                  <PromptTokenCount
+                    text={parameterText(param(config, "negative_prompt"))}
+                    baseModelName={parameterText(baseModelParam)}
+                  />
+                }
               />
             </ParamGroup>
           )}
@@ -121,6 +148,20 @@ export default function SamplingParametersSection({
           </ParamGroup>
 
           <ParamGroup title="Sampler">
+            <div>
+              <label className={labelClassName}>Generation profile</label>
+              <select
+                className={selectClassName}
+                value={generationProfile}
+                onChange={(event) => set("generation_profile", event.target.value)}
+              >
+                {GENERATION_PROFILE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <ExperimentField
               label={EXPERIMENT_PARAM_LABELS.steps}
               param={param(config, "steps")}

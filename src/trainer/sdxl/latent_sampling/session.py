@@ -9,6 +9,7 @@ import torch
 from torch import Tensor
 
 from src.sampler.registry import resolve_sampler_scheduler
+from src.sampler.registry.profiles import SamplingProfile
 from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.latent_sampling.model_sampling import DiscreteEpsSampling
 from src.trainer.sdxl.latent_sampling.sigmas import calculate_sigmas
@@ -55,6 +56,7 @@ class SDXLSamplingSession:
     autocast_dtype: torch.dtype
     sample_steps: int
     sample_vae_fp32: bool
+    generation_profile: SamplingProfile = SamplingProfile.COMFY
     vae_tiling_enabled: bool = False
 
     @classmethod
@@ -108,5 +110,6 @@ class SDXLSamplingSession:
             autocast_dtype=autocast_dtype,
             sample_steps=sample_steps,
             sample_vae_fp32=config.sample_vae_fp32,
+            generation_profile=config.generation_profile,
             vae_tiling_enabled=vae_tiling_enabled,
         )

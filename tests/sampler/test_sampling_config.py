@@ -1,6 +1,7 @@
 """Tests for sampling config GPU resolution."""
 
 from src.sampler.config import SamplingConfig
+from src.sampler.registry.profiles import SamplingProfile
 from src.settings.models import GpuDefaultsSettings
 from src.trainer.config import VaeDtype, WeightDtype
 
@@ -72,6 +73,21 @@ def test_sampling_config_snapshot_includes_gpu_fields() -> None:
     assert snapshot["tf32"] is False
     assert snapshot["attention_mechanism"] == "xformers"
     assert snapshot["mixed_precision"] == "bfloat16"
+
+
+def test_sampling_config_generation_profile_defaults_to_comfy() -> None:
+    config = SamplingConfig()
+
+    assert config.generation_profile == SamplingProfile.COMFY
+    assert config.inference_config_field_updates()["generation_profile"] == SamplingProfile.COMFY
+
+
+def test_sampling_config_generation_profile_propagates_to_inference_config() -> None:
+    config = SamplingConfig(generation_profile=SamplingProfile.REFORGE)
+
+    inference_config = config.to_inference_config()
+
+    assert inference_config.generation_profile == SamplingProfile.REFORGE
 
 
 def test_sampling_config_legacy_scheduler_maps_into_inference_fields() -> None:

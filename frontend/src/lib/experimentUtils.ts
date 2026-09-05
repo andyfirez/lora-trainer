@@ -286,6 +286,12 @@ export function setParameter(
   return { ...config, parameters };
 }
 
+export function clearPlaygroundLoraState(config: Record<string, unknown>): Record<string, unknown> {
+  let next = setParameter(config, "lora_path", { mode: "fixed", value: emptyLoraEntry() });
+  next = setParameter(next, "lora_weight", { mode: "fixed", value: 1 });
+  return { ...next, lora_paths: [] };
+}
+
 export function applyLoraStack(config: Record<string, unknown>, entries: LoraEntry[]): Record<string, unknown> {
   const normalized = entries.map(normalizeLoraEntry);
   const first = normalized.find((entry) => loraEntryPath(entry) && !entry.bypassed);

@@ -40,3 +40,14 @@ class SamplingOptionsResponse(BaseModel):
     profile: SamplingProfile
     samplers: list[SamplerOption]
     schedulers: list[SchedulerOption]
+
+
+class PromptTokenCountRequest(BaseModel):
+    prompt: str
+    base_model_name: str
+
+
+class PromptTokenCountResponse(BaseModel):
+    tokens: int
+    chunks: int
+    window: int = 75

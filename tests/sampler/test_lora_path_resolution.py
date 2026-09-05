@@ -131,6 +131,52 @@ def test_prepare_include_base_model_sample_prepends_null(tmp_path: Path) -> None
     assert values[1]["trigger"] == "ohwx, person"
 
 
+def test_prepare_explicit_empty_entity_paths_does_not_resurrect_config_loras(tmp_path: Path) -> None:
+    a = tmp_path / "a.safetensors"
+    b = tmp_path / "b.safetensors"
+    a.write_bytes(b"x")
+    b.write_bytes(b"x")
+    config = SamplingConfig(
+        lora_paths=[str(a), str(b)],
+        parameters=ExperimentParameters(
+            lora_path=ExperimentParameter(
+                mode=ExperimentMode.FIXED,
+                value=[
+                    {"path": str(a), "trigger": "", "weight": 1.0},
+                    {"path": str(b), "trigger": "", "weight": 0.6},
+                ],
+            )
+        ),
+    )
+    updated, paths = prepare_sampling_config_lora_paths(config, [])
+    assert paths == []
+    assert updated.lora_paths == []
+    assert updated.parameters.lora_path.mode == ExperimentMode.FIXED
+    assert updated.parameters.lora_path.value == {
+        "path": None,
+        "trigger": "",
+        "weight": 1.0,
+        "bypassed": False,
+    }
+
+
+def test_prepare_none_entity_paths_still_derives_from_config(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "epoch1.safetensors"
+    checkpoint.write_bytes(b"x")
+    config = SamplingConfig(
+        lora_paths=[str(checkpoint)],
+        parameters=ExperimentParameters(
+            lora_path=ExperimentParameter(
+                mode=ExperimentMode.FIXED,
+                value={"path": str(checkpoint), "trigger": "ohwx"},
+            )
+        ),
+    )
+    updated, paths = prepare_sampling_config_lora_paths(config, None)
+    assert paths == [str(checkpoint)]
+    assert updated.parameters.lora_path.value["path"] == str(checkpoint)
+
+
 def test_prepare_keeps_fixed_lora_stack(tmp_path: Path) -> None:
     a = tmp_path / "a.safetensors"
     b = tmp_path / "b.safetensors"

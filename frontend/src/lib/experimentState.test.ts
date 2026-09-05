@@ -6,7 +6,7 @@ import {
   loadExperimentDraft,
 } from "./experimentState.ts";
 import { PLAYGROUND_STORAGE_KEY, collapseExperimentToFixed, loadPlaygroundState } from "./playgroundState.ts";
-import { setParameter } from "./experimentUtils.ts";
+import { applyLoraStack, getParameters, setParameter } from "./experimentUtils.ts";
 
 function installLocalStorage() {
   const store = new Map<string, string>();
@@ -87,6 +87,27 @@ describe("playground and experiment persisted state", () => {
     const draft = loadExperimentDraft();
     const prompt = (draft.config.parameters as { prompt?: { value?: unknown } }).prompt;
     assert.equal(prompt?.value, "keep me");
+  });
+
+  it("clears a stale hidden LoRA stack when loading playground state", () => {
+    const config = applyLoraStack(
+      setParameter({}, "prompt", { mode: "fixed", value: "portrait <lora:style:0.8>" }),
+      [
+        { path: "a.safetensors", trigger: "", weight: 0.8 },
+        { path: "b.safetensors", trigger: "", weight: 0.4 },
+      ],
+    );
+    globalThis.localStorage.setItem(
+      PLAYGROUND_STORAGE_KEY,
+      JSON.stringify({ config, batchCount: 1 }),
+    );
+
+    const loaded = loadPlaygroundState();
+    const parameters = getParameters(loaded.config);
+    assert.deepEqual(loaded.config.lora_paths, []);
+    assert.deepEqual(parameters.lora_path?.value, { path: null, trigger: "", weight: 1, bypassed: false });
+    assert.equal(parameters.lora_weight?.value, 1);
+    assert.equal(parameters.prompt?.value, "portrait <lora:style:0.8>");
   });
 });
 

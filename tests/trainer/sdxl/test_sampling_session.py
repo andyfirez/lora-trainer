@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import torch
+from src.sampler.registry.profiles import SamplingProfile
 from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.latent_sampling.model_sampling import DiscreteEpsSampling
 from src.trainer.sdxl.latent_sampling.runner import (
@@ -42,6 +43,7 @@ def test_sampling_session_builds_sigmas() -> None:
     assert session.sample_steps == 30
     assert session.sampler_name == "euler"
     assert session.scheduler_name == "normal"
+    assert session.generation_profile == SamplingProfile.COMFY
     assert len(session.sigmas) >= 30
     assert float(session.sigmas[-1]) == 0.0
     assert session.vae_scale_factor == 8
@@ -49,6 +51,27 @@ def test_sampling_session_builds_sigmas() -> None:
     assert torch.equal(session.add_time_ids[0, :2], torch.tensor([1024.0, 1024.0]))
     unet.eval.assert_called_once()
     vae.enable_tiling.assert_called_once()
+
+
+def test_sampling_session_propagates_generation_profile_from_config() -> None:
+    unet = MagicMock()
+    vae = MagicMock()
+    vae.dtype = torch.float32
+    vae.config.force_upcast = False
+
+    session = SDXLSamplingSession.create(
+        unet=unet,
+        vae=vae,
+        noise_scheduler=_noise_scheduler(),
+        device=torch.device("cpu"),
+        width=512,
+        height=512,
+        sample_steps=10,
+        autocast_dtype=torch.float16,
+        config=_inference_config(generation_profile=SamplingProfile.REFORGE),
+    )
+
+    assert session.generation_profile == SamplingProfile.REFORGE
 
 
 def test_sampling_session_uses_reference_add_time_ids_when_provided() -> None:

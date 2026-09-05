@@ -114,7 +114,20 @@ def prepare_sampling_config_lora_paths(
     *,
     default_trigger: str | None = None,
 ) -> tuple[SamplingConfig, list[str]]:
-    """Merge entity-level and config-level LoRA paths; preserve triggers and empty entries."""
+    """Merge entity-level and config-level LoRA paths; preserve triggers and empty entries.
+
+    ``entity_lora_paths is None`` means derive extra files from the sampling config.
+    An explicit empty list means no file LoRAs: do not fall back to config-level
+    ``lora_paths`` or ``parameters.lora_path`` entries.
+    """
+    if entity_lora_paths is not None and not entity_lora_paths:
+        cleared = sampling_config.with_resolved_lora_experiment(
+            [LoraEntry(path=None, trigger="")],
+            [],
+            mode=ExperimentMode.FIXED,
+        )
+        return cleared, []
+
     original = sampling_config.parameters.lora_path
     keep_stack = original.mode == ExperimentMode.FIXED and is_lora_entry_list(original.value)
     explicit = lora_path_experiment_values(original)

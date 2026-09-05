@@ -125,6 +125,12 @@ export interface SamplingOptionsResponse {
   schedulers: SamplingSchedulerOption[];
 }
 
+export interface PromptTokenCountResponse {
+  tokens: number;
+  chunks: number;
+  window: number;
+}
+
 export interface RunnableSample {
   filename: string;
   path: string;

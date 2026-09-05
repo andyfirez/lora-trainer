@@ -13,6 +13,7 @@ from src.gpu import (
     resolve_gpu_config,
     strip_gpu_overrides_matching_defaults,
 )
+from src.sampler.registry.profiles import SamplingProfile
 from src.trainer.config import ModelPartConfig, VaeDtype, WeightDtype
 
 if TYPE_CHECKING:
@@ -59,6 +60,7 @@ class SDXLInferenceConfig(YamlGpuConfigMixin, BaseModel):
     sample_height: Optional[int] = Field(default=None, ge=64, le=2048)
     sample_sampler: str = "euler"
     sample_scheduler: str = "normal"
+    generation_profile: SamplingProfile = SamplingProfile.COMFY
     sample_vae_tiling: bool = True
     sample_vae_fp32: bool = False
     sample_offload_unet_before_decode: bool = True

@@ -5,7 +5,7 @@ import useSWR from "swr";
 import type { QueueEntry } from "@/components/playground/queueTypes";
 import { lorasApi } from "@/lib/api/loras";
 import { samplingsApi } from "@/lib/api/samplings";
-import { getParameters } from "@/lib/experimentUtils";
+import { clearPlaygroundLoraState, getParameters } from "@/lib/experimentUtils";
 import type { SamplingResponse } from "@/types";
 
 const ACTIVE = new Set(["queued", "running"]);
@@ -77,7 +77,7 @@ export function useSamplingJobs() {
     setSubmitting(true);
     setError(null);
     try {
-      const withFlags = { ...config, compose_grids: options.composeGrids };
+      const withFlags = clearPlaygroundLoraState({ ...config, compose_grids: options.composeGrids });
       const created = await samplingsApi.generate(withFlags, [], {
         kind: "playground",
         composeGrids: options.composeGrids,

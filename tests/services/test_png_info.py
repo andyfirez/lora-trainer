@@ -6,6 +6,7 @@ import io
 
 import pytest
 from PIL import Image, PngImagePlugin
+from src.sampler.registry.profiles import SamplingProfile
 from src.services.png_info.exceptions import InvalidImageError
 from src.services.png_info.parser import parse_generation_parameters
 from src.services.png_info.reader import read_info_from_image
@@ -114,6 +115,41 @@ def test_build_a1111_infotext_roundtrips_through_parser() -> None:
     assert parsed["Size-2"] == 1024
     assert parsed["Lora"] == "character"
     assert parsed["Lora weight"] == "0.8"
+
+
+def test_build_a1111_infotext_uses_comfy_labels_for_comfy_profile() -> None:
+    infotext = build_a1111_infotext(
+        prompt="a cat in a hat",
+        steps=30,
+        sampler="euler_ancestral",
+        scheduler="normal",
+        cfg_scale=7.5,
+        seed=42,
+        width=1024,
+        height=1024,
+        model_name="stabilityai/stable-diffusion-xl-base-1.0",
+        sampling_profile=SamplingProfile.COMFY,
+    )
+    parsed = parse_generation_parameters(infotext)
+    assert parsed["Sampler"] == "euler_ancestral"
+    assert parsed["Schedule type"] == "normal"
+
+
+def test_build_a1111_infotext_uses_reforge_labels_by_default() -> None:
+    infotext = build_a1111_infotext(
+        prompt="a cat in a hat",
+        steps=30,
+        sampler="euler_ancestral",
+        scheduler="normal",
+        cfg_scale=7.5,
+        seed=42,
+        width=1024,
+        height=1024,
+        model_name="stabilityai/stable-diffusion-xl-base-1.0",
+    )
+    parsed = parse_generation_parameters(infotext)
+    assert parsed["Sampler"] == "Euler a"
+    assert parsed["Schedule type"] == "Normal"
 
 
 def test_build_a1111_infotext_formats_lora_stack() -> None:

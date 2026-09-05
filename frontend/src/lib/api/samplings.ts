@@ -3,6 +3,7 @@ import { createRunnableApi } from "@/lib/api/runnableApi";
 import type {
   CreateSamplingRequest,
   ExperimentManifestResponse,
+  PromptTokenCountResponse,
   SamplingOptionsResponse,
   SamplingProfile,
   SamplingResponse,
@@ -18,6 +19,11 @@ export const samplingsApi = {
     api.get<ExperimentManifestResponse | null>(`/samplings/${id}/experiment-manifest`),
   getOptions: (profile: SamplingProfile = "comfy") =>
     api.get<SamplingOptionsResponse>(`/samplings/options?profile=${profile}`),
+  tokenCount: (prompt: string, baseModelName: string) =>
+    api.post<PromptTokenCountResponse>("/samplings/token-count", {
+      prompt,
+      base_model_name: baseModelName,
+    }),
   livePreviewUrl: (id: number, cacheBust: number) =>
     `${BASE_URL}/samplings/${id}/live-preview?t=${cacheBust}`,
   generate: async (

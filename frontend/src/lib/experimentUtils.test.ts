@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import {
   applyLoraStack,
+  clearPlaygroundLoraState,
   collapseStackToSingleLora,
+  getParameters,
   loraParameterFromStack,
   loraPathsFromParameter,
   parseLoraEntries,
@@ -80,5 +82,27 @@ describe("lora stack helpers", () => {
       lora_path?: { value?: { path?: string } };
     };
     assert.equal(parameters.lora_path?.value?.path, "a.safetensors");
+  });
+
+  it("clears hidden playground LoRA stack without touching the prompt", () => {
+    const stacked = applyLoraStack(
+      {
+        parameters: {
+          prompt: { mode: "fixed", value: "photo <lora:style:0.8>" },
+          lora_weight: { mode: "fixed", value: 0.4 },
+        },
+      },
+      [
+        { path: "a.safetensors", trigger: "", weight: 0.8 },
+        { path: "b.safetensors", trigger: "", weight: 0.4 },
+      ],
+    );
+    const cleared = clearPlaygroundLoraState(stacked);
+    const parameters = getParameters(cleared);
+    assert.deepEqual(cleared.lora_paths, []);
+    assert.equal(parameters.lora_path?.mode, "fixed");
+    assert.deepEqual(parameters.lora_path?.value, { path: null, trigger: "", weight: 1, bypassed: false });
+    assert.equal(parameters.lora_weight?.value, 1);
+    assert.equal(parameters.prompt?.value, "photo <lora:style:0.8>");
   });
 });

@@ -7,8 +7,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.db.repositories.sampling_repo import SamplingRepository
 from src.db.tables.runnable_mixin import RunnableMixin, RunnableStatus
 from src.db.tables.sampling import Sampling
-from src.sampler.config import SamplingConfig
 from src.services.runnable.handlers.base import RunnableHandler
+from src.services.sampling.validation import (
+    parse_sampling_config,
+    validate_sampling_gpu,
+)
 
 
 class SamplingHandler(RunnableHandler):
@@ -16,8 +19,8 @@ class SamplingHandler(RunnableHandler):
         return [sys.executable, "-u", "-m", "src.sampler.runner", "--sampling-id", str(entity_id)]
 
     def validate_config(self, config: dict) -> None:
-        parsed = SamplingConfig.from_snapshot(config)
-        parsed.validate_gpu()
+        parsed = parse_sampling_config(config, snapshot=True)
+        validate_sampling_gpu(parsed)
 
     async def _load_entity(self, session: AsyncSession, entity_id: int) -> Sampling | None:
         return await SamplingRepository(session).get_by_id(entity_id)
