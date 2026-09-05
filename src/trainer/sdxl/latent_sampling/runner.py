@@ -17,6 +17,7 @@ from src.trainer.sdxl.sampling import SamplePromptEmbeds
 
 StatusCallback = Callable[[int, int], None]
 StepProgressCallback = Callable[[int, int, int], None]
+PhaseCallback = Callable[[str], None]
 
 _SLOW_CALLBACK_THRESHOLD_S = 0.05
 
@@ -117,6 +118,7 @@ def run_sdxl_sampling_pass(
     log: logging.Logger,
     on_status: StatusCallback | None = None,
     on_step: StepProgressCallback | None = None,
+    on_phase: PhaseCallback | None = None,
     log_step_context: str = "",
     output_filenames: list[str] | None = None,
     png_infotext: str | None = None,
@@ -240,6 +242,8 @@ def run_sdxl_sampling_pass(
                 offload_s = time.perf_counter() - offload_started_at
                 log.info("%s unet offload before decode: %.3fs", prefix, offload_s)
 
+            if on_phase is not None:
+                on_phase("VAE decoding")
             log.info("%s decoding started", prefix)
             decode_started_at = time.perf_counter()
             image = decode_sdxl_latent(
@@ -254,6 +258,8 @@ def run_sdxl_sampling_pass(
             if config.sample_offload_unet_before_decode:
                 _restore_unet_after_decode(session, log, prefix=prefix)
 
+            if on_phase is not None:
+                on_phase("Saving")
             filename = (
                 output_filenames[prompt_index]
                 if output_filenames is not None and prompt_index < len(output_filenames)

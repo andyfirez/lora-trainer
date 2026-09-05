@@ -44,6 +44,7 @@ describe("playground and experiment persisted state", () => {
     );
     const loaded = loadPlaygroundState();
     assert.equal(loaded.batchCount, 4);
+    assert.deepEqual(loaded.sessionIds, []);
     const steps = (loaded.config.parameters as { steps?: { mode?: string; value?: unknown } }).steps;
     assert.equal(steps?.mode, "fixed");
     assert.equal(steps?.value, 20);
@@ -87,6 +88,19 @@ describe("playground and experiment persisted state", () => {
     const draft = loadExperimentDraft();
     const prompt = (draft.config.parameters as { prompt?: { value?: unknown } }).prompt;
     assert.equal(prompt?.value, "keep me");
+  });
+
+  it("loads and caps persisted playground session ids", () => {
+    const ids = Array.from({ length: 22 }, (_, index) => index + 1);
+    globalThis.localStorage.setItem(
+      PLAYGROUND_STORAGE_KEY,
+      JSON.stringify({ config: {}, batchCount: 2, sessionIds: [...ids, 0, "x", 7] }),
+    );
+    const loaded = loadPlaygroundState();
+    assert.equal(loaded.sessionIds.length, 20);
+    assert.equal(loaded.sessionIds[0], 3);
+    assert.equal(loaded.sessionIds.at(-1), 22);
+    assert.ok(!loaded.sessionIds.includes(0));
   });
 
   it("clears a stale hidden LoRA stack when loading playground state", () => {

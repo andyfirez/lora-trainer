@@ -34,9 +34,6 @@ export default function ExperimentListItem({ experiment }: ExperimentListItemPro
         </p>
         <p className="text-xs text-muted">
           {imageCount} image{imageCount === 1 ? "" : "s"} · {experimentSummary(parameters)}
-          {experiment.status === "queued" && experiment.queue_position != null
-            ? ` · queue #${experiment.queue_position}`
-            : ""}
         </p>
       </div>
       <ChevronRight size={16} className="shrink-0 text-muted" />

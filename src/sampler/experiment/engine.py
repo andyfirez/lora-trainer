@@ -28,8 +28,14 @@ from src.sampler.experiment.models import parse_trigger_words
 from src.sampler.output_paths import flat_grid_filename, flat_sample_filename
 from src.sampler.progress_callbacks import (
     ProgressCallback,
-    ProgressCallbackMixin,
     ProgressStatusCallback,
+    SamplingProgressReporter,
+)
+from src.sampler.progress_labels import (
+    PHASE_COMPOSING_GRIDS,
+    PHASE_GENERATING,
+    PHASE_LOADING_MODEL,
+    PHASE_STARTING,
 )
 from src.sampler.registry import resolve_sampler_scheduler
 from src.sampler.sdxl.cell_generator import generate_sampling_cell
@@ -64,7 +70,7 @@ def sort_pipeline_groups(
     return sorted(groups.items(), key=lambda item: (item[0][0], item[0][1] or ""))
 
 
-class ExperimentEngine(ProgressCallbackMixin):
+class ExperimentEngine:
     def __init__(
         self,
         sampling_config: SamplingConfig,
@@ -83,12 +89,12 @@ class ExperimentEngine(ProgressCallbackMixin):
         self._base_inference_config = base_inference_config
         self._output_dir = output_dir
         self._sampling_id = sampling_id
-        self._progress_status_callback = progress_status_callback
-        self._progress_callback = progress_callback
+        self._reporter = SamplingProgressReporter(progress_status_callback, progress_callback)
         self._log = log or logging.getLogger(__name__)
         self._concept_metadata = concept_metadata or {}
         self._compose_grids = compose_grids
         self._flat_output = flat_output
+        self._cell_total = 0
         self._pipeline_loader = SDXLPipelineLoader(base_inference_config, log=self._log)
         self._prompt_embed_cache = PromptEmbedCache()
 
@@ -98,6 +104,8 @@ class ExperimentEngine(ProgressCallbackMixin):
         if not combinations:
             raise ValueError("No sample prompts configured")
 
+        self._cell_total = len(combinations)
+        self._reporter.set_phase(PHASE_STARTING)
         self._log.info(
             "Experiment engine: %d image(s) to generate, output -> %s",
             len(combinations),
@@ -116,7 +124,7 @@ class ExperimentEngine(ProgressCallbackMixin):
                 grids_dir.mkdir(parents=True, exist_ok=True)
 
         total_steps = len(combinations) * int(parameters.steps.first_value() or 30)
-        self._set_progress(0, total_steps)
+        self._reporter.set_progress(0, total_steps)
         completed_images = 0
 
         groups: dict[tuple[str, str | None], list] = defaultdict(list)
@@ -148,7 +156,6 @@ class ExperimentEngine(ProgressCallbackMixin):
             lora_path = resolve_sampling_lora_file(str(raw_path)) if raw_path else None
             lora_stack = first.params.get("lora_stack")
             stack_items = lora_stack if isinstance(lora_stack, list) else None
-            status = f"Sampling {lora_path.name if lora_path else 'base model'}"
             self._log.info(
                 "Pipeline group %d/%d: base=%s, lora=%s, cells=%d",
                 group_index,
@@ -157,7 +164,7 @@ class ExperimentEngine(ProgressCallbackMixin):
                 lora_key or "(none)",
                 len(group_combos),
             )
-            self._set_status(status)
+            self._reporter.set_phase(PHASE_LOADING_MODEL)
             stack, lora_config, merge_unet = self._pipeline_loader.load_stack_for_combo(
                 base_model=base_model,
                 lora_path=lora_path,
@@ -183,6 +190,7 @@ class ExperimentEngine(ProgressCallbackMixin):
         if self._flat_output:
             if self._compose_grids:
                 self._log.info("Composing grid images...")
+                self._reporter.set_phase(PHASE_COMPOSING_GRIDS)
                 grid_count = self._compose_flat_grids(combinations, images_dir)
                 self._log.info(
                     "Experiment complete: %d image(s), %d grid(s)",
@@ -191,14 +199,16 @@ class ExperimentEngine(ProgressCallbackMixin):
                 )
             else:
                 self._log.info("Experiment complete: %d image(s)", len(combinations))
-            self._set_status(None)
+            self._reporter.clear()
             return None
 
-        self._log.info("Composing grid images...")
+        if self._compose_grids:
+            self._log.info("Composing grid images...")
+            self._reporter.set_phase(PHASE_COMPOSING_GRIDS)
         manifest = self._build_manifest(combinations, images_dir, grids_dir)
         write_manifest(self._output_dir, manifest)
         self._log.info("Experiment complete: %d image(s), %d grid(s)", manifest.total_images, len(manifest.grids))
-        self._set_status(None)
+        self._reporter.clear()
         return manifest
 
     def _generate_cell(
@@ -225,8 +235,22 @@ class ExperimentEngine(ProgressCallbackMixin):
             if self._flat_output
             else cell_image_path(self._output_dir, combo.index).name
         )
-        self._set_status(f"Cell {combo.index + 1}: {prompt[:60]}")
+        sample_steps = sampling_config.sample_steps
+        self._reporter.set_phase(
+            PHASE_GENERATING,
+            cell_index=completed_images + 1,
+            cell_total=self._cell_total,
+        )
         lora_stack = params.get("lora_stack")
+
+        def on_progress(step: int, total: int) -> None:
+            self._reporter.set_progress(
+                step,
+                total,
+                cell_step=step - completed_images * sample_steps,
+                cell_step_total=sample_steps,
+            )
+
         generate_sampling_cell(
             stack=stack,
             lora_config=lora_config,
@@ -242,7 +266,8 @@ class ExperimentEngine(ProgressCallbackMixin):
             concept_metadata=self._concept_metadata,
             prompt_embed_cache=self._prompt_embed_cache,
             log=self._log,
-            on_progress=self._set_progress,
+            on_progress=on_progress,
+            on_phase=self._reporter.set_phase,
             lora_path=str(params["lora_path"]) if params.get("lora_path") else None,
             lora_stack=lora_stack if isinstance(lora_stack, list) else None,
             preview_path=self._output_dir / LIVE_PREVIEW_FILENAME,

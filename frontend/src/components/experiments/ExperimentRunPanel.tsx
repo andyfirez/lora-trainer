@@ -59,26 +59,9 @@ export default function ExperimentRunPanel({ experiment, hideLogs = false }: Exp
 
   return (
     <div className="space-y-6">
-      {isQueued && (
+      {isRunning && (
         <JobProgressBar
-          title="Waiting in queue"
-          step={null}
-          total={null}
-          percent={0}
-          active={false}
-          elapsedSeconds={experiment.elapsed_seconds}
-          showBar={false}
-          headerRight={
-            experiment.queue_position != null ? (
-              <span className="text-muted">Position #{experiment.queue_position}</span>
-            ) : undefined
-          }
-        />
-      )}
-
-      {(isRunning || experiment.progress_status) && (
-        <JobProgressBar
-          title={experiment.progress_status ?? "Experiment"}
+          title={experiment.progress_status ?? "Starting…"}
           step={experiment.progress_step}
           total={experiment.progress_total}
           percent={percent ?? 0}
@@ -86,7 +69,8 @@ export default function ExperimentRunPanel({ experiment, hideLogs = false }: Exp
           elapsedSeconds={experiment.elapsed_seconds}
           barClassName="bg-sampling"
           showSpinner={isRunning}
-          showBar={percent != null}
+          showBar
+          indeterminate={percent == null}
           headerRight={
             percent != null ? (
               <span className="text-muted">

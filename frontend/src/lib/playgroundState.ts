@@ -9,12 +9,14 @@ import {
   syncLoraPathsToParameters,
   type ExperimentParamKey,
 } from "./experimentUtils.ts";
+import { normalizeSessionIds } from "./samplingSession.ts";
 
 export const PLAYGROUND_STORAGE_KEY = "sampling-playground";
 
 export interface PlaygroundPersistedState {
   config: Record<string, unknown>;
   batchCount: number;
+  sessionIds: number[];
 }
 
 export function defaultPlaygroundConfig(): Record<string, unknown> {
@@ -25,6 +27,7 @@ export function defaultPlaygroundState(): PlaygroundPersistedState {
   return {
     config: defaultPlaygroundConfig(),
     batchCount: 1,
+    sessionIds: [],
   };
 }
 
@@ -48,6 +51,7 @@ export function loadPlaygroundState(): PlaygroundPersistedState {
         typeof parsed.batchCount === "number" && Number.isFinite(parsed.batchCount) && parsed.batchCount >= 1
           ? Math.min(32, Math.floor(parsed.batchCount))
           : 1,
+      sessionIds: normalizeSessionIds(parsed.sessionIds),
     };
   } catch {
     return defaultPlaygroundState();

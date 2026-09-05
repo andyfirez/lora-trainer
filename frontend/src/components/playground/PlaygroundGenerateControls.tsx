@@ -1,6 +1,5 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import type { GeneratePrimaryLabel } from "@/hooks/useSamplingJobs";
 
@@ -26,11 +25,8 @@ export default function PlaygroundGenerateControls({
         variant={primaryLabel === "Interrupt" ? "danger" : "sampling"}
         className="h-10 w-full text-base"
         onClick={onPrimary}
-        disabled={primaryBusy && primaryLabel !== "Interrupt"}
+        disabled={primaryBusy}
       >
-        {primaryBusy && primaryLabel !== "Interrupt" ? (
-          <Loader2 size={16} className="animate-spin" />
-        ) : null}
         {primaryLabel}
       </Button>
       {error ? <p className="mt-2 text-xs text-error">{error}</p> : null}

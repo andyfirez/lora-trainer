@@ -72,6 +72,18 @@ def _output_dir(sampling: Sampling) -> Path | None:
     return Path(sampling.output_path) if sampling.output_path else None
 
 
+async def _create_sampling(service: SamplingService, body: CreateSamplingRequest) -> Sampling:
+    sampling = await service.create_sampling(
+        name=body.name,
+        config=body.config,
+        lora_paths=body.lora_paths,
+        kind=body.kind,
+    )
+    if body.enqueue and sampling.id is not None:
+        return await service.enqueue_sampling(sampling.id)
+    return sampling
+
+
 router = build_runnable_router(
     prefix="/samplings",
     tags=["samplings"],
@@ -82,12 +94,7 @@ router = build_runnable_router(
         list_entities=lambda service: service.list_samplings(),
         list_entities_for_kind=lambda service, kind: service.list_samplings(kind=SamplingKind(kind)),
         get_entity=lambda service, entity_id: service.get_sampling(entity_id),
-        create_entity=lambda service, body: service.create_sampling(
-            name=body.name,
-            config=body.config,
-            lora_paths=body.lora_paths,
-            kind=body.kind,
-        ),
+        create_entity=_create_sampling,
         enqueue_entity=lambda service, entity_id: service.enqueue_sampling(entity_id),
         cancel_entity=lambda service, entity_id: service.cancel_sampling(entity_id),
         get_logs=lambda service, entity_id, tail: service.get_logs(entity_id, tail=tail),

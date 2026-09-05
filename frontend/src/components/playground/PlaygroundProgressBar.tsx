@@ -6,19 +6,19 @@ interface PlaygroundProgressBarProps {
 }
 
 export default function PlaygroundProgressBar({ label, pct }: PlaygroundProgressBarProps) {
-  if (!label && pct == null) return null;
-
   return (
     <div className="px-3 py-2 space-y-1">
-      {label ? <div className="truncate text-xs text-muted">{label}</div> : null}
-      {pct != null ? (
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 flex-1 rounded-full bg-border">
+      <div className="min-h-4 truncate text-xs text-muted">{label ?? "\u00a0"}</div>
+      <div className="flex items-center gap-2">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-border">
+          {pct != null ? (
             <div className="h-1.5 rounded-full bg-sampling transition-all" style={{ width: `${pct}%` }} />
-          </div>
-          <span className="text-xs text-muted">{pct}%</span>
+          ) : label ? (
+            <div className="progress-indeterminate h-1.5 rounded-full bg-sampling" />
+          ) : null}
         </div>
-      ) : null}
+        <span className="w-8 text-right text-xs text-muted">{pct != null ? `${pct}%` : "\u00a0"}</span>
+      </div>
     </div>
   );
 }

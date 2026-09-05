@@ -10,6 +10,7 @@ from src.services.runnable.exceptions import (
     RunnableAlreadyQueuedError,
     RunnableNotCancellableError,
 )
+from src.services.runnable.wakeup import schedule_nudge
 
 _TERMINAL_CANCEL_STATUSES = frozenset(
     {RunnableStatus.COMPLETED, RunnableStatus.FAILED, RunnableStatus.CANCELLED},
@@ -31,6 +32,7 @@ async def enqueue_runnable(
         await before_enqueue()
     runtime.clear_runtime(entity)
     await queue.enqueue(session, entity)
+    schedule_nudge(session)
 
 
 async def cancel_runnable(

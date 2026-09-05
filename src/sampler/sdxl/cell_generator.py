@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Callable
 
+from src.sampler.progress_callbacks import ProgressPhaseCallback
 from src.sampler.wildcards import expand_prompt_wildcards
 from src.services.png_info.writer import build_a1111_infotext
 from src.trainer.concept_training_metadata import (
@@ -38,6 +39,7 @@ def generate_sampling_cell(
     prompt_embed_cache: PromptEmbedCache,
     log: logging.Logger,
     on_progress: ProgressStepCallback | None = None,
+    on_phase: ProgressPhaseCallback | None = None,
     lora_path: str | None = None,
     lora_stack: list[dict[str, object]] | None = None,
     preview_path: Path | None = None,
@@ -105,6 +107,7 @@ def generate_sampling_cell(
         embed_cache=prompt_embed_cache,
         reference_add_time_ids=reference_add_time_ids,
         on_step=on_step,
+        on_phase=on_phase,
         lora_weight=lora_weight,
         output_filenames=[output_filename],
         clear_embed_cache_on_te_train=True,

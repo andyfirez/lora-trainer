@@ -11,6 +11,7 @@ from src.db.session import session_factory
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.services.runnable import runtime
 from src.services.runnable.handlers import get_runnable_handler
+from src.services.runnable.wakeup import nudge, wake_event
 from src.settings.app_settings import settings
 
 logger = logging.getLogger(__name__)
@@ -221,9 +222,19 @@ class SubprocessRunnableWorker:
             self._active.pop((kind, entity_id), None)
             if managed is not None:
                 await self._finalize(kind, entity_id, managed.returncode or 0, output_lines)
+            nudge()
 
     async def _active_count(self) -> int:
         return sum(1 for managed in self._active.values() if managed.is_running())
+
+    async def _wait_for_work(self) -> None:
+        event = wake_event()
+        try:
+            await asyncio.wait_for(event.wait(), timeout=settings.training.worker_poll_interval_seconds)
+        except TimeoutError:
+            pass
+        else:
+            event.clear()
 
     async def _poll_loop(self) -> None:
         while True:
@@ -251,4 +262,4 @@ class SubprocessRunnableWorker:
                 raise
             except Exception:
                 logger.exception("Worker poll error")
-            await asyncio.sleep(settings.training.worker_poll_interval_seconds)
+            await self._wait_for_work()

@@ -3,12 +3,11 @@
 import Link from "next/link";
 import { PlusCircle } from "lucide-react";
 import ExperimentListItem from "@/components/experiments/ExperimentListItem";
-import PlaygroundQueue from "@/components/playground/PlaygroundQueue";
 import PageHeader from "@/components/ui/PageHeader";
 import { useExperiments } from "@/hooks/useExperiments";
 
 export default function ExperimentsPage() {
-  const { inProgress, completed, queueItems, error, cancelQueueItem } = useExperiments();
+  const { inProgress, completed, error } = useExperiments();
 
   return (
     <div className="-m-4 flex h-[100dvh] flex-col overflow-hidden bg-bg md:-m-6 lg:-m-8">
@@ -16,7 +15,7 @@ export default function ExperimentsPage() {
         <div className="mx-auto max-w-4xl space-y-6 px-4 py-6">
           <PageHeader
             title="Experiments"
-            description="Parameter grids with history, queue, and results"
+            description="Parameter grids with history and results"
             actions={
               <Link
                 href="/experiments/new"
@@ -57,7 +56,6 @@ export default function ExperimentsPage() {
           </section>
         </div>
       </div>
-      <PlaygroundQueue items={queueItems} onCancel={(item) => void cancelQueueItem(item)} />
     </div>
   );
 }

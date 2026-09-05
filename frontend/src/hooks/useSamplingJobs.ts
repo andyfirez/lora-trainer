@@ -1,79 +1,87 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
-import type { QueueEntry } from "@/components/playground/queueTypes";
-import { lorasApi } from "@/lib/api/loras";
 import { samplingsApi } from "@/lib/api/samplings";
-import { clearPlaygroundLoraState, getParameters } from "@/lib/experimentUtils";
-import type { SamplingResponse } from "@/types";
+import { clearPlaygroundLoraState } from "@/lib/experimentUtils";
+import { loadPlaygroundState, savePlaygroundState } from "@/lib/playgroundState";
+import {
+  resolveGenerateBusy,
+  resolveGenerateLabel,
+  type GeneratePrimaryLabel,
+} from "@/lib/samplingGenerateLabel";
+import { activePlaygroundJobs, mergeSessionIds } from "@/lib/samplingSession";
+export type { GeneratePrimaryLabel };
 
-const ACTIVE = new Set(["queued", "running"]);
-
-export type GeneratePrimaryLabel = "Generate" | "Enqueue" | "Interrupt";
-
-function samplingPromptLabel(sampling: SamplingResponse): string {
-  try {
-    const prompt = getParameters(sampling.config).prompt;
-    const value = prompt?.mode === "vary" ? prompt.values?.[0] : prompt?.value;
-    const text = String(value ?? "").trim();
-    return text.slice(0, 80) || sampling.name || "Sampling";
-  } catch {
-    return sampling.name || "Sampling";
-  }
+function sameIds(left: number[], right: number[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
 export function useSamplingJobs() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [optimistic, setOptimistic] = useState(false);
   const [sessionIds, setSessionIds] = useState<number[]>([]);
+  const [sessionReady, setSessionReady] = useState(false);
 
   const { data: samplings, mutate: mutateSamplings } = useSWR(
     "/samplings",
     () => samplingsApi.list(),
     { refreshInterval: 1000 },
   );
-  const { data: loras, mutate: mutateLoras } = useSWR("/loras", () => lorasApi.list(), {
-    refreshInterval: 1000,
+  const active = activePlaygroundJobs(samplings);
+  const myRunning = active.find((item) => item.status === "running");
+  const myQueued = active.find((item) => item.status === "queued");
+
+  const primaryLabel = resolveGenerateLabel({
+    optimistic,
+    sessionQueued: Boolean(myQueued),
+    sessionRunning: Boolean(myRunning),
+  });
+  const cancellable = myRunning ?? myQueued;
+  const primaryBusy = resolveGenerateBusy({
+    label: primaryLabel,
+    submitting,
   });
 
-  const queueItems: QueueEntry[] = useMemo(() => {
-    const samplingItems = (samplings ?? [])
-      .filter((item) => ACTIVE.has(item.status))
-      .map((item) => ({
-        kind: "sampling" as const,
-        id: item.id,
-        label: samplingPromptLabel(item),
-        status: item.status,
-      }));
-    const loraItems = (loras ?? [])
-      .filter((item) => ACTIVE.has(item.status))
-      .map((item) => ({
-        kind: "lora" as const,
-        id: item.id,
-        label: item.name,
-        status: item.status,
-      }));
-    return [...loraItems, ...samplingItems];
-  }, [samplings, loras]);
+  const beginImmediate = () => {
+    setOptimistic(true);
+  };
 
-  const anyRunning = queueItems.some((item) => item.status === "running");
-  const myRunning = (samplings ?? []).find(
-    (item) => item.status === "running" && sessionIds.includes(item.id),
-  );
-  const primaryLabel: GeneratePrimaryLabel = myRunning
-    ? "Interrupt"
-    : anyRunning
-      ? "Enqueue"
-      : "Generate";
+  useEffect(() => {
+    setSessionIds(loadPlaygroundState().sessionIds);
+    setSessionReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!samplings || !sessionReady) return;
+    setSessionIds((ids) => {
+      const next = mergeSessionIds(ids, samplings);
+      return sameIds(ids, next) ? ids : next;
+    });
+  }, [samplings, sessionReady]);
+
+  useEffect(() => {
+    if (!sessionReady) return;
+    const stored = loadPlaygroundState();
+    if (sameIds(stored.sessionIds, sessionIds)) return;
+    savePlaygroundState({ ...stored, sessionIds });
+  }, [sessionIds, sessionReady]);
+
+  useEffect(() => {
+    if (!optimistic) return;
+    if (myQueued || myRunning) setOptimistic(false);
+  }, [optimistic, myQueued, myRunning]);
 
   const interrupt = async () => {
-    if (!myRunning) return;
-    await samplingsApi.cancel(myRunning.id);
+    if (!cancellable) return;
+    await samplingsApi.cancel(cancellable.id);
+    setOptimistic(false);
     await mutateSamplings();
   };
 
   const generate = async (config: Record<string, unknown>, options: { composeGrids: boolean }) => {
+    setOptimistic(true);
     setSubmitting(true);
     setError(null);
     try {
@@ -82,10 +90,11 @@ export function useSamplingJobs() {
         kind: "playground",
         composeGrids: options.composeGrids,
       });
-      setSessionIds((ids) => [...ids, created.id]);
+      setSessionIds((ids) => mergeSessionIds([...ids, created.id], samplings));
       await mutateSamplings();
       return created;
     } catch (err) {
+      setOptimistic(false);
       setError(err instanceof Error ? err.message : "Failed to start sampling");
       return null;
     } finally {
@@ -93,27 +102,21 @@ export function useSamplingJobs() {
     }
   };
 
-  const cancelQueueItem = async (item: QueueEntry) => {
-    if (item.kind === "sampling") {
-      await samplingsApi.cancel(item.id);
-      await mutateSamplings();
-      return;
-    }
-    await lorasApi.cancel(item.id, false);
-    await mutateLoras();
-  };
-
   return {
     samplings,
     sessionIds,
-    queueItems,
+    sessionReady,
     myRunning,
+    myQueued,
+    showProgress: optimistic || Boolean(myQueued) || Boolean(myRunning),
     primaryLabel,
+    primaryBusy,
+    optimistic,
     submitting,
     error,
     setError,
+    beginImmediate,
     interrupt,
     generate,
-    cancelQueueItem,
   };
 }

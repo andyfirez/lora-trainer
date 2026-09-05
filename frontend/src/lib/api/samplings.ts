@@ -35,12 +35,12 @@ export const samplingsApi = {
       ...config,
       compose_grids: options.composeGrids ?? config.compose_grids ?? false,
     };
-    const created = await api.post<SamplingResponse>("/samplings/", {
+    return api.post<SamplingResponse>("/samplings/", {
       name: options.name ?? "Playground",
       config: withFlags,
       lora_paths: loraPaths,
       kind: options.kind ?? "playground",
+      enqueue: true,
     } satisfies CreateSamplingRequest);
-    return runnableApi.enqueue(created.id);
   },
 };

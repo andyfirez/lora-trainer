@@ -2,8 +2,6 @@
 
 import { useMemo, useState } from "react";
 import useSWR from "swr";
-import type { QueueEntry } from "@/components/playground/queueTypes";
-import { lorasApi } from "@/lib/api/loras";
 import { samplingsApi } from "@/lib/api/samplings";
 import { getParameters, loraPathsFromParameter, syncLoraPathsToParameters } from "@/lib/experimentUtils";
 import type { SamplingResponse } from "@/types";
@@ -31,9 +29,6 @@ export function useExperiments() {
     () => samplingsApi.listExperiments(),
     { refreshInterval: 1000 },
   );
-  const { data: loras, mutate: mutateLoras } = useSWR("/loras", () => lorasApi.list(), {
-    refreshInterval: 1000,
-  });
 
   const inProgress = useMemo(
     () => (experiments ?? []).filter((item) => ACTIVE.has(item.status)),
@@ -44,24 +39,6 @@ export function useExperiments() {
     () => (experiments ?? []).filter((item) => TERMINAL.has(item.status)),
     [experiments],
   );
-
-  const queueItems: QueueEntry[] = useMemo(() => {
-    const loraItems = (loras ?? [])
-      .filter((item) => ACTIVE.has(item.status))
-      .map((item) => ({
-        kind: "lora" as const,
-        id: item.id,
-        label: item.name,
-        status: item.status,
-      }));
-    const experimentItems = inProgress.map((item) => ({
-      kind: "sampling" as const,
-      id: item.id,
-      label: experimentLabel(item),
-      status: item.status,
-    }));
-    return [...loraItems, ...experimentItems];
-  }, [loras, inProgress]);
 
   const createAndEnqueue = async (config: Record<string, unknown>) => {
     setSubmitting(true);
@@ -96,27 +73,15 @@ export function useExperiments() {
     }
   };
 
-  const cancelQueueItem = async (item: QueueEntry) => {
-    if (item.kind === "sampling") {
-      await samplingsApi.cancel(item.id);
-      await mutateExperiments();
-      return;
-    }
-    await lorasApi.cancel(item.id, false);
-    await mutateLoras();
-  };
-
   return {
     experiments,
     inProgress,
     completed,
-    queueItems,
     submitting,
     error,
     setError,
     createAndEnqueue,
     repeatExperiment,
-    cancelQueueItem,
     mutateExperiments,
   };
 }

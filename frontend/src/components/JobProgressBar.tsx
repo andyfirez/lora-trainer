@@ -17,6 +17,7 @@ interface Props {
   footer?: ReactNode;
   showSpinner?: boolean;
   showBar?: boolean;
+  indeterminate?: boolean;
 }
 
 export default function JobProgressBar({
@@ -32,6 +33,7 @@ export default function JobProgressBar({
   footer,
   showSpinner = false,
   showBar = true,
+  indeterminate = false,
 }: Props) {
   return (
     <div className="bg-surface rounded-xl border border-border p-5 space-y-3">
@@ -44,11 +46,15 @@ export default function JobProgressBar({
         {headerRight}
       </div>
       {showBar && (
-        <div className="bg-border rounded-full h-2.5">
-          <div
-            className={`${barClassName} h-2.5 rounded-full transition-all duration-500`}
-            style={{ width: `${percent}%` }}
-          />
+        <div className="bg-border rounded-full h-2.5 overflow-hidden">
+          {indeterminate ? (
+            <div className={`${barClassName} progress-indeterminate h-2.5 rounded-full`} />
+          ) : (
+            <div
+              className={`${barClassName} h-2.5 rounded-full transition-all duration-500`}
+              style={{ width: `${percent}%` }}
+            />
+          )}
         </div>
       )}
       <ProgressTimingInfo

@@ -10,6 +10,7 @@ from src.db.tables.runnable_mixin import RunnableStatus
 from src.db.tables.sampling import Sampling
 from src.sampler.config import SamplingConfig
 from src.sampler.output_paths import resolve_sampling_output_path
+from src.sampler.progress_labels import PHASE_STARTING
 from src.sampler.sdxl.service import run_experiment_sampling
 from src.services.runnable.db_updates import get_runnable_entity, update_runnable_entity
 from src.services.runnable.logging import build_runnable_log_path, build_runnable_logger
@@ -79,6 +80,7 @@ async def run_sampling(sampling_id: int) -> int:
             run_logger.info("Sampling id=%d already cancelled", sampling_id)
             return 1
 
+        await _update_progress_status(sampling_id, PHASE_STARTING)
         await update_runnable_entity(
             SamplingRepository,
             sampling_id,

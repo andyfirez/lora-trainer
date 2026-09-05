@@ -7,7 +7,6 @@ import PlaygroundCompactSettings from "@/components/playground/PlaygroundCompact
 import PlaygroundGallery from "@/components/playground/PlaygroundGallery";
 import PlaygroundLogsPanel from "@/components/playground/PlaygroundLogsPanel";
 import PlaygroundProgressBar from "@/components/playground/PlaygroundProgressBar";
-import PlaygroundQueue from "@/components/playground/PlaygroundQueue";
 import PlaygroundSourceStrip from "@/components/playground/PlaygroundSourceStrip";
 import ResizeSplit from "@/components/playground/ResizeSplit";
 import ErrorAlert from "@/components/ui/ErrorAlert";
@@ -51,15 +50,16 @@ export default function SamplingPlayground() {
   const {
     samplings,
     sessionIds,
-    queueItems,
+    sessionReady,
     myRunning,
+    showProgress,
     primaryLabel,
-    submitting,
+    primaryBusy,
     error,
     setError,
+    beginImmediate,
     interrupt,
     generate,
-    cancelQueueItem,
   } = useSamplingJobs();
 
   const { data: settingsData } = useSWR("/settings", () => settingsApi.get());
@@ -72,9 +72,9 @@ export default function SamplingPlayground() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
-    savePlaygroundState({ config, batchCount });
-  }, [hydrated, config, batchCount]);
+    if (!hydrated || !sessionReady) return;
+    savePlaygroundState({ config, batchCount, sessionIds });
+  }, [hydrated, sessionReady, config, batchCount, sessionIds]);
 
   const progressPct =
     myRunning?.progress_step != null && myRunning.progress_total
@@ -91,8 +91,6 @@ export default function SamplingPlayground() {
   }, [samplings, sessionIds, myRunning]);
 
   const jobError = logJob?.status === "failed" ? logJob.error_message : null;
-  const showProgress = Boolean(myRunning?.progress_status || progressPct != null);
-  const showStatusStrip = showProgress || queueItems.length > 0 || Boolean(jobError);
 
   useEffect(() => {
     if (!myRunning || (myRunning.progress_step ?? 0) <= 0) return;
@@ -101,7 +99,7 @@ export default function SamplingPlayground() {
       url: samplingsApi.livePreviewUrl(myRunning.id, myRunning.progress_step ?? 0),
       kind: "preview",
       samplingId: myRunning.id,
-      infotext: myRunning.progress_status ?? "Denoising…",
+      infotext: myRunning.progress_status ?? "Starting…",
       seed: null,
     });
   }, [myRunning]);
@@ -156,6 +154,7 @@ export default function SamplingPlayground() {
       setError(validationError);
       return;
     }
+    beginImmediate();
     setCurrentImage(null);
     const payload = batchCount > 1 ? applyBatchCount(config, batchCount, randomSeed) : config;
     await generate(payload, { composeGrids: false });
@@ -167,7 +166,7 @@ export default function SamplingPlayground() {
 
   const generateControls = {
     primaryLabel,
-    primaryBusy: submitting,
+    primaryBusy,
     onPrimary: () => void handlePrimary(),
     error,
   };
@@ -175,21 +174,20 @@ export default function SamplingPlayground() {
   return (
     <div className="-m-4 flex h-[100dvh] flex-col overflow-hidden bg-bg md:-m-6 lg:-m-8">
       <PlaygroundSourceStrip config={config} onChange={handleConfigChange} {...generateControls} />
-      {showStatusStrip ? (
-        <div className="border-b border-border bg-surface">
-          {showProgress ? (
-            <PlaygroundProgressBar label={myRunning?.progress_status ?? null} pct={progressPct} />
-          ) : null}
-          {jobError ? (
-            <div className="px-3 pb-2">
-              <ErrorAlert compact>
-                <strong>Sampling failed:</strong> {jobError}
-              </ErrorAlert>
-            </div>
-          ) : null}
-          <PlaygroundQueue items={queueItems} onCancel={(item) => void cancelQueueItem(item)} />
-        </div>
-      ) : null}
+      <div className="border-b border-border bg-surface">
+        <PlaygroundProgressBar
+          label={showProgress ? (myRunning?.progress_status ?? "Starting…") : null}
+          pct={showProgress ? progressPct : null}
+        />
+        {jobError ? (
+          <div className="px-3 pb-2">
+            <ErrorAlert compact>
+              <strong>Sampling failed:</strong> {jobError}
+            </ErrorAlert>
+          </div>
+        ) : null}
+        <PlaygroundLogsPanel job={logJob} />
+      </div>
       <ResizeSplit
         left={
           <div className="flex min-h-0 flex-col">
@@ -202,7 +200,6 @@ export default function SamplingPlayground() {
               gpuDefaults={settingsData?.gpu_defaults}
               lastSeed={lastSeed}
             />
-            <PlaygroundLogsPanel job={logJob} />
           </div>
         }
         right={<PlaygroundGallery item={currentImage} />}

@@ -193,6 +193,16 @@ input[type="range"].slider-input::-moz-range-thumb {
 .animate-fade-up-delay-2 { animation-delay: 0.16s; }
 .animate-fade-up-delay-3 { animation-delay: 0.24s; }
 
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+.progress-indeterminate {
+  width: 33%;
+  animation: progress-indeterminate 1.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up,
   .animate-fade-up-delay-1,
@@ -201,5 +211,10 @@ input[type="range"].slider-input::-moz-range-thumb {
     animation: none;
     opacity: 1;
     transform: none;
+  }
+
+  .progress-indeterminate {
+    animation: none;
+    width: 33%;
   }
 }

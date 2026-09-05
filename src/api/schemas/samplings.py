@@ -23,6 +23,7 @@ class CreateSamplingRequest(BaseModel):
     config: dict[str, Any]
     lora_paths: Optional[list[str]] = None
     kind: SamplingKind = SamplingKind.PLAYGROUND
+    enqueue: bool = False
 
 
 class SamplerOption(BaseModel):

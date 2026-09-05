@@ -34,6 +34,7 @@ export interface CreateSamplingRequest {
   config: Record<string, unknown>;
   lora_paths?: string[];
   kind?: "experiment" | "playground";
+  enqueue?: boolean;
 }
 
 export type PickKind = "file" | "directory" | "model";
