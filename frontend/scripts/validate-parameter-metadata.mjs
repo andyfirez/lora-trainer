@@ -97,6 +97,7 @@ const requiredYamlOnlyKeys = [
   "sample_width",
   "sample_height",
   "sample_scheduler",
+  "sample_sampler",
   "sample_vae_fp32",
   "sample_offload_unet_before_decode",
   "post_training_sampling_config_id",

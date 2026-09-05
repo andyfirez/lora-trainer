@@ -1,6 +1,12 @@
 import { api, BASE_URL } from "@/lib/api/client";
 import { createRunnableApi } from "@/lib/api/runnableApi";
-import type { CreateSamplingRequest, ExperimentManifestResponse, SamplingResponse } from "@/types";
+import type {
+  CreateSamplingRequest,
+  ExperimentManifestResponse,
+  SamplingOptionsResponse,
+  SamplingProfile,
+  SamplingResponse,
+} from "@/types";
 
 const runnableApi = createRunnableApi<SamplingResponse>("/samplings");
 
@@ -10,6 +16,8 @@ export const samplingsApi = {
   create: (body: CreateSamplingRequest) => api.post<SamplingResponse>("/samplings/", body),
   getExperimentManifest: (id: number) =>
     api.get<ExperimentManifestResponse | null>(`/samplings/${id}/experiment-manifest`),
+  getOptions: (profile: SamplingProfile = "comfy") =>
+    api.get<SamplingOptionsResponse>(`/samplings/options?profile=${profile}`),
   livePreviewUrl: (id: number, cacheBust: number) =>
     `${BASE_URL}/samplings/${id}/live-preview?t=${cacheBust}`,
   generate: async (

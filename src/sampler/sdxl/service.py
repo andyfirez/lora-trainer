@@ -6,11 +6,11 @@ import logging
 from pathlib import Path
 
 from src.sampler.config import SamplingConfig
+from src.sampler.experiment.engine import ExperimentEngine
 from src.sampler.progress_callbacks import (
     ProgressCallback,
     ProgressStatusCallback,
 )
-from src.sampler.experiment.engine import ExperimentEngine
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.inference_config import SDXLInferenceConfig
 

@@ -123,6 +123,10 @@ export const SamplingConfig = {
       },
       scheduler: {
         mode: "fixed",
+        value: "normal",
+      },
+      sampler: {
+        mode: "fixed",
         value: "euler",
       },
       seed: {

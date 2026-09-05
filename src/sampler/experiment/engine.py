@@ -31,10 +31,10 @@ from src.sampler.progress_callbacks import (
     ProgressCallbackMixin,
     ProgressStatusCallback,
 )
+from src.sampler.registry import resolve_sampler_scheduler
 from src.sampler.sdxl.cell_generator import generate_sampling_cell
 from src.storage.config_paths import resolve_sampling_lora_file
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
-from src.trainer.config import SampleScheduler
 from src.trainer.inference_config import SDXLInferenceConfig
 from src.trainer.sdxl.caption import apply_trigger_words_to_prompt
 from src.trainer.sdxl.latent_sampling.preview import LIVE_PREVIEW_FILENAME
@@ -257,9 +257,15 @@ class ExperimentEngine(ProgressCallbackMixin):
             "sample_width": params.get("width"),
             "sample_height": params.get("height"),
         }
+        sampler = params.get("sampler")
         scheduler = params.get("scheduler")
-        if scheduler is not None:
-            updates["sample_scheduler"] = SampleScheduler(str(scheduler))
+        if sampler is not None or scheduler is not None:
+            resolved_sampler, resolved_scheduler = resolve_sampler_scheduler(
+                str(sampler) if sampler is not None else self._base_inference_config.sample_sampler,
+                str(scheduler) if scheduler is not None else self._base_inference_config.sample_scheduler,
+            )
+            updates["sample_sampler"] = resolved_sampler
+            updates["sample_scheduler"] = resolved_scheduler
         seed = params.get("seed")
         if seed is not None:
             updates["seed"] = int(seed)

@@ -9,7 +9,7 @@ import { selectClassName } from "@/components/ui/Select";
 import { formSectionTitleClass } from "@/components/ui/FormSection";
 import type { GpuDefaultsInfo } from "@/lib/api/settings";
 import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
-import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
+import { useSamplingOptions } from "@/hooks/useSamplingOptions";
 import { getParameters, setParameter } from "@/lib/experimentUtils";
 
 const DEFAULT_WIDTH = 832;
@@ -37,6 +37,7 @@ export default function PlaygroundCompactSettings({
   gpuDefaults,
   lastSeed,
 }: PlaygroundCompactSettingsProps) {
+  const { samplers, schedulers } = useSamplingOptions();
   const [samplerOpen, setSamplerOpen] = useState(true);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const parameters = getParameters(config);
@@ -45,9 +46,13 @@ export default function PlaygroundCompactSettings({
   const height = fixedNumber(parameters.height?.value, DEFAULT_HEIGHT);
   const steps = fixedNumber(parameters.steps?.value, 30);
   const cfg = fixedNumber(parameters.cfg_scale?.value, 7.5);
-  const scheduler = String(parameters.scheduler?.value ?? "euler");
+  const sampler = String(parameters.sampler?.value ?? "euler");
+  const scheduler = String(parameters.scheduler?.value ?? "normal");
 
-  function setFixed(key: "steps" | "cfg_scale" | "width" | "height" | "scheduler" | "seed", value: unknown) {
+  function setFixed(
+    key: "steps" | "cfg_scale" | "width" | "height" | "sampler" | "scheduler" | "seed",
+    value: unknown,
+  ) {
     onChange(setParameter(config, key, { mode: "fixed", value }));
   }
 
@@ -78,10 +83,25 @@ export default function PlaygroundCompactSettings({
               <label className={labelClassName}>Sampling method</label>
               <select
                 className={selectClassName}
+                value={sampler}
+                onChange={(event) => setFixed("sampler", event.target.value)}
+              >
+                {samplers.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClassName}>Schedule type</label>
+              <select
+                className={selectClassName}
                 value={scheduler}
                 onChange={(event) => setFixed("scheduler", event.target.value)}
               >
-                {diffusersSchedulerOptions.map((option) => (
+                {schedulers.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>

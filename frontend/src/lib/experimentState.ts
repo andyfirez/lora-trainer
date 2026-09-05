@@ -1,5 +1,5 @@
 import { SamplingConfig } from "./defaultConfig.ts";
-import { collapseStackToSingleLora } from "./experimentUtils.ts";
+import { collapseStackToSingleLora, normalizeLegacySamplingParameters } from "./experimentUtils.ts";
 
 const LEGACY_PLAYGROUND_STORAGE_KEY = "sampling-playground";
 const LEGACY_SWEEP_STORAGE_KEY = "sampling-sweep";
@@ -55,7 +55,7 @@ export function loadExperimentDraft(): ExperimentDraftState {
       parsed.config && typeof parsed.config === "object"
         ? { ...defaults.config, ...parsed.config }
         : defaults.config;
-    return { config: collapseStackToSingleLora(config) };
+    return { config: normalizeLegacySamplingParameters(collapseStackToSingleLora(config)) };
   } catch {
     return defaultExperimentDraft();
   }

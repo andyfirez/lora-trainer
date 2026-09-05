@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import torch
 from src.trainer.inference_config import SDXLInferenceConfig
+from src.trainer.sdxl.latent_sampling.model_sampling import DiscreteEpsSampling
 from src.trainer.sdxl.latent_sampling.runner import (
     _ensure_unet_on_device,
     _restore_unet_after_decode,
@@ -13,9 +14,14 @@ def _inference_config(**kwargs: object) -> SDXLInferenceConfig:
     return SDXLInferenceConfig(**kwargs)
 
 
-def test_sampling_session_sets_timesteps_once() -> None:
+def _noise_scheduler() -> MagicMock:
     scheduler = MagicMock()
-    scheduler.timesteps = torch.tensor([999, 500, 0])
+    betas = torch.linspace(0.00085, 0.012, 1000)
+    scheduler.alphas_cumprod = torch.cumprod(1.0 - betas, dim=0)
+    return scheduler
+
+
+def test_sampling_session_builds_sigmas() -> None:
     unet = MagicMock()
     vae = MagicMock()
     vae.dtype = torch.float32
@@ -24,7 +30,7 @@ def test_sampling_session_sets_timesteps_once() -> None:
     session = SDXLSamplingSession.create(
         unet=unet,
         vae=vae,
-        scheduler=scheduler,
+        noise_scheduler=_noise_scheduler(),
         device=torch.device("cpu"),
         width=1024,
         height=1024,
@@ -33,8 +39,11 @@ def test_sampling_session_sets_timesteps_once() -> None:
         config=_inference_config(),
     )
 
-    scheduler.set_timesteps.assert_called_once_with(30, device=torch.device("cpu"))
     assert session.sample_steps == 30
+    assert session.sampler_name == "euler"
+    assert session.scheduler_name == "normal"
+    assert len(session.sigmas) >= 30
+    assert float(session.sigmas[-1]) == 0.0
     assert session.vae_scale_factor == 8
     assert session.add_time_ids.shape == (1, 6)
     assert torch.equal(session.add_time_ids[0, :2], torch.tensor([1024.0, 1024.0]))
@@ -43,8 +52,6 @@ def test_sampling_session_sets_timesteps_once() -> None:
 
 
 def test_sampling_session_uses_reference_add_time_ids_when_provided() -> None:
-    scheduler = MagicMock()
-    scheduler.timesteps = torch.tensor([999, 500, 0])
     unet = MagicMock()
     vae = MagicMock()
     vae.dtype = torch.float32
@@ -54,7 +61,7 @@ def test_sampling_session_uses_reference_add_time_ids_when_provided() -> None:
     session = SDXLSamplingSession.create(
         unet=unet,
         vae=vae,
-        scheduler=scheduler,
+        noise_scheduler=_noise_scheduler(),
         device=torch.device("cpu"),
         width=768,
         height=1024,
@@ -66,8 +73,7 @@ def test_sampling_session_uses_reference_add_time_ids_when_provided() -> None:
 
     assert session.add_time_ids.shape == (1, 6)
     assert torch.allclose(session.add_time_ids[0], torch.tensor(reference, dtype=torch.float32))
-    scheduler = MagicMock()
-    scheduler.timesteps = torch.tensor([999])
+
     unet = MagicMock()
     vae = MagicMock()
     vae.dtype = torch.float16
@@ -76,7 +82,7 @@ def test_sampling_session_uses_reference_add_time_ids_when_provided() -> None:
     SDXLSamplingSession.create(
         unet=unet,
         vae=vae,
-        scheduler=scheduler,
+        noise_scheduler=_noise_scheduler(),
         device=torch.device("cpu"),
         width=512,
         height=512,
@@ -93,8 +99,6 @@ def test_sampling_session_uses_reference_add_time_ids_when_provided() -> None:
 
 
 def test_sampling_session_enables_vae_tiling_for_large_decode() -> None:
-    scheduler = MagicMock()
-    scheduler.timesteps = torch.tensor([999])
     unet = MagicMock()
     vae = MagicMock()
     vae.dtype = torch.float16
@@ -103,7 +107,7 @@ def test_sampling_session_enables_vae_tiling_for_large_decode() -> None:
     session = SDXLSamplingSession.create(
         unet=unet,
         vae=vae,
-        scheduler=scheduler,
+        noise_scheduler=_noise_scheduler(),
         device=torch.device("cpu"),
         width=832,
         height=1216,
@@ -124,12 +128,16 @@ def _session_with_unet_on(device: torch.device) -> SDXLSamplingSession:
     param = MagicMock()
     param.device = device
     unet.parameters.side_effect = lambda: iter([param])
+    betas = torch.linspace(0.00085, 0.012, 1000)
+    model_sampling = DiscreteEpsSampling.from_alphas_cumprod(torch.cumprod(1.0 - betas, dim=0))
     return SDXLSamplingSession(
         device=torch.device("cuda:0"),
         unet=unet,
         vae=MagicMock(),
-        scheduler=MagicMock(),
-        timesteps=torch.tensor([999]),
+        model_sampling=model_sampling,
+        sigmas=torch.tensor([14.0, 0.0]),
+        sampler_name="euler",
+        scheduler_name="normal",
         add_time_ids=torch.zeros(1, 6),
         vae_scale_factor=8,
         autocast_dtype=torch.float16,

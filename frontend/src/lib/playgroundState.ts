@@ -3,6 +3,7 @@ import { migrateLegacyExperimentFromPlayground } from "./experimentState.ts";
 import {
   EXPERIMENT_PARAM_ORDER,
   getParameters,
+  normalizeLegacySamplingParameters,
   setParameter,
   syncLoraPathsToParameters,
   type ExperimentParamKey,
@@ -39,7 +40,7 @@ export function loadPlaygroundState(): PlaygroundPersistedState {
         ? { ...defaults.config, ...parsed.config }
         : defaults.config;
     return {
-      config: applySamplingSizeDefaults(collapseExperimentToFixed(merged)),
+      config: normalizeLegacySamplingParameters(applySamplingSizeDefaults(collapseExperimentToFixed(merged))),
       batchCount:
         typeof parsed.batchCount === "number" && Number.isFinite(parsed.batchCount) && parsed.batchCount >= 1
           ? Math.min(32, Math.floor(parsed.batchCount))
@@ -124,7 +125,8 @@ export function formatParamsInfotext(params: Record<string, unknown>): string {
   const height = params.height ?? 1216;
   const fields = [
     `Steps: ${params.steps ?? 30}`,
-    `Sampler: ${params.scheduler ?? "euler"}`,
+    `Sampler: ${params.sampler ?? "euler"}`,
+    `Schedule type: ${params.scheduler ?? "normal"}`,
     `CFG scale: ${params.cfg_scale ?? 7.5}`,
     `Seed: ${params.seed ?? -1}`,
     `Size: ${width}x${height}`,

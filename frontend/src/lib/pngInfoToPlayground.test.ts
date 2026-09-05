@@ -46,7 +46,8 @@ test("applyPngInfoToPlayground maps parsed PNG parameters to playground config",
     assert.equal(parameters.seed?.value, 965400086);
     assert.equal(parameters.width?.value, 512);
     assert.equal(parameters.height?.value, 512);
-    assert.equal(parameters.scheduler?.value, "euler_a");
+    assert.equal(parameters.scheduler?.value, "normal");
+    assert.equal(parameters.sampler?.value, "euler_ancestral");
     assert.equal(parameters.base_model_name?.value, "stable-diffusion-xl-base-1.0");
   } finally {
     Object.defineProperty(globalThis, "localStorage", {

@@ -2,42 +2,29 @@ from unittest.mock import MagicMock
 
 import torch
 from src.trainer.sdxl.latent_sampling.ksample import ksample_sdxl_latent
+from src.trainer.sdxl.latent_sampling.model_sampling import DiscreteEpsSampling
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 from src.trainer.sdxl.sampling import SamplePromptEmbeds
 
 
+def _model_sampling() -> DiscreteEpsSampling:
+    betas = torch.linspace(0.00085, 0.012, 1000)
+    return DiscreteEpsSampling.from_alphas_cumprod(torch.cumprod(1.0 - betas, dim=0))
+
+
 def _build_session(*, sample_steps: int = 3) -> SDXLSamplingSession:
-    scheduler = MagicMock()
-    scheduler.init_noise_sigma = 1.0
-    scheduler.timesteps = torch.tensor([999, 500, 0][:sample_steps])
-
-    def _scale_model_input(sample: torch.Tensor, _timestep: torch.Tensor) -> torch.Tensor:
-        return sample
-
-    def _step(
-        noise_pred: torch.Tensor,
-        _timestep: torch.Tensor,
-        sample: torch.Tensor,
-        *,
-        return_dict: bool,
-        **_: object,
-    ) -> tuple[torch.Tensor]:
-        assert return_dict is False
-        return (sample - noise_pred * 0.01,)
-
-    scheduler.scale_model_input.side_effect = _scale_model_input
-    scheduler.step.side_effect = _step
-
+    sigmas = torch.tensor([14.0, 7.0, 1.0, 0.0][: sample_steps + 1], dtype=torch.float32)
     unet = MagicMock()
     unet.config.in_channels = 4
     unet.return_value = (torch.zeros(2, 4, 8, 8),)
-
     return SDXLSamplingSession(
         device=torch.device("cpu"),
         unet=unet,
         vae=MagicMock(),
-        scheduler=scheduler,
-        timesteps=scheduler.timesteps,
+        model_sampling=_model_sampling(),
+        sigmas=sigmas,
+        sampler_name="euler",
+        scheduler_name="normal",
         add_time_ids=torch.tensor([[1024, 1024, 0, 0, 1024, 1024]], dtype=torch.float32),
         vae_scale_factor=8,
         autocast_dtype=torch.float32,

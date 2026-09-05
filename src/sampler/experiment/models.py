@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 EXPERIMENT_PARAM_ORDER: tuple[str, ...] = (
     "lora_path",
@@ -18,6 +18,7 @@ EXPERIMENT_PARAM_ORDER: tuple[str, ...] = (
     "negative_prompt",
     "width",
     "height",
+    "sampler",
     "scheduler",
 )
 
@@ -175,8 +176,18 @@ class ExperimentParameters(BaseModel):
     cfg_scale: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=7.5))
     width: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=None))
     height: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=None))
-    scheduler: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value="euler"))
+    sampler: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value="euler"))
+    scheduler: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value="normal"))
     seed: ExperimentParameter = Field(default_factory=lambda: ExperimentParameter(value=None))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_bundled_scheduler(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        from src.sampler.registry.legacy import normalize_experiment_parameters
+
+        return normalize_experiment_parameters(data)
 
     def vary_keys_with_values(self) -> list[str]:
         result: list[str] = []

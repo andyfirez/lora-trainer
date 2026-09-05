@@ -1,3 +1,5 @@
+import { LEGACY_BUNDLED_SCHEDULERS } from "./sampleSamplerOptions.ts";
+
 export type ExperimentMode = "fixed" | "vary";
 
 export interface LoraEntry {
@@ -23,6 +25,7 @@ export interface ExperimentParameters {
   cfg_scale?: ExperimentParameter;
   width?: ExperimentParameter;
   height?: ExperimentParameter;
+  sampler?: ExperimentParameter;
   scheduler?: ExperimentParameter;
   seed?: ExperimentParameter;
 }
@@ -43,6 +46,7 @@ export const EXPERIMENT_PARAM_ORDER = [
   "negative_prompt",
   "width",
   "height",
+  "sampler",
   "scheduler",
 ] as const;
 
@@ -58,7 +62,8 @@ export const EXPERIMENT_PARAM_LABELS: Record<ExperimentParamKey, string> = {
   cfg_scale: "CFG Scale",
   width: "Width",
   height: "Height",
-  scheduler: "Scheduler",
+  sampler: "Sampling method",
+  scheduler: "Schedule type",
   seed: "Seed",
 };
 
@@ -304,4 +309,47 @@ export function setGridLayout(
   grid: GridLayout,
 ): Record<string, unknown> {
   return { ...config, grid };
+}
+
+function paramValues(param: ExperimentParameter | undefined): unknown[] {
+  if (!param) return [];
+  if (param.mode === "vary" && param.values?.length) return param.values;
+  if (param.value !== undefined && param.value !== null) return [param.value];
+  return [];
+}
+
+export function normalizeLegacySamplingParameters(
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  const parameters = getParameters(config);
+  const samplerExplicit = parameters.sampler != null;
+  const schedulerValues = paramValues(parameters.scheduler);
+  if (!schedulerValues.length) return config;
+  const mapped = schedulerValues.map((value) => LEGACY_BUNDLED_SCHEDULERS[String(value)]);
+  if (mapped.some((item) => item == null)) return config;
+  const samplers = mapped.map((item) => item!.sampler);
+  const schedules = mapped.map((item) => item!.scheduler);
+  let next = config;
+  if (!samplerExplicit) {
+    next = setParameter(next, "sampler", {
+      mode: parameters.scheduler?.mode === "vary" && samplers.length > 1 ? "vary" : "fixed",
+      ...(samplers.length > 1 ? { values: samplers } : { value: samplers[0] }),
+    });
+    next = setParameter(next, "scheduler", {
+      mode: parameters.scheduler?.mode === "vary" && schedules.length > 1 ? "vary" : "fixed",
+      ...(schedules.length > 1 ? { values: schedules } : { value: schedules[0] }),
+    });
+    return next;
+  }
+  const samplerValues = paramValues(parameters.sampler);
+  if (
+    samplerValues.length === 0 ||
+    (samplerValues.length === samplers.length && samplerValues.every((value, index) => value === samplers[index]))
+  ) {
+    next = setParameter(next, "scheduler", {
+      mode: parameters.scheduler?.mode === "vary" && schedules.length > 1 ? "vary" : "fixed",
+      ...(schedules.length > 1 ? { values: schedules } : { value: schedules[0] }),
+    });
+  }
+  return next;
 }

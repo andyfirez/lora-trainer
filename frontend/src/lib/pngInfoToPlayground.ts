@@ -1,19 +1,65 @@
 import { setParameter } from "./experimentUtils.ts";
 import { loadPlaygroundState, type PlaygroundPersistedState } from "./playgroundState.ts";
+import { LEGACY_BUNDLED_SCHEDULERS } from "./sampleSamplerOptions.ts";
 
-const A1111_SAMPLER_TO_SCHEDULER: Record<string, string> = {
+const SAMPLER_ALIASES: Record<string, string> = {
   euler: "euler",
-  "euler a": "euler_a",
-  euler_a: "euler_a",
+  "euler a": "euler_ancestral",
+  euler_a: "euler_ancestral",
+  euler_ancestral: "euler_ancestral",
   ddim: "ddim",
-  "dpm++ 2m": "dpm++",
-  "dpm++": "dpm++",
+  "dpm++ 2m": "dpmpp_2m",
+  "dpm++": "dpmpp_2m",
+  dpmpp_2m: "dpmpp_2m",
+  heun: "heun",
+  lms: "lms",
+  "dpm++ 2s a": "dpmpp_2s_ancestral",
+  dpmpp_2s_ancestral: "dpmpp_2s_ancestral",
+  "dpm++ sde": "dpmpp_sde",
+  dpmpp_sde: "dpmpp_sde",
 };
 
-function parseScheduler(value: string | number | undefined): string | null {
-  if (value == null) return null;
-  const normalized = String(value).trim().toLowerCase();
-  return A1111_SAMPLER_TO_SCHEDULER[normalized] ?? null;
+const SCHEDULER_ALIASES: Record<string, string> = {
+  normal: "normal",
+  karras: "karras",
+  exponential: "exponential",
+  simple: "simple",
+  "sgm uniform": "sgm_uniform",
+  sgm_uniform: "sgm_uniform",
+  ddim: "ddim_uniform",
+  ddim_uniform: "ddim_uniform",
+  beta: "beta",
+  "linear quadratic": "linear_quadratic",
+  linear_quadratic: "linear_quadratic",
+  "kl optimal": "kl_optimal",
+  kl_optimal: "kl_optimal",
+  automatic: "automatic",
+};
+
+function parseSamplerAndScheduler(
+  samplerField: string | number | undefined,
+  scheduleField: string | number | undefined,
+): { sampler: string; scheduler: string } | null {
+  if (samplerField == null && scheduleField == null) return null;
+  const samplerText = samplerField == null ? "" : String(samplerField).trim().toLowerCase();
+  const scheduleText = scheduleField == null ? "" : String(scheduleField).trim().toLowerCase();
+  const legacy = LEGACY_BUNDLED_SCHEDULERS[samplerText];
+  let sampler = SAMPLER_ALIASES[samplerText] ?? legacy?.sampler ?? null;
+  let scheduler = SCHEDULER_ALIASES[scheduleText] ?? null;
+  if (sampler == null && samplerText) {
+    for (const suffix of Object.keys(SCHEDULER_ALIASES).sort((a, b) => b.length - a.length)) {
+      if (samplerText.endsWith(` ${suffix}`)) {
+        sampler = SAMPLER_ALIASES[samplerText.slice(0, -(suffix.length + 1)).trim()] ?? null;
+        scheduler = scheduler ?? SCHEDULER_ALIASES[suffix];
+        break;
+      }
+    }
+  }
+  if (sampler == null && scheduleField == null && legacy) {
+    return { sampler: legacy.sampler, scheduler: legacy.scheduler };
+  }
+  if (sampler == null) return null;
+  return { sampler, scheduler: scheduler ?? legacy?.scheduler ?? "normal" };
 }
 
 function parseNumber(value: string | number | undefined): number | null {
@@ -69,9 +115,10 @@ export function applyPngInfoToPlayground(
     config = setParameter(config, "height", { mode: "fixed", value: height });
   }
 
-  const scheduler = parseScheduler(parameters.Sampler);
-  if (scheduler) {
-    config = setParameter(config, "scheduler", { mode: "fixed", value: scheduler });
+  const parsed = parseSamplerAndScheduler(parameters.Sampler, parameters["Schedule type"]);
+  if (parsed) {
+    config = setParameter(config, "sampler", { mode: "fixed", value: parsed.sampler });
+    config = setParameter(config, "scheduler", { mode: "fixed", value: parsed.scheduler });
   }
 
   const model = parseString(parameters.Model);

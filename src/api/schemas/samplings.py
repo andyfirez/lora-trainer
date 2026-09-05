@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from src.api.schemas.runnable import RunnableResponse
 from src.db.tables.sampling import SamplingKind
+from src.sampler.registry.profiles import SamplingProfile
 
 
 class SamplingResponse(RunnableResponse):
@@ -22,3 +23,20 @@ class CreateSamplingRequest(BaseModel):
     config: dict[str, Any]
     lora_paths: Optional[list[str]] = None
     kind: SamplingKind = SamplingKind.PLAYGROUND
+
+
+class SamplerOption(BaseModel):
+    id: str
+    label: str
+    default_scheduler: str
+
+
+class SchedulerOption(BaseModel):
+    id: str
+    label: str
+
+
+class SamplingOptionsResponse(BaseModel):
+    profile: SamplingProfile
+    samplers: list[SamplerOption]
+    schedulers: list[SchedulerOption]

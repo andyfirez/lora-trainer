@@ -106,6 +106,25 @@ export interface SamplingResponse extends RunnableResponse {
   progress_status: string | null;
 }
 
+export type SamplingProfile = "comfy" | "reforge";
+
+export interface SamplingSamplerOption {
+  id: string;
+  label: string;
+  default_scheduler: string;
+}
+
+export interface SamplingSchedulerOption {
+  id: string;
+  label: string;
+}
+
+export interface SamplingOptionsResponse {
+  profile: SamplingProfile;
+  samplers: SamplingSamplerOption[];
+  schedulers: SamplingSchedulerOption[];
+}
+
 export interface RunnableSample {
   filename: string;
   path: string;

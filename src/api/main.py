@@ -38,6 +38,7 @@ app.add_middleware(
 register_exception_handlers(app)
 
 app.include_router(loras.router)
+app.include_router(samplings.options_router)
 app.include_router(samplings.router)
 app.include_router(datasets.router)
 app.include_router(files.router)

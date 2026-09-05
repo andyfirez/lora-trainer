@@ -8,7 +8,10 @@ from typing import Any
 import torch
 from torch import Tensor
 
+from src.sampler.registry import resolve_sampler_scheduler
 from src.trainer.inference_config import SDXLInferenceConfig
+from src.trainer.sdxl.latent_sampling.model_sampling import DiscreteEpsSampling
+from src.trainer.sdxl.latent_sampling.sigmas import calculate_sigmas
 from src.trainer.sdxl.sampling import prepare_vae_for_decode
 
 _VAE_TILING_MIN_SIDE = 768
@@ -43,8 +46,10 @@ class SDXLSamplingSession:
     device: torch.device
     unet: torch.nn.Module
     vae: torch.nn.Module
-    scheduler: Any
-    timesteps: Tensor
+    model_sampling: DiscreteEpsSampling
+    sigmas: Tensor
+    sampler_name: str
+    scheduler_name: str
     add_time_ids: Tensor
     vae_scale_factor: int
     autocast_dtype: torch.dtype
@@ -58,7 +63,7 @@ class SDXLSamplingSession:
         *,
         unet: torch.nn.Module,
         vae: torch.nn.Module,
-        scheduler: Any,
+        noise_scheduler: Any,
         device: torch.device,
         width: int,
         height: int,
@@ -75,7 +80,17 @@ class SDXLSamplingSession:
             vae_tiling_enabled = True
 
         unet.eval()
-        scheduler.set_timesteps(sample_steps, device=device)
+        sampler_name, scheduler_name = resolve_sampler_scheduler(
+            config.sample_sampler,
+            config.sample_scheduler,
+        )
+        model_sampling = DiscreteEpsSampling.from_noise_scheduler(noise_scheduler).to(device)
+        sigmas = calculate_sigmas(
+            model_sampling,
+            scheduler_name,
+            sample_steps,
+            sampler_name=sampler_name,
+        ).to(device=device, dtype=torch.float32)
         if reference_add_time_ids is not None:
             add_time_ids = _add_time_ids_from_reference(reference_add_time_ids, device)
         else:
@@ -84,8 +99,10 @@ class SDXLSamplingSession:
             device=device,
             unet=unet,
             vae=vae,
-            scheduler=scheduler,
-            timesteps=scheduler.timesteps,
+            model_sampling=model_sampling,
+            sigmas=sigmas,
+            sampler_name=sampler_name,
+            scheduler_name=scheduler_name,
             add_time_ids=add_time_ids,
             vae_scale_factor=vae_scale_factor,
             autocast_dtype=autocast_dtype,

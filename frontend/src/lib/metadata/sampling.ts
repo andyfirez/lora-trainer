@@ -1,5 +1,5 @@
 import type { ParameterMeta } from "../parameterUtils";
-import { diffusersSchedulerOptions } from "../sampleSamplerOptions";
+import { diffusersSchedulerOptions, samplerOptions } from "../sampleSamplerOptions";
 
 const SAMPLE_SCHEDULER_DESCRIPTIONS: Record<string, string> = {
   euler: "Euler sampler; fast and matches most SDXL workflows.",
@@ -11,6 +11,22 @@ const SAMPLE_SCHEDULER_DESCRIPTIONS: Record<string, string> = {
 const sampleSchedulerValueOptions = diffusersSchedulerOptions.map((option) => ({
   value: option.value,
   description: SAMPLE_SCHEDULER_DESCRIPTIONS[option.value] ?? option.label,
+}));
+
+const SAMPLE_SAMPLER_DESCRIPTIONS: Record<string, string> = {
+  euler: "Euler ODE sampler; fast and matches most SDXL workflows.",
+  euler_ancestral: "Euler ancestral; adds stochasticity for more varied previews.",
+  dpmpp_2m: "DPM++ 2M; higher quality at similar step counts.",
+  ddim: "DDIM; deterministic, executed as Euler in the k-diffusion backend.",
+  heun: "Heun second-order sampler; slower, often cleaner at low steps.",
+  lms: "Linear multistep sampler.",
+  dpmpp_2s_ancestral: "DPM++ 2S ancestral; second-order stochastic sampler.",
+  dpmpp_sde: "DPM++ SDE; stochastic DPM-Solver++.",
+};
+
+const sampleSamplerValueOptions = samplerOptions.map((option) => ({
+  value: option.value,
+  description: SAMPLE_SAMPLER_DESCRIPTIONS[option.value] ?? option.label,
 }));
 
 export const samplingParameterMetadata: ParameterMeta[] = [
@@ -117,6 +133,19 @@ export const samplingParameterMetadata: ParameterMeta[] = [
     yamlOnly: true,
     recommendedValue: "euler",
     valueOptions: sampleSchedulerValueOptions,
+  },
+  {
+    key: "sample_sampler",
+    label: "Sample Sampler",
+    section: "Sampling",
+    shortHint: "k-diffusion sampler used by standalone sampling jobs.",
+    description:
+      "Denoising algorithm for Playground and Experiments. Independent of the sigma schedule (sample_scheduler in sampling configs). euler is the default.",
+    defaultValue: "euler",
+    constraints: "euler | euler_ancestral | dpmpp_2m | ddim | heun | lms | dpmpp_2s_ancestral | dpmpp_sde",
+    yamlOnly: true,
+    recommendedValue: "euler",
+    valueOptions: sampleSamplerValueOptions,
   },
   {
     key: "sample_vae_tiling",

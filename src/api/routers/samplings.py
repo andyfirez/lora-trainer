@@ -3,14 +3,49 @@
 from pathlib import Path
 from typing import Optional
 
+from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse
 
 from src.api.dependencies import SamplingServiceDep
 from src.api.routers.runnable import RunnableRouterHooks, build_runnable_router
-from src.api.schemas.samplings import CreateSamplingRequest, SamplingResponse
+from src.api.schemas.samplings import (
+    CreateSamplingRequest,
+    SamplerOption,
+    SamplingOptionsResponse,
+    SamplingResponse,
+    SchedulerOption,
+)
 from src.db.tables.sampling import Sampling, SamplingKind
 from src.sampler.experiment.manifest import ExperimentManifest
+from src.sampler.registry.profiles import (
+    SamplingProfile,
+    sampler_label,
+    samplers_for_profile,
+    scheduler_label,
+    schedulers_for_profile,
+)
 from src.services.sampling.service import SamplingService
+
+options_router = APIRouter(prefix="/samplings", tags=["samplings"])
+
+
+@options_router.get("/options", response_model=SamplingOptionsResponse, operation_id="get_samplings_options")
+async def get_sampling_options(
+    profile: SamplingProfile = Query(default=SamplingProfile.COMFY),
+) -> SamplingOptionsResponse:
+    samplers = [
+        SamplerOption(
+            id=spec.id,
+            label=sampler_label(spec, profile),
+            default_scheduler=spec.default_scheduler,
+        )
+        for spec in samplers_for_profile(profile)
+    ]
+    schedulers = [
+        SchedulerOption(id=spec.id, label=scheduler_label(spec, profile))
+        for spec in schedulers_for_profile(profile)
+    ]
+    return SamplingOptionsResponse(profile=profile, samplers=samplers, schedulers=schedulers)
 
 
 def _to_response(sampling: Sampling, service: SamplingService) -> SamplingResponse:

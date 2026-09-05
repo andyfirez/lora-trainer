@@ -72,3 +72,14 @@ def test_sampling_config_snapshot_includes_gpu_fields() -> None:
     assert snapshot["tf32"] is False
     assert snapshot["attention_mechanism"] == "xformers"
     assert snapshot["mixed_precision"] == "bfloat16"
+
+
+def test_sampling_config_legacy_scheduler_maps_into_inference_fields() -> None:
+    config = SamplingConfig.from_dict(
+        {"parameters": {"scheduler": {"mode": "fixed", "value": "euler_a"}}}
+    )
+    assert config.effective_sampler() == "euler_ancestral"
+    assert config.effective_scheduler() == "normal"
+    inference = config.to_inference_config()
+    assert inference.sample_sampler == "euler_ancestral"
+    assert inference.sample_scheduler == "normal"

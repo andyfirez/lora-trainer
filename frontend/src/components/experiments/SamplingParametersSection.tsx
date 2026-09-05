@@ -5,7 +5,7 @@ import ParamGroup from "@/components/experiments/ParamGroup";
 import ExperimentField from "@/components/experiments/ExperimentField";
 import { InheritedCheckboxField, InheritedSelectField } from "@/components/ui/InheritedGpuField";
 import FormSection, { formSectionClass, formSectionTitleClass } from "@/components/ui/FormSection";
-import { diffusersSchedulerOptions } from "@/lib/sampleSamplerOptions";
+import { useSamplingOptions } from "@/hooks/useSamplingOptions";
 import { labelClassName } from "@/components/ui/Input";
 import {
   EXPERIMENT_PARAM_LABELS,
@@ -55,6 +55,7 @@ export default function SamplingParametersSection({
   hideSeed = false,
 }: SamplingParametersSectionProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const { samplers, schedulers } = useSamplingOptions();
   const baseModelParam = param(config, "base_model_name");
   const { options: baseModelOptions, isLoading: baseModelsLoading } = useBaseModelOptions();
 
@@ -144,11 +145,19 @@ export default function SamplingParametersSection({
               />
             )}
             <ExperimentField
+              label={EXPERIMENT_PARAM_LABELS.sampler}
+              param={param(config, "sampler")}
+              onChange={(p) => updateParam("sampler", p)}
+              type="select"
+              selectOptions={samplers}
+              allowVary={allowVary}
+            />
+            <ExperimentField
               label={EXPERIMENT_PARAM_LABELS.scheduler}
               param={param(config, "scheduler")}
               onChange={(p) => updateParam("scheduler", p)}
               type="select"
-              selectOptions={diffusersSchedulerOptions}
+              selectOptions={schedulers}
               allowVary={allowVary}
             />
           </ParamGroup>

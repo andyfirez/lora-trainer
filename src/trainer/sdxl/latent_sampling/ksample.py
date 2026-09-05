@@ -1,14 +1,14 @@
 """Latent-space SDXL denoising (Comfy KSampler equivalent)."""
 
-import inspect
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
 
 import torch
 from torch import Tensor
 
+from src.trainer.sdxl.latent_sampling.kdiffusion import get_sample_function
+from src.trainer.sdxl.latent_sampling.model_wrapper import SDXLKDiffusionModel
 from src.trainer.sdxl.latent_sampling.session import SDXLSamplingSession
 from src.trainer.sdxl.sampling import SamplePromptEmbeds
 
@@ -34,71 +34,60 @@ def ksample_sdxl_latent(
     prep_started_at = time.perf_counter()
 
     generator = torch.Generator(device=device)
-    if seed is not None:
-        generator.manual_seed(seed + prompt_index)
+    noise_seed = None if seed is None else seed + prompt_index
+    if noise_seed is not None:
+        generator.manual_seed(noise_seed)
 
     latent_channels = session.unet.config.in_channels
-    latent = torch.randn(
+    noise = torch.randn(
         size=(1, latent_channels, height // session.vae_scale_factor, width // session.vae_scale_factor),
         generator=generator,
         device=device,
         dtype=session.autocast_dtype,
     )
-    latent = latent * session.scheduler.init_noise_sigma
+    sigma_max = session.sigmas[0]
+    latent = session.model_sampling.noise_scaling(sigma_max, noise, max_denoise=True)
 
-    combined_prompt_embeds = torch.cat([embeds.negative_prompt_embeds, embeds.prompt_embeds], dim=0).to(
-        dtype=session.autocast_dtype,
+    model = SDXLKDiffusionModel(
+        unet=session.unet,
+        model_sampling=session.model_sampling,
+        embeds=embeds,
+        add_time_ids=session.add_time_ids,
+        guidance_scale=guidance_scale,
+        autocast_dtype=session.autocast_dtype,
     )
-    added_cond_kwargs = {
-        "text_embeds": torch.cat(
-            [embeds.negative_pooled_prompt_embeds, embeds.pooled_prompt_embeds],
-            dim=0,
-        ).to(dtype=session.autocast_dtype),
-        "time_ids": torch.cat([session.add_time_ids, session.add_time_ids], dim=0),
-    }
+    sample_fn = get_sample_function(session.sampler_name)
+    extra_args = {"seed": noise_seed}
+    total_steps = max(len(session.sigmas) - 1, 1)
 
-    extra_step_kwargs: dict[str, Any] = {}
-    if "generator" in inspect.signature(session.scheduler.step).parameters:
-        extra_step_kwargs["generator"] = generator
+    def _callback(payload: dict[str, object]) -> None:
+        completed = int(payload["i"]) + 1
+        current = payload["x"]
+        if on_step_end is not None:
+            on_step_end(completed, total_steps)
+        if on_latent is not None and isinstance(current, Tensor):
+            on_latent(completed, total_steps, current)
 
     if log is not None:
         log.info(
-            "%s ksample prep (latents+embeds): %.3fs",
+            "%s ksample prep (latents+embeds): %.3fs sampler=%s scheduler=%s",
             log_prefix,
             time.perf_counter() - prep_started_at,
+            session.sampler_name,
+            session.scheduler_name,
         )
 
-    total_steps = len(session.timesteps)
     loop_started_at = time.perf_counter()
-    with torch.autocast(device_type=device.type, dtype=session.autocast_dtype):
-        for step_index, timestep in enumerate(session.timesteps):
-            latent_model_input = torch.cat([latent, latent], dim=0)
-            latent_model_input = session.scheduler.scale_model_input(latent_model_input, timestep)
-
-            noise_pred = session.unet(
-                sample=latent_model_input,
-                timestep=timestep,
-                encoder_hidden_states=combined_prompt_embeds,
-                added_cond_kwargs=added_cond_kwargs,
-                return_dict=False,
-            )[0]
-
-            noise_pred_negative, noise_pred_positive = noise_pred.chunk(2)
-            noise_pred = noise_pred_negative + guidance_scale * (noise_pred_positive - noise_pred_negative)
-
-            latent = session.scheduler.step(
-                noise_pred,
-                timestep,
-                latent,
-                return_dict=False,
-                **extra_step_kwargs,
-            )[0]
-
-            completed = step_index + 1
-            if on_step_end is not None:
-                on_step_end(completed, total_steps)
-            if on_latent is not None:
-                on_latent(completed, total_steps, latent)
+    autocast_device = device.type if device.type in {"cuda", "cpu"} else "cuda"
+    with torch.autocast(device_type=autocast_device, dtype=session.autocast_dtype):
+        latent = sample_fn(
+            model,
+            latent,
+            session.sigmas.to(dtype=latent.dtype),
+            extra_args=extra_args,
+            callback=_callback,
+            disable=True,
+        )
 
     if log is not None:
         if device.type == "cuda":

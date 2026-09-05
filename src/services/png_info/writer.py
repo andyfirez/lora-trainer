@@ -6,19 +6,17 @@ from pathlib import Path
 
 from PIL import PngImagePlugin
 
+from src.sampler.registry.legacy import LEGACY_BUNDLED_SCHEDULERS
+from src.sampler.registry.profiles import SamplingProfile
+from src.services.png_info.names import infotext_sampler_label, infotext_scheduler_label
 from src.trainer.config import SampleScheduler
-
-A1111_SAMPLER_NAMES: dict[str, str] = {
-    SampleScheduler.EULER.value: "Euler",
-    SampleScheduler.EULER_A.value: "Euler a",
-    SampleScheduler.DDIM.value: "DDIM",
-    SampleScheduler.DPM_PP.value: "DPM++ 2M",
-}
 
 
 def a1111_sampler_name(scheduler: str | SampleScheduler) -> str:
     key = scheduler.value if isinstance(scheduler, SampleScheduler) else str(scheduler)
-    return A1111_SAMPLER_NAMES.get(key, key)
+    mapped = LEGACY_BUNDLED_SCHEDULERS.get(key)
+    sampler_id = mapped[0] if mapped else key
+    return infotext_sampler_label(sampler_id)
 
 
 def build_a1111_infotext(
@@ -35,15 +33,27 @@ def build_a1111_infotext(
     lora_path: str | None = None,
     lora_weight: float | None = None,
     loras: list[tuple[str, float | None]] | None = None,
+    scheduler: str | None = None,
+    sampling_profile: SamplingProfile = SamplingProfile.REFORGE,
 ) -> str:
     """Format generation info so A1111/reForge PNG Info can parse it."""
+    sampler_key = sampler.value if isinstance(sampler, SampleScheduler) else str(sampler)
+    mapped = LEGACY_BUNDLED_SCHEDULERS.get(sampler_key)
+    if mapped is not None:
+        sampler_id, scheduler_id = mapped
+        if scheduler:
+            scheduler_id = scheduler
+    else:
+        sampler_id = sampler_key
+        scheduler_id = scheduler or "normal"
     lines = [prompt.strip()]
     negative = negative_prompt.strip()
     if negative:
         lines.append(f"Negative prompt: {negative}")
     fields = [
         f"Steps: {steps}",
-        f"Sampler: {a1111_sampler_name(sampler)}",
+        f"Sampler: {infotext_sampler_label(sampler_id, sampling_profile)}",
+        f"Schedule type: {infotext_scheduler_label(scheduler_id, sampling_profile)}",
         f"CFG scale: {cfg_scale}",
         f"Seed: {-1 if seed is None else seed}",
         f"Size: {width}x{height}",

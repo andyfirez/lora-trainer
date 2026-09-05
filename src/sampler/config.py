@@ -15,12 +15,12 @@ from src.gpu import (
 )
 from src.sampler.experiment.models import (
     EXPERIMENT_PARAM_ORDER,
-    GridLayout,
-    LoraEntry,
     ExperimentMode,
     ExperimentParameters,
+    GridLayout,
+    LoraEntry,
 )
-from src.trainer.config import SampleScheduler, VaeDtype, WeightDtype
+from src.trainer.config import VaeDtype, WeightDtype
 
 if TYPE_CHECKING:
     from src.settings.models import GpuDefaultsSettings
@@ -46,8 +46,6 @@ FORBIDDEN_DEPRECATED_SAMPLING_KEYS: frozenset[str] = frozenset(
         "source_type",
         "lora_name",
         "use_reforge_sampler",
-        "sample_sampler",
-        "sample_scheduler_mode",
         "post_training_sampling_config_id",
     }
 )
@@ -150,11 +148,21 @@ class SamplingConfig(GpuConfigMixin, BaseModel):
         value = self.parameters.height.first_value()
         return int(value) if value is not None else None
 
-    def effective_scheduler(self) -> SampleScheduler:
+    def effective_sampler(self) -> str:
+        from src.sampler.registry import DEFAULT_SAMPLER
+
+        sampler = self.parameters.sampler.first_value()
+        if sampler is None:
+            return DEFAULT_SAMPLER
+        return str(sampler)
+
+    def effective_scheduler(self) -> str:
+        from src.sampler.registry import DEFAULT_SCHEDULER, resolve_sampler_scheduler
+
         scheduler = self.parameters.scheduler.first_value()
-        if scheduler is None:
-            return SampleScheduler.EULER
-        return SampleScheduler(str(scheduler))
+        raw = DEFAULT_SCHEDULER if scheduler is None else str(scheduler)
+        _, resolved = resolve_sampler_scheduler(self.effective_sampler(), raw)
+        return resolved
 
     def has_varying_params_except_prompt(self) -> bool:
         for key in EXPERIMENT_PARAM_ORDER:
@@ -177,6 +185,7 @@ class SamplingConfig(GpuConfigMixin, BaseModel):
             "sample_cfg_scale": self.effective_cfg_scale(),
             "sample_width": params.width.first_value(),
             "sample_height": params.height.first_value(),
+            "sample_sampler": self.effective_sampler(),
             "sample_scheduler": self.effective_scheduler(),
             "sample_vae_tiling": resolved.sample_vae_tiling,
             "sample_vae_fp32": self.sample_vae_fp32,

@@ -101,7 +101,6 @@ def test_run_merged_adapter_sampling_delegates_to_pass_helper(mock_pass: MagicMo
     te1.unmerge_adapter.assert_not_called()
 
 
-@patch("src.trainer.sdxl.inference_context.build_inference_scheduler")
 @patch("src.trainer.sdxl.inference_context.run_sdxl_sampling_pass")
 @patch("src.trainer.sdxl.inference_context.precompute_all_sample_embeds", return_value=[])
 @patch("src.trainer.sdxl.inference_context.SDXLSamplingSession.create")
@@ -109,7 +108,6 @@ def test_run_sampling_pass_moves_text_encoders_to_device_before_embeds(
     mock_session_create: MagicMock,
     mock_precompute: MagicMock,
     mock_pass: MagicMock,
-    mock_build_scheduler: MagicMock,
 ) -> None:
     call_order: list[str] = []
     te1 = MagicMock(name="te1")

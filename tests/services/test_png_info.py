@@ -93,7 +93,8 @@ def test_build_a1111_infotext_roundtrips_through_parser() -> None:
         prompt="a cat in a hat",
         negative_prompt="blurry, low quality",
         steps=30,
-        sampler="euler_a",
+        sampler="euler_ancestral",
+        scheduler="normal",
         cfg_scale=7.5,
         seed=42,
         width=1024,
@@ -107,6 +108,7 @@ def test_build_a1111_infotext_roundtrips_through_parser() -> None:
     assert parsed["Negative prompt"] == "blurry, low quality"
     assert parsed["Steps"] == "30"
     assert parsed["Sampler"] == "Euler a"
+    assert parsed["Schedule type"] == "Normal"
     assert parsed["Seed"] == "42"
     assert parsed["Size-1"] == 1024
     assert parsed["Size-2"] == 1024
@@ -150,5 +152,8 @@ def test_pnginfo_with_parameters_embeds_chunk() -> None:
     result = inspect_image_bytes(buffer.getvalue())
     assert result.parameters["Prompt"] == "portrait"
     assert result.parameters["Sampler"] == "Euler"
+    assert result.parameters["Schedule type"] == "Normal"
+    assert result.parameters["scheduler_id"] == "normal"
+    assert result.parameters["sampler_id"] == "euler"
     assert result.parameters["Seed"] == "-1"
 

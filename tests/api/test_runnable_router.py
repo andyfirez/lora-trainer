@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from src.api.routers.loras import router as lora_router
 from src.api.routers.runnable import build_sample_responses, sample_file_url
+from src.api.routers.samplings import options_router
 from src.api.routers.samplings import router as sampling_router
 
 _SHARED_SUFFIXES = (
@@ -26,6 +27,10 @@ def test_sampling_live_preview_route_exists() -> None:
     assert "/samplings/{entity_id}/live-preview" in _route_paths(sampling_router)
 
 
+def test_sampling_options_route_exists() -> None:
+    assert "/samplings/options" in _route_paths(options_router)
+
+
 def test_lora_and_sampling_share_runnable_paths() -> None:
     lora_paths = _route_paths(lora_router)
     sampling_paths = _route_paths(sampling_router)
@@ -37,6 +42,7 @@ def test_lora_and_sampling_share_runnable_paths() -> None:
 def test_runnable_operation_ids_are_unique() -> None:
     app = FastAPI()
     app.include_router(lora_router)
+    app.include_router(options_router)
     app.include_router(sampling_router)
     operation_ids = [
         operation["operationId"]

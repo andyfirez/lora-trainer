@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from PIL import Image, UnidentifiedImageError
 
 from src.services.png_info.exceptions import InvalidImageError
+from src.services.png_info.names import split_combined_sampler_name
 from src.services.png_info.parser import parse_generation_parameters
 from src.services.png_info.reader import read_info_from_image
 
@@ -48,6 +49,25 @@ def inspect_image_bytes(data: bytes) -> PngInfoResult:
             merged_items.update(items)
 
             parameters = parse_generation_parameters(info) if info else {}
+            if parameters:
+                sampler_field = parameters.get("Sampler")
+                schedule_field = parameters.get("Schedule type")
+                if isinstance(sampler_field, str):
+                    sampler_id, scheduler_id = split_combined_sampler_name(sampler_field)
+                    if sampler_id:
+                        parameters["sampler_id"] = sampler_id
+                    if scheduler_id:
+                        parameters["scheduler_id"] = scheduler_id
+                    elif isinstance(schedule_field, str):
+                        _, from_schedule = split_combined_sampler_name(schedule_field)
+                        if from_schedule:
+                            parameters["scheduler_id"] = from_schedule
+                        else:
+                            from src.services.png_info.names import lookup_scheduler_id
+
+                            resolved = lookup_scheduler_id(schedule_field)
+                            if resolved:
+                                parameters["scheduler_id"] = resolved
 
             return PngInfoResult(
                 info=info,
