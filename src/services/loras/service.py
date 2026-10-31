@@ -143,9 +143,12 @@ class LoraService:
 
     async def _validate_config(self, config: TrainConfig) -> None:
         try:
-            if not config.base_model_name:
-                raise RunnableValidationError("base_model_name is required")
-            resolve_config_base_model(config.base_model_name)
+            if config.model_type.is_flux:
+                config.validate_model_files()
+            else:
+                if not config.base_model_name:
+                    raise RunnableValidationError("base_model_name is required")
+                resolve_config_base_model(config.base_model_name)
             StoragePaths.resolve_lora_path(config.output_dir or "")
             if not config.concepts:
                 raise RunnableValidationError("At least one training concept is required")
@@ -175,7 +178,8 @@ class LoraService:
         await self._validate_config(snapshot)
         lora = Lora(
             name=name,
-            base_model_name=snapshot.base_model_name or "unknown",
+            base_model_name=snapshot.display_base_model_name(),
+            model_type=snapshot.model_type.value,
             config_yaml=snapshot.to_snapshot_yaml(),
             status=RunnableStatus.DRAFT,
         )

@@ -15,6 +15,7 @@ from src.sampler.sweep.models import (
     normalize_lora_path_value,
     parse_lora_entry,
 )
+from src.services.runnable.exceptions import RunnableValidationError
 from src.services.sampling.exceptions import (
     SamplingLoRAPathNotFoundError,
     SamplingPromptsNotConfiguredError,
@@ -37,11 +38,28 @@ def validate_sample_prompts(config: SamplingConfig) -> None:
         raise SamplingPromptsNotConfiguredError()
 
 
+def _is_flux_lora_file(path: Path) -> bool:
+    """Flux LoRAs use diffusers keys (``transformer.*``); the sampler only supports SDXL (kohya keys)."""
+    if path.suffix.lower() != ".safetensors":
+        return False
+    try:
+        from safetensors import safe_open
+
+        with safe_open(str(path), framework="pt") as handle:
+            return any(key.startswith("transformer.") for key in handle.keys())
+    except Exception:
+        return False
+
+
 def validate_lora_paths(lora_paths: list[str]) -> None:
     for lora_path in lora_paths:
         path = resolve_config_lora_file(lora_path)
         if not path.is_file():
             raise SamplingLoRAPathNotFoundError(lora_path)
+        if _is_flux_lora_file(path):
+            raise RunnableValidationError(
+                f"{lora_path} is a Flux LoRA; sampling is currently supported for SDXL LoRAs only"
+            )
 
 
 def resolve_lora_paths_from_sampling_config(sampling_config: SamplingConfig) -> list[str]:

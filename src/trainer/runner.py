@@ -3,7 +3,7 @@
 Usage:
     python -m src.trainer.runner --lora-id <id>
 
-Loads the Lora's config_yaml from SQLite, runs the SDXL LoRA trainer, and
+Loads the Lora's config_yaml from SQLite, runs the LoRA trainer for its model type, and
 writes progress back to the DB synchronously. Final status (completed/failed)
 is derived by the worker from this process's exit code — this runner only
 sets status explicitly for a graceful cancellation (stop-after-save/cache).
@@ -39,11 +39,11 @@ from src.trainer.concept_resolution import resolve_concept_paths
 from src.trainer.concept_training_metadata import resolve_concept_training_metadata
 from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
-from src.trainer.sdxl.trainer import (
-    SDXLLoRATrainer,
+from src.trainer.base_trainer import (
     TrainingCancelledAfterSave,
     TrainingCancelledDuringCache,
 )
+from src.trainer.factory import build_trainer
 from src.trainer.training_log import JobTrainingLogger, setup_tensorboard_writer
 
 logging.basicConfig(
@@ -269,7 +269,11 @@ async def _run(lora_id: int) -> None:
     if not is_resume_run:
         await _clear_resume_state(lora_id)
     training_logger.logger.info(
-        "Starting SDXL LoRA training for lora id=%d: %s/%s", lora_id, config.output_dir, config.lora_name
+        "Starting %s LoRA training for lora id=%d: %s/%s",
+        config.model_type.value,
+        lora_id,
+        config.output_dir,
+        config.lora_name,
     )
 
     try:
@@ -294,7 +298,7 @@ async def _run(lora_id: int) -> None:
                 logger.exception("Failed to poll stop request during cache")
                 return False
 
-        trainer = SDXLLoRATrainer(
+        trainer = build_trainer(
             config,
             progress_callback=_make_progress_callback(lora_id),
             training_logger=training_logger,

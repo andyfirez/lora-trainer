@@ -28,6 +28,7 @@ export interface LoraResponse extends RunnableResponse {
   relative_path: string;
   weights_relpath: string;
   base_model_name: string;
+  model_type: "sdxl" | "flux1" | "flux2_klein";
   resolved_work_dir: string;
   resolved_weights_path: string;
   path_missing: boolean;

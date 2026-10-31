@@ -242,13 +242,62 @@ function normalizeConcept(concept: unknown, datasets?: Dataset[]): Config {
   return item;
 }
 
+type ModelType = "sdxl" | "flux1" | "flux2_klein";
+
+const MODEL_TYPE_OPTIONS: { value: ModelType; label: string }[] = [
+  { value: "sdxl", label: "SDXL" },
+  { value: "flux1", label: "Flux.1 (dev / schnell)" },
+  { value: "flux2_klein", label: "FLUX.2 Klein" },
+];
+
+const QUANTIZATION_OPTIONS = [
+  { value: "fp8", label: "fp8 (default)" },
+  { value: "nf4", label: "nf4 (bitsandbytes 4-bit)" },
+  { value: "none", label: "none (bf16)" },
+];
+
+const TIMESTEP_DISTRIBUTION_OPTIONS = [
+  { value: "logit_normal", label: "logit-normal" },
+  { value: "uniform", label: "uniform" },
+];
+
+const FLUX_FLOW_DEFAULTS = { timestep_distribution: "logit_normal", timestep_shift: 3.0, guidance_scale: 1.0 };
+const EMPTY_TEXT_ENCODER = { weights_path: "", tokenizer_dir: "" };
+
+function isFluxModelType(value: unknown): boolean {
+  return value === "flux1" || value === "flux2_klein";
+}
+
+function defaultFluxSection(type: ModelType): Config {
+  if (type === "flux1") {
+    return {
+      variant: "dev",
+      transformer_path: "",
+      vae_path: "",
+      clip_l: { ...EMPTY_TEXT_ENCODER },
+      t5: { ...EMPTY_TEXT_ENCODER },
+      quantization: "fp8",
+      t5_sequence_length: 512,
+      flow: { ...FLUX_FLOW_DEFAULTS },
+    };
+  }
+  return {
+    transformer_path: "",
+    vae_path: "",
+    qwen3: { ...EMPTY_TEXT_ENCODER },
+    quantization: "fp8",
+    text_sequence_length: 512,
+    flow: { ...FLUX_FLOW_DEFAULTS },
+  };
+}
+
 function isTextEncoderTrainingEnabled(config: Config): boolean {
   return Boolean(config.text_encoder_1?.train || config.text_encoder_2?.train);
 }
 
 function sanitizeTrainConfig(next: Config, datasets?: Dataset[]): Config {
   let cleaned = stripInlineSamplingFields(next);
-  if (cleaned.clip_skip == null) {
+  if (cleaned.clip_skip == null && !isFluxModelType(cleaned.model_type)) {
     cleaned = { ...cleaned, clip_skip: 2 };
   }
   if (isTextEncoderTrainingEnabled(cleaned)) {
@@ -297,6 +346,21 @@ export default function TrainConfigForm({
   hideLoraName = false,
 }: TrainConfigFormProps) {
   const concepts: Config[] = config.concepts ?? [];
+  const modelType: ModelType = (config.model_type as ModelType | undefined) ?? "sdxl";
+  const isFlux = modelType !== "sdxl";
+  const fluxKey = modelType === "flux1" ? "flux1" : "flux2_klein";
+  const fluxConfig: Config = (isFlux ? config[fluxKey] : undefined) ?? {};
+  const targetParts = (
+    modelType === "flux2_klein" ? ["unet", "text_encoder_1"] : ["unet", "text_encoder_1", "text_encoder_2"]
+  ) as readonly ("unet" | "text_encoder_1" | "text_encoder_2")[];
+  const partLabels: Record<string, string> = isFlux
+    ? {
+        unet: "unet (transformer)",
+        text_encoder_1: modelType === "flux1" ? "text_encoder_1 (CLIP-L)" : "text_encoder_1 (Qwen3)",
+        text_encoder_2: "text_encoder_2 (T5-XXL)",
+      }
+    : { unet: "unet", text_encoder_1: "text_encoder_1", text_encoder_2: "text_encoder_2" };
+  const defaultPartDtype = isFlux ? "bfloat16" : "float16";
   const { data: datasets, isLoading: datasetsLoading } = useSWR("/datasets", () => datasetsApi.list());
   const baseModelWarning = useMemo(
     () => getBaseModelPathFormatIssue(String(config.base_model_name ?? "")),
@@ -328,6 +392,45 @@ export default function TrainConfigForm({
       ...config,
       [parent]: { ...(config[parent] ?? {}), [key]: value },
     });
+  }
+
+  function setModelType(next: ModelType) {
+    if (next === modelType) return;
+    const updated: Config = { ...config, model_type: next };
+    if (isFluxModelType(next)) {
+      const key = next === "flux1" ? "flux1" : "flux2_klein";
+      updated[key] = config[key] ?? defaultFluxSection(next);
+      updated.mixed_precision = "bfloat16";
+      for (const part of ["unet", "text_encoder_1", "text_encoder_2"] as const) {
+        updated[part] = { ...(config[part] ?? {}), weight_dtype: "bfloat16" };
+      }
+      if (next === "flux2_klein") {
+        updated.text_encoder_2 = { ...updated.text_encoder_2, train: false };
+      }
+      if (!isFluxModelType(config.model_type) && (config.unet?.learning_rate ?? 0.00005) === 0.00005) {
+        updated.unet = { ...updated.unet, learning_rate: 0.0001 };
+      }
+      delete updated.clip_skip;
+    } else {
+      updated.mixed_precision = "float16";
+      for (const part of ["unet", "text_encoder_1", "text_encoder_2"] as const) {
+        updated[part] = { ...(config[part] ?? {}), weight_dtype: "float16" };
+      }
+      if (isFluxModelType(config.model_type) && config.unet?.learning_rate === 0.0001) {
+        updated.unet = { ...updated.unet, learning_rate: 0.00005 };
+      }
+    }
+    emit(updated);
+  }
+
+  function setFlux(path: string[], value: unknown) {
+    const section: Config = { ...(config[fluxKey] ?? defaultFluxSection(modelType)) };
+    if (path.length === 1) {
+      section[path[0]] = value;
+    } else {
+      section[path[0]] = { ...(section[path[0]] ?? {}), [path[1]]: value };
+    }
+    emit({ ...config, [fluxKey]: section });
   }
 
   function setOptimizerType(type: OptimizerType) {
@@ -427,16 +530,25 @@ export default function TrainConfigForm({
       <section className={sectionClass}>
         <div className={sectionTitleClass}>Model</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PathInput
-            label="Base Model"
-            value={config.base_model_name ?? ""}
-            onChange={(v) => set("base_model_name", v)}
-            placeholder="path/to/sdxl.safetensors"
-            kind="model"
-            pickerTitle="Select SDXL checkpoint file"
-            warning={baseModelWarning}
-            {...trainHint("base_model_name")}
+          <SelectInput
+            label="Base Model Type"
+            value={modelType}
+            onChange={(v) => setModelType(v as ModelType)}
+            options={MODEL_TYPE_OPTIONS}
+            paramKey="model_type"
           />
+          {!isFlux && (
+            <PathInput
+              label="Base Model"
+              value={config.base_model_name ?? ""}
+              onChange={(v) => set("base_model_name", v)}
+              placeholder="path/to/sdxl.safetensors"
+              kind="model"
+              pickerTitle="Select SDXL checkpoint file"
+              warning={baseModelWarning}
+              {...trainHint("base_model_name")}
+            />
+          )}
           <PathInput
             label="Output Folder"
             value={config.output_dir ?? ""}
@@ -447,6 +559,110 @@ export default function TrainConfigForm({
             {...trainHint("output_dir")}
           />
         </div>
+        {isFlux && (
+          <div className="space-y-4 rounded-lg border border-border p-4 bg-bg">
+            <div className="text-xs font-medium text-muted">
+              {modelType === "flux1" ? "Flux.1 model files" : "FLUX.2 Klein model files"} (local .safetensors files;
+              nothing is downloaded)
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <PathInput
+                label="Transformer"
+                value={fluxConfig.transformer_path ?? ""}
+                onChange={(v) => setFlux(["transformer_path"], v)}
+                kind="model"
+                pickerTitle="Select transformer .safetensors"
+                {...trainHint(`${fluxKey}.transformer_path`)}
+              />
+              <PathInput
+                label="VAE"
+                value={fluxConfig.vae_path ?? ""}
+                onChange={(v) => setFlux(["vae_path"], v)}
+                kind="model"
+                pickerTitle="Select VAE .safetensors"
+                {...trainHint(`${fluxKey}.vae_path`)}
+              />
+              {(modelType === "flux1"
+                ? ([
+                    ["clip_l", "CLIP-L", "flux1.clip_l"],
+                    ["t5", "T5-XXL", "flux1.t5"],
+                  ] as const)
+                : ([["qwen3", "Qwen3", "flux2_klein.qwen3"]] as const)
+              ).map(([field, title, metaPrefix]) => (
+                <div key={field} className="contents">
+                  <PathInput
+                    label={`${title} Weights`}
+                    value={fluxConfig[field]?.weights_path ?? ""}
+                    onChange={(v) => setFlux([field, "weights_path"], v)}
+                    kind="model"
+                    pickerTitle={`Select ${title} .safetensors`}
+                    {...trainHint(`${metaPrefix}.weights_path`)}
+                  />
+                  <PathInput
+                    label={`${title} Tokenizer Folder`}
+                    value={fluxConfig[field]?.tokenizer_dir ?? ""}
+                    onChange={(v) => setFlux([field, "tokenizer_dir"], v)}
+                    kind="directory"
+                    pickerTitle={`Select ${title} tokenizer folder (with config.json)`}
+                    {...trainHint(`${metaPrefix}.tokenizer_dir`)}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {modelType === "flux1" && (
+                <SelectInput
+                  label="Variant"
+                  value={fluxConfig.variant ?? "dev"}
+                  onChange={(v) => setFlux(["variant"], v)}
+                  options={[
+                    { value: "dev", label: "dev" },
+                    { value: "schnell", label: "schnell" },
+                  ]}
+                  paramKey="flux1.variant"
+                />
+              )}
+              <SelectInput
+                label="Quantization"
+                value={fluxConfig.quantization ?? "fp8"}
+                onChange={(v) => setFlux(["quantization"], v)}
+                options={QUANTIZATION_OPTIONS}
+                paramKey={`${fluxKey}.quantization`}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-border">
+              <SelectInput
+                label="Timestep Distribution"
+                value={fluxConfig.flow?.timestep_distribution ?? "logit_normal"}
+                onChange={(v) => setFlux(["flow", "timestep_distribution"], v)}
+                options={TIMESTEP_DISTRIBUTION_OPTIONS}
+                paramKey={`${fluxKey}.flow.timestep_distribution`}
+              />
+              <NumberInput
+                label="Timestep Shift"
+                value={fluxConfig.flow?.timestep_shift ?? 3.0}
+                onChange={(v) => setFlux(["flow", "timestep_shift"], v ?? 3.0)}
+                min={0.1}
+                step={0.1}
+                placeholder="3.0"
+                paramKey={`${fluxKey}.flow.timestep_shift`}
+              />
+              <NumberInput
+                label="Guidance Scale"
+                value={fluxConfig.flow?.guidance_scale ?? 1.0}
+                onChange={(v) => setFlux(["flow", "guidance_scale"], v ?? 1.0)}
+                min={0.1}
+                step={0.1}
+                placeholder="1.0"
+                paramKey={`${fluxKey}.flow.guidance_scale`}
+              />
+            </div>
+            <p className="text-xs text-muted">
+              Flux training requires bfloat16 mixed precision. Text encoders are quantized to fp8 whenever quantization
+              is not &quot;none&quot;.
+            </p>
+          </div>
+        )}
         {hideLoraName && loraName != null ? (
           <p className="text-xs text-muted">
             Artifacts folder:{" "}
@@ -529,14 +745,14 @@ export default function TrainConfigForm({
               </tr>
             </thead>
             <tbody className="space-y-2">
-              {(["unet", "text_encoder_1", "text_encoder_2"] as const).map((part) => {
+              {targetParts.map((part) => {
                 const trainHints = trainHint(`${part}.train`);
                 const dtypeHints = trainHint(`${part}.weight_dtype`);
                 const lrHints = trainHint(`${part}.learning_rate`);
                 const isTraining = !!(config[part]?.train ?? (part === "unet"));
                 return (
                 <tr key={part} className="border-t border-border">
-                  <td className="py-2 pr-4 text-text font-mono text-xs">{part}</td>
+                  <td className="py-2 pr-4 text-text font-mono text-xs">{partLabels[part]}</td>
                   <td className="py-2 pr-4">
                     <div className="flex items-center gap-1">
                       <input
@@ -554,7 +770,7 @@ export default function TrainConfigForm({
                     <div className="flex items-center gap-1">
                       <select
                         className="rounded-lg bg-bg border border-border px-2 py-1 text-xs text-text focus:outline-none focus:border-accent"
-                        value={config[part]?.weight_dtype ?? "float16"}
+                        value={config[part]?.weight_dtype ?? defaultPartDtype}
                         onChange={(e) => setNested(part, "weight_dtype", e.target.value)}
                       >
                         {weightDtypeOptions.map((o) => (
@@ -574,7 +790,7 @@ export default function TrainConfigForm({
                         <input
                           type="number"
                           className="rounded-lg bg-bg border border-border px-2 py-1 text-xs text-text focus:outline-none focus:border-accent w-28"
-                          value={config[part]?.learning_rate ?? 0.00005}
+                          value={config[part]?.learning_rate ?? (isFlux && part === "unet" ? 0.0001 : 0.00005)}
                           min={0}
                           step={0.00001}
                           placeholder="0.00005"
@@ -597,6 +813,8 @@ export default function TrainConfigForm({
             </tbody>
           </table>
         </div>
+        {!isFlux && (
+          <>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-border">
           <NumberInput
             label="CLIP Skip"
@@ -611,6 +829,8 @@ export default function TrainConfigForm({
         <p className="text-xs text-muted">
           CLIP hidden layer used for text encoding during training and sampling. Default 2 matches Kohya.
         </p>
+          </>
+        )}
       </section>
 
       {/* Training Hyperparameters */}
@@ -642,24 +862,28 @@ export default function TrainConfigForm({
             placeholder="0"
             paramKey="lr_warmup_steps"
           />
-          <NumberInput
-            label="Min SNR Gamma"
-            value={config.min_snr_gamma}
-            onChange={(v) => set("min_snr_gamma", v)}
-            min={0}
-            step={0.5}
-            placeholder="5"
-            paramKey="min_snr_gamma"
-          />
-          <NumberInput
-            label="Noise Offset"
-            value={config.noise_offset}
-            onChange={(v) => set("noise_offset", v)}
-            min={0}
-            step={0.001}
-            placeholder="0.0357"
-            paramKey="noise_offset"
-          />
+          {!isFlux && (
+            <NumberInput
+              label="Min SNR Gamma"
+              value={config.min_snr_gamma}
+              onChange={(v) => set("min_snr_gamma", v)}
+              min={0}
+              step={0.5}
+              placeholder="5"
+              paramKey="min_snr_gamma"
+            />
+          )}
+          {!isFlux && (
+            <NumberInput
+              label="Noise Offset"
+              value={config.noise_offset}
+              onChange={(v) => set("noise_offset", v)}
+              min={0}
+              step={0.001}
+              placeholder="0.0357"
+              paramKey="noise_offset"
+            />
+          )}
         </div>
       </section>
 

@@ -4,6 +4,12 @@ import { AlertTriangle } from "lucide-react";
 import Card, { CardTitle } from "@/components/ui/Card";
 import type { LoraResponse } from "@/types";
 
+const MODEL_TYPE_LABELS: Record<string, string> = {
+  sdxl: "SDXL",
+  flux1: "Flux.1",
+  flux2_klein: "FLUX.2 Klein",
+};
+
 function formatElapsed(seconds: number | null | undefined): string | null {
   if (seconds == null || !Number.isFinite(seconds)) return null;
   const total = Math.floor(seconds);
@@ -34,6 +40,10 @@ export default function LoraOverviewPanel({ lora }: LoraOverviewPanelProps) {
       )}
 
       <dl className="space-y-3 text-sm">
+        <div>
+          <dt className="text-xs text-muted mb-0.5">Model type</dt>
+          <dd className="text-text">{MODEL_TYPE_LABELS[lora.model_type] ?? lora.model_type}</dd>
+        </div>
         <div>
           <dt className="text-xs text-muted mb-0.5">Base model</dt>
           <dd className="text-text break-all">{lora.base_model_name}</dd>

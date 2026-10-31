@@ -134,7 +134,8 @@ export default function LoraDetailPage({ params }: Props) {
     if (!lora?.config_yaml) return;
     try {
       const parsed = yamlParse(lora.config_yaml) as Record<string, unknown>;
-      const issue = await validateBaseModelPath(String(parsed.base_model_name ?? ""));
+      const isFlux = parsed.model_type === "flux1" || parsed.model_type === "flux2_klein";
+      const issue = isFlux ? null : await validateBaseModelPath(String(parsed.base_model_name ?? ""));
       if (issue) {
         alert(issue);
         return;

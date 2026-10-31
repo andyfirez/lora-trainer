@@ -73,7 +73,9 @@ function NewLoraPageContent() {
         }
       }
     }
-    const baseModelIssue = await validateBaseModelPath(String(parsed.base_model_name ?? ""));
+    const isFlux = parsed.model_type === "flux1" || parsed.model_type === "flux2_klein";
+    // Flux model files are validated by the backend on create/enqueue.
+    const baseModelIssue = isFlux ? null : await validateBaseModelPath(String(parsed.base_model_name ?? ""));
     if (baseModelIssue) {
       setError(baseModelIssue);
       return;
@@ -95,7 +97,7 @@ function NewLoraPageContent() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <PageHeader title="New LoRA" description="Configure and start a new SDXL LoRA training run" />
+      <PageHeader title="New LoRA" description="Configure and start a new LoRA training run (SDXL, Flux.1, FLUX.2 Klein)" />
 
       <div className="flex flex-col gap-4">
         {error && (

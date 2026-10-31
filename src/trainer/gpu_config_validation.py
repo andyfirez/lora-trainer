@@ -3,7 +3,7 @@
 import torch
 from diffusers.utils.import_utils import is_xformers_available
 
-from src.trainer.config import VaeDtype, WeightDtype
+from src.trainer.config import ModelType, VaeDtype, WeightDtype
 
 
 def _format_gpu() -> str:
@@ -19,7 +19,14 @@ def validate_gpu_config(
     attention_mechanism: str,
     mixed_precision: WeightDtype,
     vae_dtype: VaeDtype,
+    model_type: ModelType = ModelType.SDXL,
 ) -> None:
+    if model_type.is_flux and mixed_precision != WeightDtype.BFLOAT_16:
+        raise ValueError(
+            f"{model_type.value} training requires mixed_precision=bfloat16 "
+            f"(got {mixed_precision.value}). Set gpu.mixed_precision to bfloat16 in settings."
+        )
+
     if attention_mechanism == "xformers" and not is_xformers_available():
         raise ValueError(
             "attention_mechanism='xformers' requires the xformers package. "

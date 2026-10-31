@@ -115,4 +115,6 @@ def resolve_completed_lora_paths(lora: Lora) -> LoraPaths | None:
         work_dir = Path(lora.output_path)
     else:
         work_dir = StoragePaths.resolve_training_work_dir(config.output_dir, config.lora_name)
-    return build_lora_paths(work_dir=work_dir, name=lora.name, base_model_name=config.base_model_name)
+    return build_lora_paths(
+        work_dir=work_dir, name=lora.name, base_model_name=config.display_base_model_name()
+    )

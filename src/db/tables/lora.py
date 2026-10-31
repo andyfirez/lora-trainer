@@ -21,6 +21,11 @@ class Lora(RunnableMixin, TimestampMixin, SQLModel, table=True):
     relative_path: str = Field(default="", description="Work directory relative to lora_root")
     weights_relpath: str = Field(default="", description="Weights file relative to lora_root")
     base_model_name: str = Field(default="unknown", index=True)
+    model_type: str = Field(
+        default="sdxl",
+        index=True,
+        description="Base model family: sdxl | flux1 | flux2_klein",
+    )
 
     # Training progress
     progress_step: Optional[int] = Field(default=None)

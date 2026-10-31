@@ -15,6 +15,7 @@ class LoraResponse(RunnableResponse):
     relative_path: str
     weights_relpath: str
     base_model_name: str
+    model_type: str = "sdxl"
     resolved_work_dir: str = ""
     resolved_weights_path: str = ""
     path_missing: bool = True

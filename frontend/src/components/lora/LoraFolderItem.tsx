@@ -16,6 +16,9 @@ function LoraMeta({ lora }: { lora: LoraResponse }) {
       {lora.status === "queued" && lora.queue_position != null && (
         <span>Queue #{lora.queue_position}</span>
       )}
+      {lora.model_type && lora.model_type !== "sdxl" && (
+        <span className="uppercase tracking-wide">{lora.model_type.replace("_", " ")}</span>
+      )}
       <span className="truncate max-w-xs">{lora.base_model_name}</span>
       <span>{new Date(lora.created_at).toLocaleDateString()}</span>
       {lora.status === "running" && lora.progress_step != null && lora.progress_total != null && (

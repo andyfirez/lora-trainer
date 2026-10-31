@@ -10,7 +10,7 @@ Persisted YAML omits runtime-only fields:
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal, Optional, Self, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, Optional, Self, TypeAlias
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
@@ -28,6 +28,34 @@ if TYPE_CHECKING:
     from src.settings.models import GpuDefaultsSettings
     from src.trainer.concept_resolution import ResolvedConceptPaths
     from src.trainer.gpu_resolution import ResolvedGpuConfig
+
+
+class ModelType(StrEnum):
+    """Base model family a LoRA is trained on. Selects trainer and config sections."""
+
+    SDXL = "sdxl"
+    FLUX1 = "flux1"
+    FLUX2_KLEIN = "flux2_klein"
+
+    @property
+    def is_flux(self) -> bool:
+        return self in (ModelType.FLUX1, ModelType.FLUX2_KLEIN)
+
+
+class Flux1Variant(StrEnum):
+    DEV = "dev"
+    SCHNELL = "schnell"
+
+
+class FluxQuantization(StrEnum):
+    NONE = "none"
+    FP8 = "fp8"
+    NF4 = "nf4"
+
+
+class FluxTimestepDistribution(StrEnum):
+    UNIFORM = "uniform"
+    LOGIT_NORMAL = "logit_normal"
 
 
 class OutputFormat(StrEnum):
@@ -122,11 +150,60 @@ class LoggingConfig(BaseModel):
     log_dir: Optional[str] = None
 
 
+class TextEncoderFiles(BaseModel):
+    """Local text encoder: a single weights file plus a directory with tokenizer + config.json."""
+
+    weights_path: str = ""
+    tokenizer_dir: str = ""
+
+
+class FluxFlowConfig(BaseModel):
+    """Flow-matching hyperparameters (OneTrainer defaults)."""
+
+    timestep_distribution: FluxTimestepDistribution = FluxTimestepDistribution.LOGIT_NORMAL
+    timestep_shift: float = Field(default=3.0, gt=0.0)
+    guidance_scale: float = Field(default=1.0, gt=0.0)
+
+
+class Flux1Config(BaseModel):
+    """Flux.1 (dev / schnell) model files and flow settings.
+
+    Part mapping onto ``TrainConfig``: ``unet`` = transformer, ``text_encoder_1`` = CLIP-L,
+    ``text_encoder_2`` = T5-XXL.
+    """
+
+    variant: Flux1Variant = Flux1Variant.DEV
+    transformer_path: str = ""
+    vae_path: str = ""
+    clip_l: TextEncoderFiles = Field(default_factory=TextEncoderFiles)
+    t5: TextEncoderFiles = Field(default_factory=TextEncoderFiles)
+    quantization: FluxQuantization = FluxQuantization.FP8
+    t5_sequence_length: int = Field(default=512, ge=64, le=512)
+    flow: FluxFlowConfig = Field(default_factory=FluxFlowConfig)
+
+
+class Flux2KleinConfig(BaseModel):
+    """FLUX.2 Klein model files and flow settings.
+
+    Part mapping onto ``TrainConfig``: ``unet`` = transformer, ``text_encoder_1`` = Qwen3.
+    """
+
+    transformer_path: str = ""
+    vae_path: str = ""
+    qwen3: TextEncoderFiles = Field(default_factory=TextEncoderFiles)
+    quantization: FluxQuantization = FluxQuantization.FP8
+    text_sequence_length: int = Field(default=512, ge=64, le=1024)
+    flow: FluxFlowConfig = Field(default_factory=FluxFlowConfig)
+
+
 class TrainConfig(BaseModel):
     """SDXL LoRA training configuration. Serialized to/from YAML."""
 
     # Model
-    base_model_name: str = ""
+    model_type: ModelType = ModelType.SDXL
+    base_model_name: str = ""  # SDXL checkpoint; Flux models use the ``flux1`` / ``flux2_klein`` sections
+    flux1: Optional[Flux1Config] = None
+    flux2_klein: Optional[Flux2KleinConfig] = None
     output_dir: str = ""
     lora_name: str = "lora"
     output_format: OutputFormat = OutputFormat.SAFETENSORS
@@ -313,6 +390,53 @@ class TrainConfig(BaseModel):
     def default_yaml(cls) -> str:
         return cls().to_yaml()
 
+    @model_validator(mode="before")
+    @classmethod
+    def apply_flux_part_defaults(cls, data: Any) -> Any:
+        """Flux parts default to bfloat16 weights (fp16 overflows in the Flux transformer)."""
+        if not isinstance(data, dict):
+            return data
+        raw_type = data.get("model_type", ModelType.SDXL)
+        try:
+            model_type = ModelType(raw_type)
+        except ValueError:
+            return data
+        if not model_type.is_flux:
+            return data
+        patched = dict(data)
+        if patched.get("mixed_precision") is None:
+            patched["mixed_precision"] = WeightDtype.BFLOAT_16.value
+        for part in ("unet", "text_encoder_1", "text_encoder_2"):
+            part_data = patched.get(part)
+            if part_data is None:
+                patched[part] = {"weight_dtype": WeightDtype.BFLOAT_16.value}
+            elif isinstance(part_data, dict) and "weight_dtype" not in part_data:
+                patched[part] = {**part_data, "weight_dtype": WeightDtype.BFLOAT_16.value}
+        for part in ("unet",):
+            part_data = patched[part]
+            if isinstance(part_data, dict) and "learning_rate" not in part_data:
+                patched[part] = {**part_data, "learning_rate": 1e-4}
+        return patched
+
+    @model_validator(mode="after")
+    def normalize_model_sections(self) -> Self:
+        """Keep only the config section matching ``model_type`` (creating defaults if missing)."""
+        if self.model_type == ModelType.FLUX1:
+            if self.flux1 is None:
+                self.flux1 = Flux1Config()
+            self.flux2_klein = None
+        elif self.model_type == ModelType.FLUX2_KLEIN:
+            if self.flux2_klein is None:
+                self.flux2_klein = Flux2KleinConfig()
+            self.flux1 = None
+        else:
+            self.flux1 = None
+            self.flux2_klein = None
+        if self.model_type == ModelType.FLUX2_KLEIN:
+            # Klein has a single text encoder (Qwen3 = text_encoder_1).
+            self.text_encoder_2 = self.text_encoder_2.model_copy(update={"train": False})
+        return self
+
     @model_validator(mode="after")
     def sync_te_cache_with_training(self) -> Self:
         if self.text_encoder_1.train or self.text_encoder_2.train:
@@ -332,4 +456,21 @@ class TrainConfig(BaseModel):
             attention_mechanism=resolved.attention_mechanism,
             mixed_precision=resolved.mixed_precision,
             vae_dtype=resolved.vae_dtype,
+            model_type=self.model_type,
         )
+
+    def display_base_model_name(self) -> str:
+        """Human-readable base model reference stored on the Lora row."""
+        if self.model_type == ModelType.FLUX1 and self.flux1 is not None:
+            return self.flux1.transformer_path or "unknown"
+        if self.model_type == ModelType.FLUX2_KLEIN and self.flux2_klein is not None:
+            return self.flux2_klein.transformer_path or "unknown"
+        return self.base_model_name or "unknown"
+
+    def validate_model_files(self) -> None:
+        """Raise ``ValueError`` when required local model files for ``model_type`` are missing."""
+        if self.model_type == ModelType.SDXL:
+            return
+        from src.trainer.flux.model_files import validate_flux_model_files
+
+        validate_flux_model_files(self)
