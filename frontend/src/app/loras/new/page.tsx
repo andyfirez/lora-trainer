@@ -15,6 +15,7 @@ import { settingsApi } from "@/lib/api/settings";
 import { applySparseGpuOverrides } from "@/lib/gpuConfigUtils";
 import { TrainConfig } from "@/lib/defaultConfig";
 import TrainConfigForm from "@/components/TrainConfigForm";
+import { validateBaseModelPath } from "@/lib/validateBaseModelPath";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -72,6 +73,11 @@ function NewLoraPageContent() {
         }
       }
     }
+    const baseModelIssue = await validateBaseModelPath(String(parsed.base_model_name ?? ""));
+    if (baseModelIssue) {
+      setError(baseModelIssue);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -97,7 +103,7 @@ function NewLoraPageContent() {
         )}
 
         <div className="flex items-end gap-4">
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <label className="block text-sm font-medium text-muted mb-1">LoRA Name</label>
             <input
               type="text"
@@ -125,7 +131,13 @@ function NewLoraPageContent() {
         />
 
         {tab === "form" ? (
-          <TrainConfigForm config={config} onChange={handleConfigChange} gpuDefaults={gpuDefaults} />
+          <TrainConfigForm
+            config={config}
+            onChange={handleConfigChange}
+            gpuDefaults={gpuDefaults}
+            loraName={name.trim()}
+            hideLoraName
+          />
         ) : (
           <div className="rounded-xl overflow-hidden border border-border" style={{ height: 520 }}>
             <MonacoEditor

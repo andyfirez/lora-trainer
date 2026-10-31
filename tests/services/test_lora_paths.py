@@ -5,7 +5,20 @@ from pathlib import Path
 import pytest
 
 from src.db.tables.lora import Lora
-from src.services.loras.paths import resolve_sample_base_dir, resolve_work_dir
+from src.services.loras.paths import (
+    build_training_loss_log_path,
+    resolve_sample_base_dir,
+    resolve_training_work_dir_from_config,
+    resolve_work_dir,
+)
+from src.trainer.config import TrainConfig
+from src.trainer.metric_logger import build_loss_log_path
+
+
+def test_build_loss_log_path_uses_resolved_work_dir(storage_roots) -> None:
+    config = TrainConfig(output_dir="", lora_name="path-check")
+    work_dir = resolve_training_work_dir_from_config(config)
+    assert build_loss_log_path(config) == build_training_loss_log_path(work_dir)
 
 
 def test_resolve_sample_base_dir_prefers_output_path(tmp_path: Path) -> None:

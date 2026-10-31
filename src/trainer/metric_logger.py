@@ -8,8 +8,14 @@ from typing import Any, Optional
 from src.trainer.config import TrainConfig
 
 
-def build_loss_log_path(config: TrainConfig) -> Path:
-    return Path(config.output_dir) / config.lora_name / "loss_log.db"
+def build_loss_log_path(config: TrainConfig, *, work_dir: Path | None = None) -> Path:
+    from src.services.loras.paths import (
+        build_training_loss_log_path,
+        resolve_training_work_dir_from_config,
+    )
+
+    resolved = work_dir if work_dir is not None else resolve_training_work_dir_from_config(config)
+    return build_training_loss_log_path(resolved)
 
 
 def reset_loss_log(log_file: Path | str) -> None:

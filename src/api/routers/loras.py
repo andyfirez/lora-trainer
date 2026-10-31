@@ -64,6 +64,11 @@ async def cancel_lora(lora_id: int, body: CancelLoraRequest, service: LoraServic
     return LoraResponse.model_validate(lora)
 
 
+@router.delete("/{lora_id}", status_code=204)
+async def delete_lora(lora_id: int, service: LoraServiceDep) -> None:
+    await service.delete_lora(lora_id)
+
+
 @router.get("/{lora_id}/logs", response_model=JobLogsResponse)
 async def get_lora_logs(lora_id: int, service: LoraServiceDep, tail: int = 500) -> JobLogsResponse:
     lines = await service.get_logs(lora_id, tail=tail)

@@ -1,5 +1,7 @@
 """Tests for LoraService: create/enqueue/cancel/resume lifecycle."""
 
+from pathlib import Path
+
 import pytest
 from PIL import Image
 from src.db.tables.runnable_mixin import RunnableStatus
@@ -8,9 +10,9 @@ from src.services.loras.service import LoraService
 from src.services.runnable.exceptions import (
     RunnableAlreadyQueuedError,
     RunnableNotCancellableError,
+    RunnableOperationNotSupportedError,
     RunnableValidationError,
 )
-
 
 @pytest.mark.asyncio
 async def test_create_lora_rejects_unprepared_dataset(
@@ -31,7 +33,7 @@ async def test_create_lora_rejects_unprepared_dataset(
         update_target_resolution=True,
     )
 
-    yaml_text = f"""base_model_name: test-model
+    yaml_text = f"""base_model_name: test-model.safetensors
 resolution: 1024
 concepts:
   - dataset_id: {dataset.id}
@@ -61,6 +63,63 @@ async def test_enqueue_lora_sets_queued_status(lora_service: LoraService, minima
     queued = await lora_service.enqueue_lora(lora.id)
     assert queued.status == RunnableStatus.QUEUED
     assert queued.queue_position == 1
+
+
+@pytest.mark.asyncio
+async def test_enqueue_prepares_workspace(
+    lora_service: LoraService,
+    minimal_training_yaml: str,
+    storage_roots,
+) -> None:
+    lora = await lora_service.create_lora(name="workspace-run", config_yaml=minimal_training_yaml)
+    queued = await lora_service.enqueue_lora(lora.id)
+
+    work_dir = storage_roots["lora"] / "workspace-run"
+    assert queued.output_path == str(work_dir.resolve())
+    assert work_dir.is_dir()
+    assert (work_dir / "workspace-run_config.yaml").is_file()
+    assert queued.log_path
+    assert Path(queued.log_path).name == f"lora_{lora.id}.log"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_rejects_nonempty_work_dir(
+    lora_service: LoraService,
+    minimal_training_yaml: str,
+    storage_roots,
+) -> None:
+    work_dir = storage_roots["lora"] / "blocked-run"
+    work_dir.mkdir()
+    (work_dir / "existing.txt").write_text("data", encoding="utf-8")
+
+    lora = await lora_service.create_lora(name="blocked-run", config_yaml=minimal_training_yaml)
+    with pytest.raises(RunnableValidationError, match="already exists"):
+        await lora_service.enqueue_lora(lora.id)
+
+
+@pytest.mark.asyncio
+async def test_delete_lora_removes_db_and_work_dir(
+    lora_service: LoraService,
+    minimal_training_yaml: str,
+    storage_roots,
+) -> None:
+    lora = await lora_service.create_lora(name="delete-me", config_yaml=minimal_training_yaml)
+    await lora_service.enqueue_lora(lora.id)
+    await lora_service.cancel_lora(lora.id)
+    work_dir = storage_roots["lora"] / "delete-me"
+    assert work_dir.is_dir()
+
+    await lora_service.delete_lora(lora.id)
+    assert await lora_service._repo.get_by_id(lora.id) is None
+    assert not work_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_delete_queued_lora_raises(lora_service: LoraService, minimal_training_yaml: str) -> None:
+    lora = await lora_service.create_lora(name="queued-delete", config_yaml=minimal_training_yaml)
+    await lora_service.enqueue_lora(lora.id)
+    with pytest.raises(RunnableOperationNotSupportedError):
+        await lora_service.delete_lora(lora.id)
 
 
 @pytest.mark.asyncio

@@ -4,8 +4,10 @@ import { use, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Loader2, Play, RotateCcw, Square } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Loader2, Play, RotateCcw, Square, Trash2 } from "lucide-react";
+import { parse as yamlParse } from "yaml";
 import { lorasApi } from "@/lib/api/loras";
+import { validateBaseModelPath } from "@/lib/validateBaseModelPath";
 import { useCancelLora } from "@/hooks/useCancelLora";
 import StatusBadge from "@/components/StatusBadge";
 import StopJobDialog from "@/components/StopJobDialog";
@@ -83,8 +85,25 @@ export default function LoraDetailPage({ params }: Props) {
   const [reproduceEnqueue, setReproduceEnqueue] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [reproduceError, setReproduceError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const cancelLora = useCancelLora(() => mutate());
+
+  const canDelete = lora?.status !== "queued" && lora?.status !== "running";
+
+  const handleDelete = async () => {
+    if (!lora || !canDelete) return;
+    if (!confirm(`Delete LoRA "${lora.name}"? This removes the database entry and artifacts on disk.`)) return;
+    setDeleting(true);
+    try {
+      await lorasApi.delete(loraId);
+      router.push("/loras");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete LoRA");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const openReproduceModal = () => {
     setReproduceName(lora ? `${lora.name}-copy` : "");
@@ -112,8 +131,19 @@ export default function LoraDetailPage({ params }: Props) {
   };
 
   const handleEnqueue = async () => {
-    await lorasApi.enqueue(loraId);
-    mutate();
+    if (!lora?.config_yaml) return;
+    try {
+      const parsed = yamlParse(lora.config_yaml) as Record<string, unknown>;
+      const issue = await validateBaseModelPath(String(parsed.base_model_name ?? ""));
+      if (issue) {
+        alert(issue);
+        return;
+      }
+      await lorasApi.enqueue(loraId);
+      mutate();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to enqueue");
+    }
   };
 
   const handleResume = async () => {
@@ -175,6 +205,18 @@ export default function LoraDetailPage({ params }: Props) {
               <Play size={13} /> Reproduce
             </Button>
           )}
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => void handleDelete()}
+            disabled={!canDelete || deleting}
+            title={
+              canDelete ? "Delete LoRA and remove artifacts" : "Cancel or stop the run before deleting"
+            }
+          >
+            {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+            Delete
+          </Button>
         </div>
       </div>
 

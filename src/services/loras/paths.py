@@ -5,8 +5,29 @@ from pathlib import Path
 
 from src.db.tables.lora import Lora
 from src.services.loras.weights import pick_weights_file
+from src.settings.app_settings import settings
 from src.storage.paths import StorageKind, StoragePaths
 from src.trainer.config import TrainConfig
+
+
+def resolve_training_work_dir_from_config(config: TrainConfig) -> Path:
+    return StoragePaths.resolve_training_work_dir(config.output_dir, config.lora_name)
+
+
+def build_training_log_path(lora_id: int) -> Path:
+    logs_dir = Path(settings.training.logs_dir)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    return logs_dir / f"lora_{lora_id}.log"
+
+
+def build_training_loss_log_path(work_dir: Path) -> Path:
+    return work_dir / "loss_log.db"
+
+
+def resolve_lora_work_dir(lora: Lora, config: TrainConfig) -> Path:
+    if lora.output_path:
+        return Path(lora.output_path).expanduser().resolve()
+    return resolve_training_work_dir_from_config(config)
 
 
 @dataclass(frozen=True)

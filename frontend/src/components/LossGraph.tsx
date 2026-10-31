@@ -145,12 +145,6 @@ function ToggleButton({ checked, onClick, label }: { checked: boolean; onClick: 
 }
 
 export default function LossGraph({ loraId, isActive, resetKey }: Props) {
-  const { series, lossKeys, status, refreshLoss } = useLossLog(
-    loraId,
-    isActive ? 2000 : null,
-    resetKey,
-  );
-
   const [useLogScale, setUseLogScale] = useState(false);
   const [showTrend, setShowTrend] = useState(true);
   const [smoothing, setSmoothing] = useState(80);
@@ -160,6 +154,20 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
   const [isZoomed, setIsZoomed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const persistedEnabledRef = useRef<Record<string, boolean> | null>(null);
+
+  const fetchKeys = useMemo(() => {
+    const active = Object.entries(enabled)
+      .filter(([, on]) => on !== false)
+      .map(([k]) => k);
+    return active.length ? active : ["loss/loss"];
+  }, [enabled]);
+
+  const { series, lossKeys, status, refreshLoss } = useLossLog(
+    loraId,
+    isActive ? 2000 : null,
+    resetKey,
+    fetchKeys,
+  );
 
   useEffect(() => {
     setHydrated(false);
@@ -204,14 +212,21 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
   useEffect(() => {
     if (lossKeys.length === 0) return;
     setEnabled((prev) => {
+      let changed = false;
       const next = { ...prev };
       for (const k of lossKeys) {
-        if (next[k] === undefined) next[k] = persistedEnabledRef.current?.[k] ?? k === "loss/loss";
+        if (next[k] === undefined) {
+          next[k] = persistedEnabledRef.current?.[k] ?? k === "loss/loss";
+          changed = true;
+        }
       }
       for (const k of Object.keys(next)) {
-        if (!lossKeys.includes(k)) delete next[k];
+        if (!lossKeys.includes(k)) {
+          delete next[k];
+          changed = true;
+        }
       }
-      return next;
+      return changed ? next : prev;
     });
   }, [lossKeys]);
 
@@ -343,6 +358,8 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
   const chartHostRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const uplotRef = useRef<uPlot | null>(null);
+  const builtRef = useRef(built);
+  builtRef.current = built;
   useEffect(() => {
     yClipRef.current = built.yClip;
   }, [built.yClip]);
@@ -352,10 +369,12 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
     isZoomedRef.current = isZoomed;
   }, [isZoomed]);
 
-  const hasData = (built.data[0]?.length ?? 0) > 1;
+  const pointCount = built.data[0]?.length ?? 0;
+  const hasChartData = pointCount > 1;
+  const showChart = hasChartData || status === "success" || status === "refreshing";
   const structuralKey = useMemo(
-    () => `${activeKeys.join("|")}|trend=${showTrend}|log=${useLogScale}|has=${hasData}`,
-    [activeKeys, showTrend, useLogScale, hasData],
+    () => `${activeKeys.join("|")}|trend=${showTrend}|log=${useLogScale}|clip=${clipOutliers}`,
+    [activeKeys, showTrend, useLogScale, clipOutliers],
   );
 
   useEffect(() => {
@@ -363,8 +382,9 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
       uplotRef.current.destroy();
       uplotRef.current = null;
     }
-    if (!containerRef.current || !chartHostRef.current || !hasData) return;
+    if (!containerRef.current || !chartHostRef.current || !hasChartData) return;
 
+    const snapshot = builtRef.current;
     const host = chartHostRef.current;
     const rect = host.getBoundingClientRect();
     const initialHeight = rect.height > 0 ? Math.max(MIN_CANVAS_HEIGHT, rect.height - 40) : FALLBACK_CANVAS_HEIGHT;
@@ -372,9 +392,9 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
       width: rect.width || 800,
       height: initialHeight,
       padding: [12, 16, 0, 4],
-      series: built.seriesConfigs,
-      scales: built.scales,
-      axes: built.axes,
+      series: snapshot.seriesConfigs,
+      scales: snapshot.scales,
+      axes: snapshot.axes,
       cursor: { drag: { x: true, y: false, setScale: true }, points: { size: 6 } },
       legend: { show: true },
       hooks: {
@@ -391,7 +411,7 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
       },
     };
 
-    uplotRef.current = new uPlot(opts, built.data, containerRef.current);
+    uplotRef.current = new uPlot(opts, snapshot.data, containerRef.current);
     setIsZoomed(false);
 
     const raf = requestAnimationFrame(() => {
@@ -406,7 +426,8 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
       uplotRef.current?.destroy();
       uplotRef.current = null;
     };
-  }, [structuralKey, hasData, built.axes, built.data, built.scales, built.seriesConfigs]);
+    // Recreate only when series layout changes; point updates use setData below.
+  }, [structuralKey, hasChartData]);
 
   useEffect(() => {
     const u = uplotRef.current;
@@ -430,7 +451,7 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [hasData]);
+  }, [showChart]);
 
   const handleResetZoom = useCallback(() => {
     const u = uplotRef.current;
@@ -452,8 +473,8 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
             {status === "loading" && "Loading…"}
             {status === "refreshing" && "Refreshing…"}
             {status === "error" && "Error"}
-            {status === "success" && hasData && `${totalPoints.toLocaleString()} steps`}
-            {status === "success" && !hasData && "No data yet"}
+            {status === "success" && hasChartData && `${totalPoints.toLocaleString()} steps`}
+            {status === "success" && !hasChartData && "No data yet"}
           </span>
         </div>
         <button
@@ -470,9 +491,13 @@ export default function LossGraph({ loraId, isActive, resetKey }: Props) {
           className="bg-black/30 rounded-lg border border-border relative select-none"
           style={{ minHeight: 280, height: 320 }}
         >
-          {!hasData ? (
+          {!showChart ? (
             <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">
               {status === "error" ? "Failed to load loss logs." : "Waiting for loss points…"}
+            </div>
+          ) : !hasChartData ? (
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">
+              {status === "refreshing" ? "Updating…" : "Collecting points…"}
             </div>
           ) : (
             <>

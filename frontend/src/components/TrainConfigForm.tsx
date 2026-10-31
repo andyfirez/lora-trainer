@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { Plus, X } from "lucide-react";
@@ -19,6 +19,7 @@ import type { Dataset } from "@/types";
 import type { GpuDefaultsInfo } from "@/lib/api/settings";
 import { InheritedSelectField } from "@/components/ui/InheritedGpuField";
 import { MIXED_PRECISION_OPTIONS, VAE_DTYPE_OPTIONS } from "@/lib/gpuConfigUtils";
+import { getBaseModelPathFormatIssue } from "@/lib/validateBaseModelPath";
 
 type Config = Record<string, any>;
 
@@ -30,6 +31,9 @@ interface TrainConfigFormProps {
   config: Config;
   onChange: (config: Config) => void;
   gpuDefaults?: GpuDefaultsInfo;
+  /** Entity LoRA name (work dir subfolder); hides duplicate LoRA Name field when set. */
+  loraName?: string;
+  hideLoraName?: boolean;
 }
 
 const sectionClass = "bg-surface rounded-xl border border-border p-5 space-y-4";
@@ -274,9 +278,30 @@ function stripInlineSamplingFields(next: Config): Config {
   return cleaned;
 }
 
-export default function TrainConfigForm({ config, onChange, gpuDefaults }: TrainConfigFormProps) {
+function formatWorkDirPreview(outputDir: string | undefined, loraName: string): string {
+  const base = (outputDir ?? "").trim();
+  const name = loraName.trim() || "…";
+  if (!base) {
+    return `(lora root)/${name}`;
+  }
+  const sep = base.includes("\\") ? "\\" : "/";
+  const trimmed = base.replace(/[/\\]+$/, "");
+  return `${trimmed}${sep}${name}`;
+}
+
+export default function TrainConfigForm({
+  config,
+  onChange,
+  gpuDefaults,
+  loraName,
+  hideLoraName = false,
+}: TrainConfigFormProps) {
   const concepts: Config[] = config.concepts ?? [];
   const { data: datasets, isLoading: datasetsLoading } = useSWR("/datasets", () => datasetsApi.list());
+  const baseModelWarning = useMemo(
+    () => getBaseModelPathFormatIssue(String(config.base_model_name ?? "")),
+    [config.base_model_name],
+  );
 
   function emit(next: Config) {
     onChange(sanitizeTrainConfig(next, datasets));
@@ -406,9 +431,10 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             label="Base Model"
             value={config.base_model_name ?? ""}
             onChange={(v) => set("base_model_name", v)}
-            placeholder="sdxl-base"
+            placeholder="path/to/sdxl.safetensors"
             kind="model"
-            pickerTitle="Select base model"
+            pickerTitle="Select SDXL checkpoint file"
+            warning={baseModelWarning}
             {...trainHint("base_model_name")}
           />
           <PathInput
@@ -421,16 +447,27 @@ export default function TrainConfigForm({ config, onChange, gpuDefaults }: Train
             {...trainHint("output_dir")}
           />
         </div>
-        <TextInput
-          label="LoRA Name"
-          value={stripLoraVersionSuffix(config.lora_name ?? "")}
-          onChange={(v) => set("lora_name", v)}
-          placeholder="my_lora"
-          paramKey="lora_name"
-        />
-        <p className="text-xs text-muted -mt-2">
-          Each training run gets a unique output folder name automatically.
-        </p>
+        {hideLoraName && loraName != null ? (
+          <p className="text-xs text-muted">
+            Artifacts folder:{" "}
+            <span className="font-mono text-text">{formatWorkDirPreview(config.output_dir, loraName)}</span>
+            <span className="block mt-1">
+              Relative paths resolve under the configured LoRA root; browsing folders on the list page does not change
+              this path.
+            </span>
+          </p>
+        ) : (
+          <>
+            <TextInput
+              label="LoRA Name"
+              value={stripLoraVersionSuffix(config.lora_name ?? "")}
+              onChange={(v) => set("lora_name", v)}
+              placeholder="my_lora"
+              paramKey="lora_name"
+            />
+            <p className="text-xs text-muted -mt-2">Training writes weights to the output folder above plus this name.</p>
+          </>
+        )}
         <SelectInput
           label="Output Format"
           value={config.output_format ?? "safetensors"}

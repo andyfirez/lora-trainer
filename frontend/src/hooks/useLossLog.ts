@@ -9,6 +9,8 @@ export default function useLossLog(
   loraId: number,
   reloadInterval: number | null = null,
   resetKey: string | null = null,
+  /** When set, load point data only for these keys (must be a subset of API keys). */
+  fetchKeys: string[] | null = null,
 ) {
   const [series, setSeries] = useState<SeriesMap>({});
   const [keys, setKeys] = useState<string[]>([]);
@@ -23,6 +25,14 @@ export default function useLossLog(
     return [...keys].sort();
   }, [keys]);
 
+  const fetchKeysRef = useRef(fetchKeys);
+  fetchKeysRef.current = fetchKeys;
+
+  const fetchKeysKey = useMemo(() => {
+    if (!fetchKeys?.length) return "*";
+    return [...fetchKeys].sort().join("\0");
+  }, [fetchKeys]);
+
   const refreshLoss = useCallback(async () => {
     if (!loraId || inFlightRef.current) return;
     inFlightRef.current = true;
@@ -31,9 +41,17 @@ export default function useLossLog(
     try {
       const first = await lorasApi.getLoss(loraId, { key: "loss/loss", limit: 1 });
       const newKeys = first.keys ?? [];
-      setKeys(newKeys);
+      setKeys((prev) => {
+        const sorted = [...newKeys].sort();
+        if (prev.length === sorted.length && prev.every((k, i) => k === sorted[i])) return prev;
+        return sorted;
+      });
 
-      const wantedKeys = (newKeys.length ? [...newKeys] : ["loss/loss"]).sort();
+      const allKeys = newKeys.length ? [...newKeys] : ["loss/loss"];
+      const activeFetch = fetchKeysRef.current;
+      const wantedKeys = (
+        activeFetch?.length ? activeFetch.filter((k) => allKeys.includes(k)) : allKeys
+      ).sort();
       const results = await Promise.all(
         wantedKeys.map(async (k) => {
           const params: { key: string; limit: number; since_step?: number } = { key: k, limit: 1_000_000 };
@@ -91,13 +109,15 @@ export default function useLossLog(
     setSeries({});
     setKeys([]);
     setStatus("idle");
+  }, [loraId, resetKey]);
+
+  useEffect(() => {
     void refreshLoss();
 
-    if (reloadInterval) {
-      const interval = setInterval(() => void refreshLoss(), reloadInterval);
-      return () => clearInterval(interval);
-    }
-  }, [loraId, reloadInterval, resetKey, refreshLoss]);
+    if (!reloadInterval) return;
+    const interval = setInterval(() => void refreshLoss(), reloadInterval);
+    return () => clearInterval(interval);
+  }, [loraId, reloadInterval, resetKey, fetchKeysKey, refreshLoss]);
 
   return { series, keys, lossKeys, status, refreshLoss };
 }

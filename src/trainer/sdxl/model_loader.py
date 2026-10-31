@@ -1,4 +1,4 @@
-"""Load SDXL model components from HuggingFace repos, diffusers folders, or single-file checkpoints."""
+"""Load SDXL model components from single-file .safetensors / .ckpt checkpoints."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -65,55 +65,18 @@ def load_sdxl_components(
     text_encoder_2_dtype: WeightDtype,
     vae_dtype: VaeDtype = VaeDtype.AUTO,
 ) -> SDXLComponents:
-    resolved_vae_dtype = resolve_vae_dtype(vae_dtype)
     path = Path(base_model_name)
-    if is_checkpoint_file(path):
-        return _load_from_checkpoint(
-            path,
-            unet_dtype=unet_dtype,
-            text_encoder_1_dtype=text_encoder_1_dtype,
-            text_encoder_2_dtype=text_encoder_2_dtype,
-            vae_dtype=resolved_vae_dtype,
+    if not is_checkpoint_file(path):
+        raise ValueError(
+            f"Base model must be an existing .safetensors or .ckpt file, got: {base_model_name}"
         )
-    return _load_from_pretrained(
-        base_model_name,
+    resolved_vae_dtype = resolve_vae_dtype(vae_dtype)
+    return _load_from_checkpoint(
+        path,
         unet_dtype=unet_dtype,
         text_encoder_1_dtype=text_encoder_1_dtype,
         text_encoder_2_dtype=text_encoder_2_dtype,
         vae_dtype=resolved_vae_dtype,
-    )
-
-
-def _load_from_pretrained(
-    base_model_name: str,
-    *,
-    unet_dtype: WeightDtype,
-    text_encoder_1_dtype: WeightDtype,
-    text_encoder_2_dtype: WeightDtype,
-    vae_dtype: torch.dtype,
-) -> SDXLComponents:
-    return SDXLComponents(
-        tokenizer_1=CLIPTokenizer.from_pretrained(base_model_name, subfolder="tokenizer"),
-        tokenizer_2=CLIPTokenizer.from_pretrained(base_model_name, subfolder="tokenizer_2"),
-        noise_scheduler=_build_training_noise_scheduler(
-            DDPMScheduler.from_pretrained(base_model_name, subfolder="scheduler")
-        ),
-        text_encoder_1=CLIPTextModel.from_pretrained(
-            base_model_name,
-            subfolder="text_encoder",
-            torch_dtype=_DTYPE_MAP[text_encoder_1_dtype],
-        ),
-        text_encoder_2=CLIPTextModelWithProjection.from_pretrained(
-            base_model_name,
-            subfolder="text_encoder_2",
-            torch_dtype=_DTYPE_MAP[text_encoder_2_dtype],
-        ),
-        vae=AutoencoderKL.from_pretrained(base_model_name, subfolder="vae", torch_dtype=vae_dtype),
-        unet=UNet2DConditionModel.from_pretrained(
-            base_model_name,
-            subfolder="unet",
-            torch_dtype=_DTYPE_MAP[unet_dtype],
-        ),
     )
 
 

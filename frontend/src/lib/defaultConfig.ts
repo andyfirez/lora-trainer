@@ -1,6 +1,6 @@
 export const TrainConfig = {
   DEFAULT_YAML: `# SDXL LoRA Training Configuration
-base_model_name: stabilityai/stable-diffusion-xl-base-1.0
+base_model_name: ""
 output_dir: output
 lora_name: lora
 output_format: safetensors

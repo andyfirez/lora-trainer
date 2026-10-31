@@ -9,6 +9,7 @@ from src.db.repositories.lora_repo import LoraRepository
 from src.db.tables.lora import Lora
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.services.datasets.training_validation import validate_dataset_for_training
+from src.services.loras.cleanup import cleanup_lora_artifacts
 from src.services.loras.discovery import LoraDiscoveryService
 from src.services.loras.exceptions import (
     LoraCheckpointNotFoundError,
@@ -17,12 +18,16 @@ from src.services.loras.exceptions import (
     LoraReproduceError,
 )
 from src.services.loras.paths import (
+    build_training_loss_log_path,
     lora_artifacts_exist,
     lora_work_dir_exists,
     resolve_completed_lora_paths,
+    resolve_lora_work_dir,
+    resolve_training_work_dir_from_config,
     resolve_work_dir,
 )
 from src.services.loras.relocation import find_relocated_lora
+from src.services.loras.workspace import prepare_training_workspace
 from src.services.runnable import queue, runtime
 from src.services.runnable.exceptions import (
     RunnableAlreadyQueuedError,
@@ -37,7 +42,6 @@ from src.settings.app_settings import settings
 from src.storage.config_paths import resolve_config_base_model
 from src.storage.paths import StorageKind, StoragePaths
 from src.trainer.config import TrainConfig
-from src.trainer.metric_logger import build_loss_log_path, reset_loss_log
 from src.trainer.sdxl.checkpoint_state import find_latest_checkpoint, load_resume_state
 from src.trainer.training_log import JobTrainingLogger
 
@@ -76,6 +80,12 @@ class LoraService:
     async def get_lora(self, lora_id: int) -> Lora:
         lora = await self._repo.get_by_id(lora_id)
         if lora is None or not self._is_visible(lora):
+            raise LoraNotFoundError(lora_id)
+        return lora
+
+    async def _get_lora_for_delete(self, lora_id: int) -> Lora:
+        lora = await self._repo.get_by_id(lora_id)
+        if lora is None:
             raise LoraNotFoundError(lora_id)
         return lora
 
@@ -206,8 +216,9 @@ class LoraService:
         lora.resume_checkpoint_path = None
         lora.resume_from_epoch = None
         lora.resume_from_step = None
-        if config.logging.use_ui_logger:
-            reset_loss_log(build_loss_log_path(config))
+        prepare_training_workspace(lora, config)
+        self._repo._session.add(lora)
+        await self._repo._session.flush()
         await queue.enqueue(self._repo._session, lora)
         return lora
 
@@ -218,7 +229,11 @@ class LoraService:
         if not lora.config_yaml:
             raise RunnableOperationNotSupportedError("Lora", lora_id, "resume")
         config = TrainConfig.from_snapshot_yaml(lora.config_yaml)
-        work_dir = Path(config.output_dir) / config.lora_name
+        work_dir = (
+            Path(lora.output_path).expanduser().resolve()
+            if lora.output_path
+            else resolve_training_work_dir_from_config(config)
+        )
         checkpoint = find_latest_checkpoint(work_dir, config.lora_name, config.output_format.value)
         if checkpoint is None:
             raise LoraCheckpointNotFoundError(lora_id)
@@ -275,13 +290,38 @@ class LoraService:
         if not lora.config_yaml:
             return JobLossResponse(key=key, keys=[], points=[])
         config = TrainConfig.from_snapshot_yaml(lora.config_yaml)
-        log_path = build_loss_log_path(config)
+        work_dir = resolve_lora_work_dir(lora, config)
+        log_path = build_training_loss_log_path(work_dir)
         return read_loss_log(log_path, key=key, limit=limit, since_step=since_step, stride=stride)
 
     def list_samples(self, lora: Lora) -> list[tuple[Path, str, dict]]:
         if not lora.output_path:
             return []
         return list_samples_for_output_dir(Path(lora.output_path))
+
+    async def delete_lora(self, lora_id: int) -> None:
+        lora = await self._get_lora_for_delete(lora_id)
+        if lora.status in (RunnableStatus.QUEUED, RunnableStatus.RUNNING):
+            raise RunnableOperationNotSupportedError("Lora", lora_id, "delete")
+
+        loss_log_path: Path | None = None
+        if lora.config_yaml:
+            config = TrainConfig.from_snapshot_yaml(lora.config_yaml)
+            work_dir = (
+                Path(lora.output_path).expanduser().resolve()
+                if lora.output_path
+                else resolve_training_work_dir_from_config(config)
+            )
+            loss_log_path = build_training_loss_log_path(work_dir)
+
+        output_path = lora.output_path
+        log_path = lora.log_path
+        await self._repo.delete(lora)
+        cleanup_lora_artifacts(
+            output_path=output_path,
+            log_path=log_path,
+            loss_log_path=loss_log_path,
+        )
 
     async def finalize_completed_training(self, lora: Lora) -> None:
         """Resolve the final weights/work-dir paths once training finishes successfully."""

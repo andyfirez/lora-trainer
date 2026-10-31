@@ -34,9 +34,9 @@ def storage_roots(tmp_path):
     lora = tmp_path / "lora"
     for path in (datasets, base_models, lora):
         path.mkdir()
-    (base_models / "test-model").mkdir()
-    for name in ("alt-model", "changed"):
-        (base_models / name).mkdir()
+    (base_models / "test-model.safetensors").write_bytes(b"")
+    for name in ("alt-model.safetensors", "changed.safetensors"):
+        (base_models / name).write_bytes(b"")
     settings.storage = settings.storage.model_copy(
         update={
             "datasets_root": str(datasets),
@@ -106,7 +106,7 @@ async def training_dataset(datasets_service: DatasetsService, storage_roots) -> 
 
 @pytest_asyncio.fixture
 async def minimal_training_yaml(training_dataset: Dataset, storage_roots) -> str:
-    return f"""base_model_name: test-model
+    return f"""base_model_name: test-model.safetensors
 output_dir: ""
 concepts:
   - dataset_id: {training_dataset.id}
@@ -120,7 +120,7 @@ async def create_training_lora(
 ) -> Callable[..., Awaitable[Lora]]:
     async def _create(name: str = "test", config_yaml: str | None = None) -> Lora:
         if config_yaml is None:
-            config_yaml = f"""base_model_name: test-model
+            config_yaml = f"""base_model_name: test-model.safetensors
 output_dir: ""
 concepts:
   - dataset_id: {training_dataset.id}

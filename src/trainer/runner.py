@@ -25,14 +25,16 @@ from src.db.tables.lora import Lora
 from src.db.tables.runnable_mixin import RunnableStatus
 from src.services.datasets.service import reconcile_datasets_for_training
 from src.services.datasets.training_validation import validate_dataset_for_training
+from src.services.loras.paths import (
+    build_training_log_path,
+    resolve_training_work_dir_from_config,
+)
 from src.services.runnable import runtime
 from src.services.worker.progress_loop import (
     run_in_progress_loop,
     start_progress_loop,
     submit_to_progress_loop,
 )
-from src.settings.app_settings import settings
-from src.storage.paths import StoragePaths
 from src.trainer.concept_resolution import resolve_concept_paths
 from src.trainer.concept_training_metadata import resolve_concept_training_metadata
 from src.trainer.config import TrainConfig
@@ -185,12 +187,6 @@ def _make_progress_callback(lora_id: int):
     return callback
 
 
-def _build_log_path(lora_id: int) -> Path:
-    logs_dir = Path(settings.training.logs_dir)
-    logs_dir.mkdir(parents=True, exist_ok=True)
-    return logs_dir / f"lora_{lora_id}.log"
-
-
 async def _run(lora_id: int) -> None:
     async with session_factory() as session:
         repo = LoraRepository(session)
@@ -200,6 +196,8 @@ async def _run(lora_id: int) -> None:
             sys.exit(1)
         config_yaml = lora.config_yaml
         resume_checkpoint_path = lora.resume_checkpoint_path
+        stored_output_path = lora.output_path
+        stored_log_path = lora.log_path
 
     if not config_yaml:
         logger.error("Lora id=%d has no config_yaml", lora_id)
@@ -237,10 +235,15 @@ async def _run(lora_id: int) -> None:
     if resume_checkpoint_path:
         config.resume_from_checkpoint = resume_checkpoint_path
     is_resume_run = bool(config.resume_from_checkpoint)
-    log_path = _build_log_path(lora_id)
+    work_dir = (
+        Path(stored_output_path).expanduser().resolve()
+        if stored_output_path
+        else resolve_training_work_dir_from_config(config)
+    )
+    log_path = Path(stored_log_path).expanduser().resolve() if stored_log_path else build_training_log_path(lora_id)
     metric_logger: MetricLogger | None = None
     if config.logging.use_ui_logger:
-        loss_log_path = build_loss_log_path(config)
+        loss_log_path = build_loss_log_path(config, work_dir=work_dir)
         if not is_resume_run:
             reset_loss_log(loss_log_path)
         metric_logger = MetricLogger(loss_log_path)
@@ -262,7 +265,6 @@ async def _run(lora_id: int) -> None:
     if config.logging.log_dir:
         training_logger.logger.info("TensorBoard log dir: %s", tensorboard_dir)
     await _set_log_path(lora_id, str(log_path))
-    work_dir = StoragePaths.resolve_training_work_dir(config.output_dir, config.lora_name)
     await _set_output_path(lora_id, str(work_dir))
     if not is_resume_run:
         await _clear_resume_state(lora_id)
@@ -300,6 +302,7 @@ async def _run(lora_id: int) -> None:
             save_checkpoint_requested_callback=_save_checkpoint_requested,
             stop_requested_callback=_stop_requested,
             concept_metadata=concept_metadata,
+            work_dir=work_dir,
         )
         trainer.train()
         training_logger.logger.info("Lora id=%d completed successfully", lora_id)

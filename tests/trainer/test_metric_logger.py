@@ -6,9 +6,10 @@ from src.trainer.config import TrainConfig
 from src.trainer.metric_logger import MetricLogger, build_loss_log_path, reset_loss_log
 
 
-def test_build_loss_log_path() -> None:
-    config = TrainConfig(output_dir="out", lora_name="my_lora")
-    assert build_loss_log_path(config) == Path("out/my_lora/loss_log.db")
+def test_build_loss_log_path(storage_roots) -> None:
+    config = TrainConfig(output_dir="runs", lora_name="my_lora")
+    expected = storage_roots["lora"] / "runs" / "my_lora" / "loss_log.db"
+    assert build_loss_log_path(config) == expected.resolve()
 
 
 def test_metric_logger_log_commit_finish(tmp_path: Path) -> None:

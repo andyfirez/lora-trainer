@@ -13,3 +13,12 @@ class PickPathRequest(BaseModel):
 
 class PickPathResponse(BaseModel):
     path: str
+
+
+class ValidateBaseModelRequest(BaseModel):
+    path: str = Field(min_length=1)
+
+
+class ValidateBaseModelResponse(BaseModel):
+    valid: bool
+    message: str | None = None

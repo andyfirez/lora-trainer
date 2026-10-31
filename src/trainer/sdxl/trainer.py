@@ -12,11 +12,13 @@ from peft import get_peft_model
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
+from src.services.loras.paths import resolve_training_work_dir_from_config
+from src.settings.app_settings import settings
+from src.storage.config_paths import resolve_config_base_model
 from src.trainer.attention import configure_unet_attention
 from src.trainer.concept_training_metadata import ConceptTrainingMetadata
 from src.trainer.config import TrainConfig, WeightDtype
 from src.trainer.optimizer_config import build_optimizer
-from src.trainer.training_log import resolve_part_learning_rates
 from src.trainer.progress import TrainProgress
 from src.trainer.sdxl.bucket_batch_sampler import build_bucket_batch_sampler
 from src.trainer.sdxl.checkpoint_state import (
@@ -48,12 +50,10 @@ from src.trainer.sdxl.mixed_precision import (
     cast_trainable_params_to_fp32,
     create_grad_scaler,
 )
-from src.settings.app_settings import settings
-from src.storage.config_paths import resolve_config_base_model
 from src.trainer.sdxl.model_loader import load_sdxl_components
 from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
 from src.trainer.sdxl.te_cache import build_te_cache
-from src.trainer.training_log import JobTrainingLogger
+from src.trainer.training_log import JobTrainingLogger, resolve_part_learning_rates
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +82,10 @@ class SDXLLoRATrainer:
         save_checkpoint_requested_callback: Optional[Callable[[], bool]] = None,
         stop_requested_callback: Optional[Callable[[], bool]] = None,
         concept_metadata: Optional[dict[int, ConceptTrainingMetadata]] = None,
+        work_dir: Path | None = None,
     ) -> None:
         self._config = config
+        self._work_dir_override = work_dir.expanduser().resolve() if work_dir is not None else None
         self._concept_metadata = concept_metadata or {}
         self._progress_callback = progress_callback
         self._training_logger = training_logger
@@ -623,7 +625,9 @@ class SDXLLoRATrainer:
         )
 
     def _work_dir(self, config: TrainConfig) -> Path:
-        return Path(config.output_dir) / config.lora_name
+        if self._work_dir_override is not None:
+            return self._work_dir_override
+        return resolve_training_work_dir_from_config(config)
 
     def _save_config(self, config: TrainConfig) -> None:
         work_dir = self._work_dir(config)

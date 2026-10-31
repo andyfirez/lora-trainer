@@ -48,4 +48,5 @@ export const lorasApi = {
   getSamples: (id: number) => api.get<RunnableSamplesResponse>(`/loras/${id}/samples`),
   reproduce: (id: number, body: ReproduceLoraRequest = {}) =>
     api.post<LoraResponse>(`/loras/${id}/reproduce`, body),
+  delete: (id: number) => api.delete(`/loras/${id}`),
 };
