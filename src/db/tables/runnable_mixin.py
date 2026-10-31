@@ -40,7 +40,6 @@ class RunnableMixin:
             native_enum=False,
         ),
     )
-    config_yaml: Optional[str] = Field(default=None, description="Snapshot YAML — source of truth")
     queue_position: Optional[int] = Field(default=None, index=True)
     error_message: Optional[str] = Field(default=None)
     output_path: Optional[str] = Field(default=None)
