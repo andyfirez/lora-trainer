@@ -73,6 +73,10 @@ async def test_datasets_service_caption_crud(storage_roots, datasets_service: Da
     assert removed == 1
     assert "solo" not in datasets_service.get_tags(dataset, "photo.png")
 
+    cleared = datasets_service.clear_all_tags(dataset)
+    assert cleared == 1
+    assert datasets_service.get_tags(dataset, "photo.png") == []
+
 
 @pytest.mark.asyncio
 async def test_datasets_service_invalid_filename(

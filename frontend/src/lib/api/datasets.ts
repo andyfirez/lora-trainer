@@ -106,6 +106,11 @@ export const datasetsApi = {
       filenames,
       caption_extension: captionExtension,
     }),
+  clearAllTags: (id: number, filenames?: string[], captionExtension = ".txt") =>
+    api.post<BulkTagResult>(`/datasets/${id}/tags/clear-all`, {
+      filenames,
+      caption_extension: captionExtension,
+    }),
   autotag: (id: number, body: AutotagRequest = {}) =>
     api.post<AutotagStatusResponse>(`/datasets/${id}/autotag`, body),
   getAutotagStatus: (id: number) => api.get<AutotagStatusResponse>(`/datasets/${id}/autotag/status`),

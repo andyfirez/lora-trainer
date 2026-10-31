@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import Button from "@/components/ui/Button";
 import TagChip from "@/components/dataset/TagChip";
 import type { TagStat } from "@/types";
 
@@ -9,13 +10,21 @@ interface Props {
   tags: TagStat[];
   onBulkAdd: (tag: string) => Promise<void>;
   onBulkRemove: (tag: string) => Promise<void>;
+  onClearAll: () => Promise<void>;
   disabled?: boolean;
 }
 
-export default function TagFrequencyPanel({ tags, onBulkAdd, onBulkRemove, disabled = false }: Props) {
+export default function TagFrequencyPanel({
+  tags,
+  onBulkAdd,
+  onBulkRemove,
+  onClearAll,
+  disabled = false,
+}: Props) {
   const [addInput, setAddInput] = useState("");
   const [busyTag, setBusyTag] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const handleBulkAdd = async () => {
     const tag = addInput.trim();
@@ -35,6 +44,15 @@ export default function TagFrequencyPanel({ tags, onBulkAdd, onBulkRemove, disab
       await onBulkRemove(tag);
     } finally {
       setBusyTag(null);
+    }
+  };
+
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      await onClearAll();
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -63,6 +81,17 @@ export default function TagFrequencyPanel({ tags, onBulkAdd, onBulkRemove, disab
             <Plus size={14} />
           </button>
         </div>
+        {tags.length > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={disabled || clearing}
+            onClick={() => void handleClearAll()}
+          >
+            <Trash2 size={14} />
+            {clearing ? "Clearing…" : "Clear all tags"}
+          </Button>
+        )}
       </div>
 
       {tags.length === 0 ? (

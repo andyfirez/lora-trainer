@@ -59,8 +59,15 @@ async def test_dataset_caption_api(storage_roots) -> None:
                 assert bulk_remove.status_code == 200
                 assert bulk_remove.json()["updated_count"] == 1
 
+                clear_all = await client.post(
+                    f"/datasets/{dataset.id}/tags/clear-all",
+                    json={},
+                )
+                assert clear_all.status_code == 200
+                assert clear_all.json()["updated_count"] == 1
+
                 caption = await client.get(f"/datasets/{dataset.id}/captions/cat.png")
-                assert caption.json()["tags"] == ["cat"]
+                assert caption.json()["tags"] == []
 
                 image = await client.get(f"/datasets/{dataset.id}/images/cat.png?w=32")
                 assert image.status_code == 200

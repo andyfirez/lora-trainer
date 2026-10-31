@@ -13,6 +13,7 @@ from src.api.schemas.datasets import (
     BakeResponse,
     BulkTagRequest,
     BulkTagResponse,
+    ClearAllTagsRequest,
     CaptionResponse,
     CaptionUpdateRequest,
     CropMetaResponse,
@@ -268,6 +269,21 @@ async def bulk_remove_tag(
     updated = service.bulk_remove_tag(
         dataset,
         body.tag,
+        body.filenames,
+        body.caption_extension,
+    )
+    return BulkTagResponse(updated_count=updated)
+
+
+@router.post("/{dataset_id}/tags/clear-all", response_model=BulkTagResponse)
+async def clear_all_tags(
+    dataset_id: int,
+    body: ClearAllTagsRequest,
+    service: DatasetsServiceDep,
+) -> BulkTagResponse:
+    dataset = await service.get_dataset(dataset_id)
+    updated = service.clear_all_tags(
+        dataset,
         body.filenames,
         body.caption_extension,
     )

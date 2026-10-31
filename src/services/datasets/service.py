@@ -380,6 +380,29 @@ class DatasetsService:
             updated += 1
         return updated
 
+    def clear_all_tags(
+        self,
+        dataset: Dataset,
+        filenames: list[str] | None = None,
+        caption_extension: str = DEFAULT_CAPTION_EXTENSION,
+    ) -> int:
+        image_dir = Path(dataset_image_dir(dataset))
+        targets = filenames if filenames else list_image_filenames(image_dir)
+        updated = 0
+        for filename in targets:
+            try:
+                safe_filename(filename)
+                image_path(image_dir, filename)
+            except (ValueError, FileNotFoundError):
+                continue
+            tags = read_tags(image_dir, filename, caption_extension)
+            if not tags:
+                continue
+            write_tags(image_dir, filename, [], caption_extension)
+            self._invalidate_te_cache(dataset, filename)
+            updated += 1
+        return updated
+
     def get_image_bytes(
         self,
         dataset: Dataset,

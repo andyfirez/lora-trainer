@@ -169,6 +169,11 @@ class BulkTagResponse(BaseModel):
     updated_count: int
 
 
+class ClearAllTagsRequest(BaseModel):
+    filenames: list[str] | None = None
+    caption_extension: str = ".txt"
+
+
 TaggingMode = Literal["if_empty", "overwrite", "append"]
 
 

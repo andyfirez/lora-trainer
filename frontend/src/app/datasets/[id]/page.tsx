@@ -132,6 +132,20 @@ export default function DatasetDetailPage() {
     [datasetId, refreshAll]
   );
 
+  const handleClearAllTags = useCallback(async () => {
+    const tagCount = tagStats?.tags?.length ?? 0;
+    if (tagCount <= 0) return;
+    if (
+      !confirm(
+        "Remove all tags from every image in this dataset? Caption files will be emptied. This cannot be undone."
+      )
+    ) {
+      return;
+    }
+    await datasetsApi.clearAllTags(datasetId, undefined, CAPTION_EXTENSION);
+    await refreshAll();
+  }, [datasetId, refreshAll, tagStats?.tags?.length]);
+
   const handleAutoTag = useCallback(
     async (options: { mode: TaggingMode; threshold: number; model: string; strip_rating: boolean }) => {
       await datasetsApi.autotag(datasetId, {
@@ -301,6 +315,7 @@ export default function DatasetDetailPage() {
         tags={tagStats?.tags ?? []}
         onBulkAdd={handleBulkAdd}
         onBulkRemove={handleBulkRemove}
+        onClearAll={handleClearAllTags}
         disabled={taggingActive}
       />
 
