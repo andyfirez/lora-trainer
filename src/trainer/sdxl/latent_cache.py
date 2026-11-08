@@ -10,6 +10,8 @@ from PIL import Image
 from torch import Tensor
 from torchvision import transforms
 
+from src.trainer.sdxl.vae_encode import encode_pixel_values_to_latents
+
 logger = logging.getLogger(__name__)
 
 _NPZ_SUFFIX = "_sdxl.npz"
@@ -71,11 +73,10 @@ def build_latent_cache(
             raise ValueError(
                 f"Prepared image {image_path.name} size {image.size} must be divisible by 8 for VAE"
             )
-        pixel_values = transform(image).unsqueeze(0).to(device, dtype=torch.float32)
+        pixel_values = transform(image).unsqueeze(0)
 
         with torch.no_grad():
-            latent = vae.encode(pixel_values).latent_dist.sample()
-            latent = (latent * vae.config.scaling_factor).squeeze(0).cpu()
+            latent = encode_pixel_values_to_latents(vae, pixel_values, device=device).squeeze(0).cpu()
 
         if to_disk:
             np.savez(npz, latents=latent.float().numpy())

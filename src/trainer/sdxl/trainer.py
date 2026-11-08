@@ -52,6 +52,7 @@ from src.trainer.sdxl.mixed_precision import (
 )
 from src.trainer.sdxl.model_loader import load_sdxl_components
 from src.trainer.sdxl.prompt_encoding import select_clip_hidden_state
+from src.trainer.sdxl.vae_encode import encode_pixel_values_to_latents
 from src.trainer.sdxl.te_cache import build_te_cache
 from src.trainer.training_log import JobTrainingLogger, resolve_part_learning_rates
 
@@ -412,11 +413,10 @@ class SDXLLoRATrainer:
                             [latent_cache[p].to(device, dtype=weight_dtype) for p in image_paths]
                         )
                     else:
-                        pixel_values = batch["pixel_values"].to(device)
                         with torch.no_grad():
-                            latents = vae.encode(pixel_values.to(dtype=torch.float32)).latent_dist.sample()
-                            latents = latents * vae.config.scaling_factor
-                            latents = latents.to(dtype=weight_dtype)
+                            latents = encode_pixel_values_to_latents(
+                                vae, batch["pixel_values"], device=device
+                            ).to(dtype=weight_dtype)
 
                     # --- Noise + timesteps ---
                     with torch.no_grad():
