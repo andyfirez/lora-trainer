@@ -113,3 +113,38 @@ def test_flux1_vae_loads_diffusers_format_checkpoint(tmp_path):
     model = load_flux1_vae(path, dtype=torch.float32)
     assert model.config.latent_channels == 16
     assert model.config.shift_factor == pytest.approx(0.1159)
+
+
+def test_dequantize_comfy_fp8_and_nvfp4():
+    import json
+
+    from src.trainer.flux.loading import dequantize_comfy_state_dict
+
+    def meta(fmt: str) -> torch.Tensor:
+        return torch.tensor(list(json.dumps({"format": fmt}).encode()), dtype=torch.uint8)
+
+    fp8_w = torch.full((4, 4), 2.0).to(torch.float8_e4m3fn)
+    packed = torch.full((16, 8), 0x22, dtype=torch.uint8)  # two e2m1 values of 1.0 per byte
+    state = {
+        "a.weight": fp8_w,
+        "a.weight_scale": torch.tensor(0.5),
+        "a.input_scale": torch.tensor(1.0),
+        "a.comfy_quant": meta("float8_e4m3fn"),
+        "b.weight": packed,
+        "b.weight_scale": torch.ones(128, 4).to(torch.float8_e4m3fn),
+        "b.weight_scale_2": torch.tensor(2.0),
+        "b.comfy_quant": meta("nvfp4"),
+        "norm.weight": torch.ones(3),
+    }
+    out = dequantize_comfy_state_dict(state, torch.float32)
+    assert set(out) == {"a.weight", "b.weight", "norm.weight"}
+    assert torch.allclose(out["a.weight"], torch.ones(4, 4))
+    assert out["b.weight"].shape == (16, 16)
+    assert torch.allclose(out["b.weight"], torch.full((16, 16), 2.0))
+
+
+def test_infer_vae_channels_ldm_layout():
+    from src.trainer.flux.loading import _infer_vae_channels
+
+    state = {f"decoder.up.{i}.block.0.conv2.weight": torch.zeros(c, c, 3, 3) for i, c in enumerate((96, 192, 384, 384))}
+    assert _infer_vae_channels(state, "decoder") == (96, 192, 384, 384)

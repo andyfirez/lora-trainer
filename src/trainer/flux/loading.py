@@ -202,6 +202,8 @@ def load_flux2_transformer(
     )
 
     state_dict = strip_known_prefix(load_safetensors(path), _DIFFUSION_PREFIXES)
+    if any(key.endswith((".comfy_quant", ".weight_scale")) for key in state_dict):
+        state_dict = dequantize_comfy_state_dict(state_dict, compute_dtype)
     if any(key.startswith("double_blocks.") for key in state_dict):
         state_dict = convert_flux2_transformer_checkpoint_to_diffusers(state_dict)
     kwargs = flux2_transformer_kwargs(state_dict)
@@ -270,16 +272,49 @@ def load_flux1_vae(path: Path, *, dtype: torch.dtype) -> nn.Module:
     return _load_vae(model, converted, dtype)
 
 
+def _infer_vae_channels(state_dict: dict[str, torch.Tensor], part: str) -> tuple[int, ...] | None:
+    """Per-level output channels of the VAE ``encoder``/``decoder`` in block_out_channels order."""
+    ldm_name = "down" if part == "encoder" else "up"
+    diff_name = "down_blocks" if part == "encoder" else "up_blocks"
+    ldm = re.compile(rf"^{part}\.{ldm_name}\.(\d+)\.block\.0\.conv2\.weight$")
+    diff = re.compile(rf"^{part}\.{diff_name}\.(\d+)\.resnets\.0\.conv2\.weight$")
+    found: dict[int, int] = {}
+    for key, value in state_dict.items():
+        for pattern in (ldm, diff):
+            match = pattern.match(key)
+            if match:
+                found[int(match.group(1))] = int(value.shape[0])
+    if not found or sorted(found) != list(range(len(found))):
+        return None
+    channels = tuple(found[i] for i in range(len(found)))
+    # Diffusers stores decoder levels deepest-first, so reverse to config order.
+    if part == "decoder" and any(diff.match(k) for k in state_dict):
+        channels = tuple(reversed(channels))
+    return channels
+
+
 def load_flux2_vae(path: Path, *, dtype: torch.dtype) -> nn.Module:
     from diffusers import AutoencoderKLFlux2
 
     state_dict = strip_known_prefix(load_safetensors(path), ("first_stage_model.",))
+    # Some exports nest the quant convs under the encoder/decoder module.
+    state_dict = {
+        (key.split(".", 1)[1] if key.startswith(("encoder.quant_conv.", "decoder.post_quant_conv.")) else key): value
+        for key, value in state_dict.items()
+    }
     config = {
         "down_block_types": ("DownEncoderBlock2D",) * 4,
         "up_block_types": ("UpDecoderBlock2D",) * 4,
     }
     converted = _vae_state_dict_to_diffusers(state_dict, config)
-    model = AutoencoderKLFlux2()
+    kwargs: dict[str, Any] = {}
+    encoder_channels = _infer_vae_channels(converted, "encoder")
+    decoder_channels = _infer_vae_channels(converted, "decoder")
+    if encoder_channels is not None and len(encoder_channels) == 4:
+        kwargs["block_out_channels"] = encoder_channels
+    if decoder_channels is not None and len(decoder_channels) == 4:
+        kwargs["decoder_block_out_channels"] = decoder_channels
+    model = AutoencoderKLFlux2(**kwargs)
     return _load_vae(model, converted, dtype)
 
 
@@ -347,6 +382,96 @@ def load_t5(
     return model.eval()
 
 
+_E2M1_LUT = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
+
+
+def _unswizzle_block_scales(blocked: torch.Tensor, rows: int, cols: int) -> torch.Tensor:
+    """Reverse the cuBLAS tiled layout of NVFP4 block scales (see comfy_kitchen.float_utils)."""
+    n_row_blocks = -(-rows // 128)
+    n_col_blocks = -(-cols // 4)
+    step = blocked.reshape(-1, 32, 16).reshape(-1, 32, 4, 4).transpose(1, 2)
+    step = step.reshape(n_row_blocks, n_col_blocks, 4, 32, 4).reshape(n_row_blocks, n_col_blocks, 128, 4)
+    full = step.permute(0, 2, 1, 3).reshape(n_row_blocks * 128, n_col_blocks * 4)
+    return full[:rows, :cols]
+
+
+def _dequantize_nvfp4(weight: torch.Tensor, block_scale: torch.Tensor, global_scale: torch.Tensor, dtype: torch.dtype):
+    lut = torch.tensor(_E2M1_LUT, dtype=torch.float32)
+    lo = (weight & 0x0F).long()
+    hi = (weight >> 4).long()
+    values = lut[torch.stack([hi, lo], dim=-1).reshape(weight.shape[0], -1)]
+    rows, cols = values.shape
+    scales = _unswizzle_block_scales(block_scale, rows, cols // 16).to(torch.float32) * global_scale.float()
+    return (values.reshape(rows, -1, 16) * scales.unsqueeze(-1)).reshape(rows, cols).to(dtype)
+
+
+def dequantize_comfy_state_dict(state_dict: dict[str, torch.Tensor], dtype: torch.dtype) -> dict[str, torch.Tensor]:
+    """Dequantize ComfyUI mixed-precision checkpoints (fp8 per-tensor and nvfp4 layers).
+
+    Tensors without ``comfy_quant`` metadata are returned unchanged; helper keys
+    (``weight_scale``, ``weight_scale_2``, ``comfy_quant``, ``input_scale``) are dropped.
+    """
+    import json
+
+    out: dict[str, torch.Tensor] = {}
+    for key in list(state_dict):
+        if key.endswith((".weight_scale", ".weight_scale_2", ".comfy_quant", ".input_scale")):
+            continue
+        tensor = state_dict.pop(key)
+        if key.endswith(".weight"):
+            base = key[: -len(".weight")]
+            meta = state_dict.get(f"{base}.comfy_quant")
+            if meta is not None:
+                fmt = json.loads(bytes(meta.tolist()).decode("utf-8")).get("format")
+            elif f"{base}.weight_scale" in state_dict and tensor.dtype == torch.float8_e4m3fn:
+                fmt = "float8_e4m3fn"
+            else:
+                fmt = None
+            if fmt == "nvfp4":
+                tensor = _dequantize_nvfp4(
+                    tensor, state_dict[f"{base}.weight_scale"], state_dict[f"{base}.weight_scale_2"], dtype
+                )
+            elif fmt == "float8_e4m3fn":
+                scale = state_dict[f"{base}.weight_scale"].float()
+                tensor = tensor.to(torch.float32).mul_(scale).to(dtype)
+            elif fmt is not None:
+                raise ValueError(f"Unsupported quantization format '{fmt}' for {key}")
+        out[key] = tensor
+    return out
+
+
+def _align_qwen3_config_with_weights(config, state_dict: dict) -> None:
+    """Override size fields of ``config`` with what the checkpoint actually contains.
+
+    The bundled config may describe a different Qwen3 size (e.g. 4B) than the weights
+    (e.g. 8B used by Flux2 Klein 9B). Only output dims are used, so packed/quantized
+    input dims do not matter.
+    """
+    layer_ids = {
+        int(k.split(".")[1])
+        for k in state_dict
+        if k.startswith("layers.") and k.split(".")[1].isdigit()
+    }
+    if layer_ids:
+        config.num_hidden_layers = max(layer_ids) + 1
+    config.hidden_size = int(state_dict["embed_tokens.weight"].shape[1])
+    gate = state_dict.get("layers.0.mlp.gate_proj.weight")
+    if gate is not None:
+        config.intermediate_size = int(gate.shape[0])
+    q_norm = state_dict.get("layers.0.self_attn.q_norm.weight")
+    q_proj = state_dict.get("layers.0.self_attn.q_proj.weight")
+    k_proj = state_dict.get("layers.0.self_attn.k_proj.weight")
+    if q_norm is not None:
+        head_dim = int(q_norm.shape[0])
+        config.head_dim = head_dim
+        if q_proj is not None:
+            config.num_attention_heads = int(q_proj.shape[0]) // head_dim
+        if k_proj is not None:
+            config.num_key_value_heads = int(k_proj.shape[0]) // head_dim
+    if getattr(config, "layer_types", None) is not None:
+        config.layer_types = ["full_attention"] * config.num_hidden_layers
+
+
 def load_qwen3(
     weights_path: Path,
     config_dir: Path,
@@ -360,8 +485,11 @@ def load_qwen3(
     raw = load_safetensors(weights_path)
     state_dict = strip_known_prefix(raw, ("model.",)) if any(k.startswith("model.") for k in raw) else raw
     state_dict = {k: v for k, v in state_dict.items() if not k.startswith("lm_head.")}
+    if any(k.endswith((".comfy_quant", ".weight_scale")) for k in state_dict):
+        state_dict = dequantize_comfy_state_dict(state_dict, compute_dtype)
     if "embed_tokens.weight" not in state_dict:
         raise ValueError("Qwen3 weights file does not contain 'embed_tokens.weight'")
+    _align_qwen3_config_with_weights(config, state_dict)
     te_quantization = FluxQuantization.FP8 if quantization != FluxQuantization.NONE else FluxQuantization.NONE
     model = build_module_from_state_dict(
         lambda: Qwen3Model(config),
